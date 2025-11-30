@@ -1,0 +1,9 @@
+Hyperparameter Search Summary
+====================================================================================================
+Total combinations: 95
+Successful: 1
+Failed: 94
+
+
+Alpha = 0.5:
+  Cutoff = 0.05: 91.28%

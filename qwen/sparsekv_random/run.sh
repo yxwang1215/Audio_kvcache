@@ -46,11 +46,11 @@ python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/spar
 # This replaces Conv1d smoothing with FFT-based frequency domain filtering
 # Advantages: Global receptive field, adaptive cutoff, better separation of trends vs noise
 conda activate Qwen3_2 &&
-CUDA_VISIBLE_DEVICES=1 \
+CUDA_VISIBLE_DEVICES=4 \
 USE_SPARSEKV=true \
 USE_FFT_FILTER=true \
 FFT_FILTER_TYPE=lowpass \
-FFT_CUTOFF_RATIO=0.3 \
+FFT_CUTOFF_RATIO=0.35 \
 FFT_ALPHA=0.5 \
 FFT_ADAPTIVE_CUTOFF=true \
 USE_AUDIO_AWARE_TOPK=true \
@@ -66,19 +66,19 @@ python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/spar
 
 # Example 2.3: FFT with saliency detection (Spectral Residual method)
 conda activate Qwen3_2 &&
-CUDA_VISIBLE_DEVICES=1 \
+CUDA_VISIBLE_DEVICES=2 \
 USE_SPARSEKV=true \
 USE_FFT_FILTER=true \
 FFT_FILTER_TYPE=saliency \
-FFT_CUTOFF_RATIO=0.3 \
+FFT_CUTOFF_RATIO=0.15 \
 FFT_USE_SALIENCY=true \
-FFT_ALPHA=0.6 \
+FFT_ALPHA=0.5 \
 FFT_ADAPTIVE_CUTOFF=true \
-BUDGET=0.1 \
+BUDGET=0.5 \
 RATIO=0.5 \
 WINDOW_SIZE=32 \
 HEAD_SCORE_FILE=aggregated \
-RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv_fft/LibriSpeech_budget0.1_fft_saliency_cutoff0.3_alpha0.6 \
+RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/Results/LibriSpeech_Long_Results/SAH_FFT/LibriSpeech_budget0.5_fft_saliency_cutoff0.15_alpha0.5 \
 python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv_fft/LibriSpeech_qwen2.5.py
 
 # Example 3: Baseline without SparseMM
@@ -86,3 +86,18 @@ CUDA_VISIBLE_DEVICES=1 \
 USE_SPARSEKV=false \
 RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv_fft/LibriSpeech_vanilla \
 python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv_fft/LibriSpeech_qwen2.5.py
+
+# Example 4: Using random selection for tokens before window_size (snapkv + random)
+# This keeps the most recent window_size tokens and randomly selects from the rest
+conda activate Qwen3_2 &&
+CUDA_VISIBLE_DEVICES=5 \
+USE_SPARSEKV=true \
+USE_RANDOM_SELECTION=true \
+BUDGET=0.5 \
+RATIO=0.5 \
+WINDOW_SIZE=32 \
+KERNEL_SIZE=5 \
+POOLING=maxpool \
+HEAD_SCORE_FILE=aggregated \
+RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_random/LibriSpeech_budget0.5_random_window32 \
+python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_random/LibriSpeech_qwen2.5.py
