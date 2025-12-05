@@ -1739,8 +1739,14 @@ class Qwen2_5OmniFlashAttention2SparseMM(Qwen2_5OmniAttention):
                 if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
                     init_sparsemm(self)
                 kv_seq_len = key_states.shape[-2]  # [bsz, num_key_value_heads, q_len, head_dim]
-                compression_threshold = self.kv_cluster.base_capacity + self.kv_cluster.window_size
-                if kv_seq_len <= compression_threshold:
+                # CRITICAL FIX: Use actual sequence length to determine if compression is needed
+                # This matches the logic in update_kv: compressible_len = q_len - window_size
+                # Compression is needed if: base_capacity < compressible_len
+                # Which is equivalent to: base_capacity < (kv_seq_len - window_size)
+                # Which is equivalent to: kv_seq_len > (base_capacity + window_size)
+                compressible_len = kv_seq_len - self.kv_cluster.window_size
+                needs_compression = compressible_len > 0 and self.kv_cluster.base_capacity < compressible_len
+                if not needs_compression:
                     # Sequence too short, no compression needed
                     # CRITICAL FIX: Initialize metadata even when no compression is needed
                     # This is required for decode phase to work correctly with flash_attn_varlen_func

@@ -103,7 +103,7 @@ def process_audio_head_scores(
 
 
 def get_audio_head_score_path(
-    base_dir: str = "/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/audio_head/head_score",
+    base_dir: str = "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/head_score",
     score_type: str = "aggregated",
     batch: Optional[str] = None
 ) -> str:

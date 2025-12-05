@@ -38,15 +38,18 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 #sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '../Modeling'))
 
-from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
-from qwen_omni_utils import process_mm_info
+# Import Gemma3n model and processor
+import sys
+import os
+sys.path.insert(0, '/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/gemma/sparsekv_fft')
+from modeling_gemma3n import Gemma3nForConditionalGeneration
+from processing_gemma3n import Gemma3nProcessor
 
 random.seed(42)
 
-# 定义音频 token ID
-_AUDIO_TOKEN_ID = 151646
-_AUDIO_BOS_TOKEN_ID = 151647
-_AUDIO_EOS_TOKEN_ID = 151648
+# 定义音频 token ID (Gemma3n uses config.audio_token_id, default is 262273)
+# We'll get it from the model config after loading
+_AUDIO_TOKEN_ID = None  # Will be set from model config
 
 
 def _parse_int_list(value: Optional[str]) -> Optional[List[int]]:
@@ -1143,18 +1146,22 @@ class AudioAttentionSinkAnalyzer:
 
             return hook
         
-        # Register hooks for each layer in thinker model
-        # 注意：应该注册在整个 layer 上，而不是 self_attn 上
-        # 因为 layer 的输出包含 attention weights（如果配置了 output_attentions）
-        if hasattr(self.model, 'thinker') and hasattr(self.model.thinker, 'model'):
-            layers = self.model.thinker.model.layers
-            self.num_layers = len(layers)  # Update num_layers if needed
-            for layer_idx, layer in enumerate(layers):
-                hook = layer.register_forward_hook(make_hook(layer_idx))
-                self.hooks.append(hook)
-            print(f"Registered attention hooks for {len(self.hooks)} layers")
+        # Register hooks for each layer in Gemma3n model
+        # Gemma3n model structure: model.model.language_model.layers
+        if hasattr(self.model, 'model') and hasattr(self.model.model, 'language_model'):
+            base_model = self.model.model.language_model
+            if hasattr(base_model, 'layers'):
+                layers = base_model.layers
+                self.num_layers = len(layers)  # Update num_layers if needed
+                for layer_idx, layer in enumerate(layers):
+                    if hasattr(layer, 'self_attn'):
+                        hook = layer.self_attn.register_forward_hook(make_hook(layer_idx))
+                        self.hooks.append(hook)
+                print(f"Registered attention hooks for {len(self.hooks)} layers")
+            else:
+                print("Warning: Could not find language_model.layers, hooks not registered")
         else:
-            print("Warning: Could not find thinker.model.layers, hooks not registered")
+            print("Warning: Could not find model.model.language_model, hooks not registered")
     
     def remove_hooks(self):
         """Remove all hooks"""
@@ -1978,9 +1985,18 @@ class AudioAttentionSinkAnalyzerWithHeadScoring(AudioAttentionSinkAnalyzer):
     """扩展原有分析器,增加音频头打分功能 - 基于 SparseMM hit_score 机制"""
     
     def __init__(self, model, processor, output_dir="./audio_attention_analysis", 
-                 num_layers=36, enable_head_scoring=True, task_type='librispeech', topk=128,
+                 num_layers=None, enable_head_scoring=True, task_type='librispeech', topk=128,
                  use_simple_prompt=True, sink_params: Optional[AttnSinkParams] = None,
                  skip_heatmaps=False):
+        # Get num_layers from model config if not provided
+        if num_layers is None:
+            if hasattr(model, 'config') and hasattr(model.config, 'text_config'):
+                num_layers = model.config.text_config.num_hidden_layers
+            elif hasattr(model, 'model') and hasattr(model.model, 'language_model'):
+                num_layers = model.model.language_model.config.num_hidden_layers
+            else:
+                num_layers = 28  # Default fallback for Gemma3n-E2B
+        
         super().__init__(model, processor, output_dir, num_layers, sink_params=sink_params,
                         skip_heatmaps=skip_heatmaps)
         
@@ -2091,12 +2107,12 @@ class AudioAttentionSinkAnalyzerWithHeadScoring(AudioAttentionSinkAnalyzer):
             else:  # ASR (librispeech)
                 prompt_text = "Transcribe this audio."
         
-        # Build messages
+        # Build messages for Gemma3n
         messages = [
             {
                 "role": "system",
                 "content": [
-                    {"type": "text", "text": "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group."}
+                    {"type": "text", "text": "You are a helpful assistant."}
                 ]
             },
             {
@@ -2108,41 +2124,61 @@ class AudioAttentionSinkAnalyzerWithHeadScoring(AudioAttentionSinkAnalyzer):
             }
         ]
         
-        # Process inputs
-        audios, images, videos = process_mm_info(messages, use_audio_in_video=True)
+        # Process inputs for Gemma3n
         text = self.processor.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
         
         inputs = self.processor(
-            text=text,
-            audio=audios,
-            images=images,
-            videos=videos,
+            text=[text],
+            audio=[audio_np],
+            sampling_rate=16000,
             return_tensors="pt",
-            padding=True,
-            use_audio_in_video=True
+            padding=False
         )
-        inputs = inputs.to(device=self.device, dtype=self.dtype)
         
-        # Locate audio tokens
+        # Move to device
+        float_dtype = getattr(self.model, "dtype", None) or (torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16)
+        for k, v in inputs.items():
+            if torch.is_tensor(v):
+                if k == "input_features":
+                    inputs[k] = v.to(device=self.device, dtype=torch.float32)
+                elif k == "input_features_mask":
+                    inputs[k] = v.to(device=self.device)
+                else:
+                    if v.is_floating_point():
+                        inputs[k] = v.to(device=self.device, dtype=float_dtype)
+                    else:
+                        inputs[k] = v.to(device=self.device)
+        
+        # Locate audio tokens (Gemma3n uses config.audio_token_id)
         audio_token_start = None
         audio_token_length = 0
         audio_token_indices = []
         
+        # Get audio_token_id from model config
+        global _AUDIO_TOKEN_ID
+        if _AUDIO_TOKEN_ID is None:
+            if hasattr(self.model, 'config') and hasattr(self.model.config, 'audio_token_id'):
+                _AUDIO_TOKEN_ID = self.model.config.audio_token_id
+            else:
+                _AUDIO_TOKEN_ID = 262273  # Default Gemma3n audio_token_id
+        
         if hasattr(inputs, 'input_ids'):
             input_ids = inputs.input_ids[0]
+            # Gemma3n uses audio_token_id to mark audio positions
             audio_positions = (input_ids == _AUDIO_TOKEN_ID).nonzero(as_tuple=True)[0].tolist()
-            bos_positions = (input_ids == _AUDIO_BOS_TOKEN_ID).nonzero(as_tuple=True)[0].tolist()
-            eos_positions = (input_ids == _AUDIO_EOS_TOKEN_ID).nonzero(as_tuple=True)[0].tolist()
 
             if audio_positions:
+                # Audio tokens are consecutive in Gemma3n (188 tokens by default)
                 audio_token_indices = audio_positions
-            elif bos_positions and eos_positions:
-                start_idx = bos_positions[0]
-                end_idx = eos_positions[-1]
-                if end_idx >= start_idx:
-                    audio_token_indices = list(range(start_idx, end_idx + 1))
+            else:
+                # Try to find audio tokens by checking tokenizer
+                if hasattr(self.processor, 'audio_token_id'):
+                    audio_token_id = self.processor.audio_token_id
+                    audio_positions = (input_ids == audio_token_id).nonzero(as_tuple=True)[0].tolist()
+                    if audio_positions:
+                        audio_token_indices = audio_positions
 
             if audio_token_indices:
                 audio_token_start = int(audio_token_indices[0])
@@ -2169,15 +2205,17 @@ class AudioAttentionSinkAnalyzerWithHeadScoring(AudioAttentionSinkAnalyzer):
         print(f"Running generation with max_new_tokens={max_gen_tokens} (hooks will capture generation attention)...")
         
         # 确保模型配置了 output_attentions（如果存在配置对象）
-        # 首先设置 attn_implementation 为 'eager'，因为 sdpa 不支持 output_attentions
-        if hasattr(self.model, 'thinker') and hasattr(self.model.thinker, 'model') and hasattr(self.model.thinker.model, 'config'):
-            config = self.model.thinker.model.config
-            if hasattr(config, 'attn_implementation') and config.attn_implementation != 'eager':
-                config.attn_implementation = 'eager'
-                print(f"  Set model.config.attn_implementation='eager' (was '{config.attn_implementation}')")
-            if hasattr(config, 'output_attentions'):
-                config.output_attentions = True
-                print("  Set model.config.output_attentions=True")
+        # Gemma3n model structure: model.model.language_model.config
+        if hasattr(self.model, 'model') and hasattr(self.model.model, 'language_model'):
+            base_model = self.model.model.language_model
+            if hasattr(base_model, 'config'):
+                config = base_model.config
+                if hasattr(config, 'attn_implementation') and config.attn_implementation != 'eager':
+                    config.attn_implementation = 'eager'
+                    print(f"  Set model.config.attn_implementation='eager' (was '{config.attn_implementation}')")
+                if hasattr(config, 'output_attentions'):
+                    config.output_attentions = True
+                    print("  Set model.config.output_attentions=True")
         
         if self.enable_head_scoring:
             # 重置序列长度追踪,确保当前样本的生成步统计准确
@@ -2187,17 +2225,15 @@ class AudioAttentionSinkAnalyzerWithHeadScoring(AudioAttentionSinkAnalyzer):
             outputs = self.model.generate(
                 input_ids=inputs.input_ids,
                 attention_mask=inputs.attention_mask,
-                pixel_values=inputs.pixel_values if hasattr(inputs, 'pixel_values') else None,
-                pixel_values_videos=inputs.pixel_values_videos if hasattr(inputs, 'pixel_values_videos') else None,
-                image_grid_thw=inputs.image_grid_thw if hasattr(inputs, 'image_grid_thw') else None,
-                video_grid_thw=inputs.video_grid_thw if hasattr(inputs, 'video_grid_thw') else None,
                 input_features=inputs.input_features if hasattr(inputs, 'input_features') else None,
-                feature_attention_mask=inputs.feature_attention_mask if hasattr(inputs, 'feature_attention_mask') else None,
-                use_audio_in_video=True,
+                input_features_mask=inputs.input_features_mask if hasattr(inputs, 'input_features_mask') else None,
                 max_new_tokens=max_gen_tokens,  # 生成64个token
                 output_attentions=True,
                 return_dict_in_generate=True,
-                use_cache=True  # 启用 KV cache 以加速生成
+                use_cache=True,  # 启用 KV cache 以加速生成
+                do_sample=False,
+                temperature=0.0,
+                top_p=1.0
             )
 
         # CRITICAL: Delete outputs immediately to free GPU memory
@@ -2508,7 +2544,7 @@ def main():
                         choices=['librispeech', 'tau', 'vox', 'vox_age', 'desed', 'gtzan', 'had', 'slue', 'vesus', 'race'],
                         help='Task type')
     parser.add_argument('--model_path', type=str, 
-                        default="/mnt/users/wangyuxuan-20250915/Models/Qwen2.5-Omni-3B",
+                        default="/mnt/petrelfs/wenzichen/hf_models/google/gemma-3n-E2B-it",
                         help='Path to model')
     parser.add_argument('--data_path', type=str, 
                         default="/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon",
@@ -2651,24 +2687,23 @@ def main():
     
     # 加载模型
     print("\nLoading model...")
-    processor = Qwen2_5OmniProcessor.from_pretrained(args.model_path)
+    processor = Gemma3nProcessor.from_pretrained(args.model_path, trust_remote_code=True)
     
     if device_type == 'cuda':
-        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+        float_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        model = Gemma3nForConditionalGeneration.from_pretrained(
             args.model_path,
-            torch_dtype=torch.float16,
+            torch_dtype=float_dtype,
             device_map='auto',
-            attn_implementation='eager'  # 使用 eager 实现以支持 output_attentions
+            trust_remote_code=True
         )
     else:
-        model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
+        model = Gemma3nForConditionalGeneration.from_pretrained(
             args.model_path,
             torch_dtype=torch.float32,
-            attn_implementation='eager'  # 使用 eager 实现以支持 output_attentions
+            trust_remote_code=True
         ).to(compute_device)
 
-    if hasattr(model, "disable_talker"):
-        model.disable_talker()
     model = model.eval()
     
     # 创建分析器（增强版）

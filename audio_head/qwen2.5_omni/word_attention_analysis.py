@@ -83,7 +83,8 @@ class TokenAttentionStats:
 class WordAttentionAnalyzer:
     """分析生成单词 token 时的注意力分布 - 基于 top-k 注意力"""
     
-    def __init__(self, model, processor, output_dir="./word_attention_analysis", num_layers=36, topk=128):
+    def __init__(self, model, processor, output_dir="./word_attention_analysis", num_layers=36, topk=128,
+                 alpha=1.0, beta=1.0, gamma=1.0):
         self.model = model
         self.processor = processor
         self.output_dir = Path(output_dir)
@@ -93,6 +94,11 @@ class WordAttentionAnalyzer:
         self.num_heads = None
         self.hooks = []
         self.topk = topk  # top-k 注意力位置（参考 SparseMM）
+        
+        # 权重参数用于计算加权importance score: S = α*S_hit + β*S_attn + γ*S_cov
+        self.alpha = alpha  # weight for hit ratio
+        self.beta = beta    # weight for attention ratio
+        self.gamma = gamma  # weight for coverage ratio
         
         # 当前样本信息
         self.current_audio_indices = None  # prefill 阶段的音频 token 位置
@@ -689,22 +695,25 @@ class WordAttentionAnalyzer:
         return sample_stats
     
     def _compute_layer_head_statistics(self, all_tokens: List[Dict]) -> Dict:
-        """计算每个 layer/head 的统计信息"""
+        """计算每个 layer/head 的统计信息，包括加权importance score"""
         
         # 收集每个 layer/head 的所有数据
         layer_head_data = defaultdict(lambda: {
             'topk_hits_on_word': [],
             'topk_hits_on_audio': [],
             'attn_weight_on_word': [],
-            'attn_weight_on_audio': []
+            'attn_weight_on_audio': [],
+            'num_word_audio_tokens': []  # 用于计算coverage ratio
         })
         
         for token in all_tokens:
+            num_word_audio_tokens = token.get('num_word_audio_tokens', 0)
             for key, stats in token['layer_head_stats'].items():
                 layer_head_data[key]['topk_hits_on_word'].append(stats['topk_hits_on_word'])
                 layer_head_data[key]['topk_hits_on_audio'].append(stats['topk_hits_on_audio'])
                 layer_head_data[key]['attn_weight_on_word'].append(stats['attn_weight_on_word'])
                 layer_head_data[key]['attn_weight_on_audio'].append(stats['attn_weight_on_audio'])
+                layer_head_data[key]['num_word_audio_tokens'].append(num_word_audio_tokens)
         
         # 计算每个 layer/head 的统计量
         layer_head_summary = {}
@@ -715,14 +724,48 @@ class WordAttentionAnalyzer:
                 for w, a in zip(data['attn_weight_on_word'], data['attn_weight_on_audio'])
             ]
             
+            # 计算hit ratio: r_hit = c_word / K
+            hit_ratios = [
+                hits / self.topk if self.topk > 0 else 0.0
+                for hits in data['topk_hits_on_word']
+            ]
+            
+            # 计算coverage ratio: r_cov = c_word / |A(w_i)|
+            coverage_ratios = [
+                hits / num_tokens if num_tokens > 0 else 0.0
+                for hits, num_tokens in zip(data['topk_hits_on_word'], data['num_word_audio_tokens'])
+            ]
+            
+            # 计算三个metric的平均值（对应论文中的 S_hit, S_attn, S_cov）
+            S_hit = float(np.mean(hit_ratios))
+            S_attn = float(np.mean(attn_ratios))
+            S_cov = float(np.mean(coverage_ratios))
+            
+            # 加权组合: S = α*S_hit + β*S_attn + γ*S_cov
+            importance_score = (
+                self.alpha * S_hit +
+                self.beta * S_attn +
+                self.gamma * S_cov
+            )
+            
             layer_head_summary[key] = {
                 'num_tokens': len(data['topk_hits_on_word']),
                 'avg_topk_hits_on_word': float(np.mean(data['topk_hits_on_word'])),
                 'avg_topk_hits_on_audio': float(np.mean(data['topk_hits_on_audio'])),
                 'avg_attn_weight_on_word': float(np.mean(data['attn_weight_on_word'])),
                 'avg_attn_weight_on_audio': float(np.mean(data['attn_weight_on_audio'])),
-                'avg_attn_ratio': float(np.mean(attn_ratios)),
+                'avg_attn_ratio': S_attn,
                 'median_attn_ratio': float(np.median(attn_ratios)),
+                'avg_hit_ratio': S_hit,  # 新增
+                'median_hit_ratio': float(np.median(hit_ratios)),  # 新增
+                'avg_coverage_ratio': S_cov,  # 新增
+                'median_coverage_ratio': float(np.median(coverage_ratios)),  # 新增
+                'importance_score': importance_score,  # 加权后的importance score
+                'weights': {  # 保存权重信息
+                    'alpha': self.alpha,
+                    'beta': self.beta,
+                    'gamma': self.gamma
+                }
             }
         
         return layer_head_summary
@@ -755,6 +798,11 @@ class WordAttentionAnalyzer:
             
             summary = {
                 'topk_value': self.topk,
+                'importance_score_weights': {
+                    'alpha': self.alpha,
+                    'beta': self.beta,
+                    'gamma': self.gamma
+                },
                 'total_samples': len(self.sample_results),
                 'total_words_in_json': self.total_words_across_samples,
                 'total_high_quality_words': self.total_high_quality_words,
@@ -815,10 +863,43 @@ class WordAttentionAnalyzer:
             
             # 3. 计算并保存每个 layer/head 的统计
             layer_head_summary = self._compute_layer_head_statistics(all_tokens)
+            
+            # 按importance_score排序
+            sorted_heads = sorted(
+                layer_head_summary.items(),
+                key=lambda x: x[1]['importance_score'],
+                reverse=True
+            )
+            
+            # 保存排序后的结果
             layer_head_file = self.output_dir / "layer_head_attention_stats.json"
             with open(layer_head_file, 'w') as f:
                 json.dump(layer_head_summary, f, indent=2)
             print(f"Saved layer/head statistics to: {layer_head_file}")
+            
+            # 保存排序后的top heads
+            top_heads_file = self.output_dir / "top_heads_by_importance.json"
+            top_heads_data = {
+                'weights': {
+                    'alpha': self.alpha,
+                    'beta': self.beta,
+                    'gamma': self.gamma
+                },
+                'top_heads': [
+                    {
+                        'layer_head': key,
+                        'importance_score': stats['importance_score'],
+                        'avg_hit_ratio': stats['avg_hit_ratio'],
+                        'avg_attn_ratio': stats['avg_attn_ratio'],
+                        'avg_coverage_ratio': stats['avg_coverage_ratio'],
+                        'num_tokens': stats['num_tokens']
+                    }
+                    for key, stats in sorted_heads
+                ]
+            }
+            with open(top_heads_file, 'w') as f:
+                json.dump(top_heads_data, f, indent=2)
+            print(f"Saved top heads (sorted by importance) to: {top_heads_file}")
             
             print(f"\n{'='*80}")
             print(f"Summary Statistics (Top-k = {self.topk}):")
@@ -871,6 +952,22 @@ class WordAttentionAnalyzer:
             print(f"  P50: {summary['attn_ratio_distribution']['p50']:.4f}")
             print(f"  P75: {summary['attn_ratio_distribution']['p75']:.4f}")
             print(f"  P95: {summary['attn_ratio_distribution']['p95']:.4f}")
+            
+            # 显示importance score信息
+            print(f"\n{'='*80}")
+            print(f"Head Importance Scores (Weighted Combination):")
+            print(f"{'='*80}")
+            print(f"Weights: α={self.alpha}, β={self.beta}, γ={self.gamma}")
+            print(f"Formula: S = α·S_hit + β·S_attn + γ·S_cov")
+            print(f"\nTop 20 Audio-Critical Heads (by Importance Score):")
+            print(f"{'Rank':<6} {'Layer/Head':<15} {'Importance':<12} {'S_hit':<10} {'S_attn':<10} {'S_cov':<10}")
+            print(f"{'-'*80}")
+            for rank, (key, stats) in enumerate(sorted_heads[:20], 1):
+                print(f"{rank:<6} {key:<15} {stats['importance_score']:<12.6f} "
+                      f"{stats['avg_hit_ratio']:<10.4f} {stats['avg_attn_ratio']:<10.4f} "
+                      f"{stats['avg_coverage_ratio']:<10.4f}")
+            if len(sorted_heads) > 20:
+                print(f"... and {len(sorted_heads) - 20} more heads")
 
 
 def main():
@@ -896,7 +993,13 @@ def main():
     parser.add_argument('--score_threshold', type=float, default=0.95,
                        help='WhisperX score threshold for high-quality words')
     parser.add_argument('--topk', type=int, default=32,
-                       help='Top-k attention positions to check (default: 128)')
+                       help='Top-k attention positions to check (default: 32)')
+    parser.add_argument('--alpha', type=float, default=1.0,
+                       help='Weight for hit ratio in importance score (default: 1.0)')
+    parser.add_argument('--beta', type=float, default=1.0,
+                       help='Weight for attention ratio in importance score (default: 1.0)')
+    parser.add_argument('--gamma', type=float, default=1.0,
+                       help='Weight for coverage ratio in importance score (default: 1.0)')
     parser.add_argument('--device', type=str, default='cuda',
                        help='Device to use')
     
@@ -981,7 +1084,13 @@ def main():
     model = model.eval()
     
     # 创建分析器
-    analyzer = WordAttentionAnalyzer(model, processor, args.output_dir, topk=args.topk)
+    analyzer = WordAttentionAnalyzer(
+        model, processor, args.output_dir, 
+        topk=args.topk,
+        alpha=args.alpha,
+        beta=args.beta,
+        gamma=args.gamma
+    )
     
     # 注册 hooks
     analyzer.register_attention_hooks()

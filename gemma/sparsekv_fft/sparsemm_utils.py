@@ -9,8 +9,92 @@ import random
 import numpy as np
 import json
 import warnings
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from transformers.cache_utils import Cache
+
+# Global flag to track CUDA API availability
+_CUDA_API_AVAILABLE = None
+_CUDA_API_CHECKED = False
+# Global flag to track if CUDA kernel usage has been logged
+_CUDA_KERNEL_USED_LOGGED = False
+
+def check_cuda_api_availability():
+    """
+    Check if cuda_api.cu (compiled as tiny_api_cuda) is available.
+    This function checks:
+    1. If CUDA is available in PyTorch
+    2. If tiny_api_cuda module can be imported
+    3. If update_flatten_view function exists and is callable
+    
+    Returns:
+        tuple: (is_available: bool, error_message: str or None)
+    """
+    global _CUDA_API_AVAILABLE, _CUDA_API_CHECKED
+    
+    # Return cached result if already checked
+    if _CUDA_API_CHECKED:
+        return _CUDA_API_AVAILABLE, None
+    
+    _CUDA_API_CHECKED = True
+    
+    # Check 1: CUDA availability in PyTorch
+    if not torch.cuda.is_available():
+        _CUDA_API_AVAILABLE = False
+        return False, "CUDA is not available in PyTorch"
+    
+    # Check 2: Try to import tiny_api_cuda module
+    try:
+        import tiny_api_cuda
+    except ImportError as e:
+        _CUDA_API_AVAILABLE = False
+        return False, f"Failed to import tiny_api_cuda module: {e}. Please ensure cuda_api.cu is compiled."
+    
+    # Check 3: Verify update_flatten_view function exists
+    if not hasattr(tiny_api_cuda, 'update_flatten_view'):
+        _CUDA_API_AVAILABLE = False
+        return False, "tiny_api_cuda module does not have update_flatten_view function"
+    
+    # Check 4: Verify function is callable
+    if not callable(tiny_api_cuda.update_flatten_view):
+        _CUDA_API_AVAILABLE = False
+        return False, "update_flatten_view is not callable"
+    
+    # All checks passed
+    _CUDA_API_AVAILABLE = True
+    return True, None
+
+def get_cuda_api_status():
+    """
+    Get the current status of CUDA API availability.
+    
+    Returns:
+        dict: Status information including availability, error message, and recommendations
+    """
+    is_available, error_msg = check_cuda_api_availability()
+    
+    status = {
+        "available": is_available,
+        "error": error_msg,
+        "cuda_available": torch.cuda.is_available(),
+        "recommendation": None
+    }
+    
+    if not is_available:
+        if not status["cuda_available"]:
+            status["recommendation"] = "CUDA is not available. SparseMM will use PyTorch fallback implementation."
+        elif error_msg and "import" in error_msg.lower():
+            status["recommendation"] = (
+                "tiny_api_cuda module not found. To enable CUDA acceleration:\n"
+                "  1. Navigate to SparseMM/csrc directory\n"
+                "  2. Run: pip install -e .\n"
+                "  3. This will compile cuda_api.cu into tiny_api_cuda module"
+            )
+        else:
+            status["recommendation"] = "CUDA API check failed. SparseMM will use PyTorch fallback implementation."
+    else:
+        status["recommendation"] = "CUDA API (cuda_api.cu) is available and ready to use."
+    
+    return status
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -241,6 +325,8 @@ class DynamicCacheSplitHeadFlatten(Cache):
         self.key_cache: List[List[torch.Tensor]] = []
         self.value_cache: List[List[torch.Tensor]] = []
         self._seen_tokens = 0
+        # Initialize shared_layers for KV sharing compatibility
+        self.shared_layers: Dict[int, Tuple[torch.Tensor, torch.Tensor]] = {}
 
     def __len__(self):
         return len(self.key_cache)
@@ -302,7 +388,9 @@ class DynamicCacheSplitHeadFlatten(Cache):
                 
                 # Check if head_lens and cu_klen are valid tensors (not None and correct dtype)
                 use_cuda_kernel = False
-                if head_lens is not None and cu_klen is not None:
+                # First check if CUDA API is available
+                cuda_api_available, cuda_api_error = check_cuda_api_availability()
+                if cuda_api_available and head_lens is not None and cu_klen is not None:
                     # Check if they are tensors with correct dtype
                     if isinstance(head_lens, torch.Tensor) and isinstance(cu_klen, torch.Tensor):
                         # Ensure they are int32 dtype as required by CUDA kernel
@@ -317,14 +405,32 @@ class DynamicCacheSplitHeadFlatten(Cache):
                                 self.value_cache[layer_idx] = new_value_cache
                             except Exception as e:
                                 # Fallback to PyTorch implementation if CUDA kernel fails
-                                print(f"[SparseMM] Warning: CUDA kernel failed ({e}), falling back to PyTorch implementation")
+                                # Only print warning once per instance to reduce log noise
+                                if not hasattr(self, '_cuda_warning_printed'):
+                                    print(f"[SparseMM] Warning: CUDA kernel failed ({e}), falling back to PyTorch implementation")
+                                    self._cuda_warning_printed = True
                                 use_cuda_kernel = False
+                elif not cuda_api_available and not hasattr(self, '_cuda_api_warning_printed'):
+                    # Print warning about CUDA API unavailability only once
+                    print(f"[SparseMM] CUDA API (cuda_api.cu) not available: {cuda_api_error}")
+                    print(f"[SparseMM] Using PyTorch fallback implementation (slower but functional)")
+                    self._cuda_api_warning_printed = True
                 
                 # Fallback to PyTorch implementation if CUDA kernel is not available or failed
                 if not use_cuda_kernel:
-                    # Fallback: simple concatenation (not ideal, but better than crashing)
-                    self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=0)
-                    self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=0)
+                    # CRITICAL FIX: Use correct PyTorch implementation instead of simple concatenation
+                    # Simple torch.cat would break the per-head structure of flattened KV cache
+                    if head_lens is not None and cu_klen is not None:
+                        self.key_cache[layer_idx] = self._update_flatten_view_pytorch(
+                            self.key_cache[layer_idx], key_states, head_lens, cu_klen
+                        )
+                        self.value_cache[layer_idx] = self._update_flatten_view_pytorch(
+                            self.value_cache[layer_idx], value_states, head_lens, cu_klen
+                        )
+                    else:
+                        # If metadata not available, fallback to simple concatenation (shouldn't happen normally)
+                        self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=0)
+                        self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=0)
             elif key_states.dim() == 4:
                 # Normal decode: 4D tensor [bs, head, seqlen, dim]
                 bs, head, seqlen, dim = key_states.shape
@@ -334,7 +440,9 @@ class DynamicCacheSplitHeadFlatten(Cache):
 
                 # Check if head_lens and cu_klen are valid tensors (not None and correct dtype)
                 use_cuda_kernel = False
-                if head_lens is not None and cu_klen is not None:
+                # First check if CUDA API is available
+                cuda_api_available, cuda_api_error = check_cuda_api_availability()
+                if cuda_api_available and head_lens is not None and cu_klen is not None:
                     # Check if they are tensors with correct dtype
                     if isinstance(head_lens, torch.Tensor) and isinstance(cu_klen, torch.Tensor):
                         # Ensure they are int32 dtype as required by CUDA kernel
@@ -345,22 +453,42 @@ class DynamicCacheSplitHeadFlatten(Cache):
                                 new_value_cache = update_flatten_view(self.value_cache[layer_idx].contiguous().reshape(-1,dim), value_states.contiguous().reshape(-1, dim), head_lens, cu_klen)
                                 use_cuda_kernel = True
                                 # 在 解码阶段，把新生成的一个 token 的 KV 高效地追加到 flatten KV Cache 中
-                                if not hasattr(self, '_cuda_kernel_used_logged'):
+                                global _CUDA_KERNEL_USED_LOGGED
+                                if not _CUDA_KERNEL_USED_LOGGED:
                                     print("[SparseMM] ✓ Using CUDA kernel (tiny_api_cuda) for cache update - optimal performance")
-                                    self._cuda_kernel_used_logged = True
+                                    _CUDA_KERNEL_USED_LOGGED = True
                                 self.key_cache[layer_idx] = new_key_cache
                                 self.value_cache[layer_idx] = new_value_cache
                             except Exception as e:
                                 # Fallback to PyTorch implementation if CUDA kernel fails
-                                print(f"[SparseMM] Warning: CUDA kernel failed ({e}), falling back to PyTorch implementation")
+                                # Only print warning once per instance to reduce log noise
+                                if not hasattr(self, '_cuda_warning_printed'):
+                                    print(f"[SparseMM] Warning: CUDA kernel failed ({e}), falling back to PyTorch implementation")
+                                    self._cuda_warning_printed = True
                                 use_cuda_kernel = False
+                elif not cuda_api_available and not hasattr(self, '_cuda_api_warning_printed'):
+                    # Print warning about CUDA API unavailability only once
+                    print(f"[SparseMM] CUDA API (cuda_api.cu) not available: {cuda_api_error}")
+                    print(f"[SparseMM] Using PyTorch fallback implementation (slower but functional)")
+                    self._cuda_api_warning_printed = True
                 
                 # Fallback to PyTorch implementation if CUDA kernel is not available or failed
                 if not use_cuda_kernel:
-                    # Use PyTorch fallback: simple concatenation
-                    # This is less efficient but more robust
-                    self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states.contiguous().reshape(-1, dim)], dim=0)
-                    self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states.contiguous().reshape(-1, dim)], dim=0)
+                    # CRITICAL FIX: Use correct PyTorch implementation instead of simple concatenation
+                    # Simple torch.cat would break the per-head structure of flattened KV cache
+                    key_states_flat = key_states.contiguous().reshape(-1, dim)
+                    value_states_flat = value_states.contiguous().reshape(-1, dim)
+                    if head_lens is not None and cu_klen is not None:
+                        self.key_cache[layer_idx] = self._update_flatten_view_pytorch(
+                            self.key_cache[layer_idx], key_states_flat, head_lens, cu_klen
+                        )
+                        self.value_cache[layer_idx] = self._update_flatten_view_pytorch(
+                            self.value_cache[layer_idx], value_states_flat, head_lens, cu_klen
+                        )
+                    else:
+                        # If metadata not available, fallback to simple concatenation (shouldn't happen normally)
+                        self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states_flat], dim=0)
+                        self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states_flat], dim=0)
             else:
                 raise ValueError(f"Unexpected key_states dimension: {key_states.dim()}, shape: {key_states.shape}")
 
@@ -369,44 +497,54 @@ class DynamicCacheSplitHeadFlatten(Cache):
     def _update_flatten_view_pytorch(self, cache, state, head_lens, cu_klen):
         """
         PyTorch fallback implementation of update_flatten_view.
-        Replicates the CUDA kernel logic: copies old cache data and inserts new state at the end of each head.
+        
+        This function correctly handles the per-head variable-length KV cache update:
+        - Each head has a different number of cached tokens (stored in head_lens)
+        - cu_klen[i] gives the start index in the flattened cache for head i
+        - For each head, we need to:
+          1. Copy the old cached tokens for this head to the new cache
+          2. Insert the new token at the end of this head's section
+        
+        Args:
+            cache: Old flattened KV cache, shape [old_total_len, head_dim]
+            state: New token states, shape [num_kv_heads, head_dim] (one new token per head)
+            head_lens: Current length of each head, shape [num_kv_heads]
+            cu_klen: Cumulative lengths (start indices), shape [num_kv_heads + 1]
+        
+        Returns:
+            New flattened KV cache with new tokens inserted, shape [old_total_len + num_kv_heads, head_dim]
         """
-        origin_len = cache.shape[0]
         head_num = head_lens.shape[0]
         dim = cache.shape[1]
         
-        # Create new cache with size origin_len + head_num
-        new_cache = torch.empty((origin_len + head_num, dim), dtype=cache.dtype, device=cache.device)
+        # Create new cache with size origin_len + head_num (adding one token per head)
+        origin_len = cache.shape[0]
+        new_total_len = origin_len + head_num
+        new_cache = torch.empty((new_total_len, dim), dtype=cache.dtype, device=cache.device)
         
-        # Convert to CPU tensors for indexing if needed (for scalar access)
+        # Convert to CPU tensors for scalar indexing (to avoid GPU synchronization issues)
         head_lens_cpu = head_lens.cpu() if head_lens.is_cuda else head_lens
         cu_klen_cpu = cu_klen.cpu() if cu_klen.is_cuda else cu_klen
         
-        # For each head, copy old data and insert new state
+        # Process each head: copy old data and insert new token
+        # The new cache layout has each head's data shifted by head_idx positions
+        # to make room for the new token at the end of each head
         for head_idx in range(head_num):
             head_len = int(head_lens_cpu[head_idx].item())
-            cu_klen_idx = int(cu_klen_cpu[head_idx].item())
-            cu_klen_next = int(cu_klen_cpu[head_idx + 1].item())
+            # Source start in old cache
+            src_start = int(cu_klen_cpu[head_idx].item())
+            # Destination start in new cache (shifted by head_idx to account for inserted tokens)
+            dst_start = src_start + head_idx
             
-            src_cum_off = cu_klen_idx * dim
-            dst_cum_off = src_cum_off + head_idx * dim
-            insert_off = (cu_klen_next + head_idx) * dim
-            
-            src_start_row = src_cum_off // dim
-            dst_start_row = dst_cum_off // dim
-            insert_row = insert_off // dim
-            
+            # Copy old cached tokens for this head
             if head_len > 0:
-                actual_available = cache.shape[0] - src_start_row
-                actual_head_len = min(head_len, actual_available)
-                
-                if actual_head_len > 0:
-                    new_cache[dst_start_row:dst_start_row + actual_head_len] = cache[src_start_row:src_start_row + actual_head_len]
-                    if actual_head_len < head_len:
-                        remaining = head_len - actual_head_len
-                        new_cache[dst_start_row + actual_head_len:dst_start_row + head_len] = 0
+                actual_len = min(head_len, origin_len - src_start)
+                if actual_len > 0:
+                    new_cache[dst_start:dst_start + actual_len] = cache[src_start:src_start + actual_len]
             
-            new_cache[insert_row:insert_row + 1] = state[head_idx:head_idx + 1]
+            # Insert new token at the end of this head's section
+            insert_pos = dst_start + head_len
+            new_cache[insert_pos:insert_pos + 1] = state[head_idx:head_idx + 1]
         
         return new_cache
 
@@ -850,10 +988,36 @@ class SparseMM():
             head_score_list = np.array([random.random() for _ in range(self.num_hidden_layers * self.num_attention_heads)])
         elif head_score == 'visual':
             head_score = load_head_score(model_type)
-            head_score_list = [np.mean(l[1]) for l in head_score.items()]
+            # Extract scores in explicit layer-head order to ensure consistency
+            head_score_list = []
+            for layer_idx in range(self.num_hidden_layers):
+                for head_idx in range(self.num_attention_heads):
+                    key = f"{layer_idx}-{head_idx}"
+                    if key in head_score:
+                        score_value = head_score[key]
+                        if isinstance(score_value, list):
+                            head_score_list.append(np.mean(score_value))
+                        else:
+                            head_score_list.append(float(score_value))
+                    else:
+                        print(f"Warning: Score not found for {key}, using default 0.0")
+                        head_score_list.append(0.0)
         elif head_score == 'audio':
             head_score = load_head_score(model_type)
-            head_score_list = [np.mean(l[1]) for l in head_score.items()]
+            # Extract scores in explicit layer-head order to ensure consistency
+            head_score_list = []
+            for layer_idx in range(self.num_hidden_layers):
+                for head_idx in range(self.num_attention_heads):
+                    key = f"{layer_idx}-{head_idx}"
+                    if key in head_score:
+                        score_value = head_score[key]
+                        if isinstance(score_value, list):
+                            head_score_list.append(np.mean(score_value))
+                        else:
+                            head_score_list.append(float(score_value))
+                    else:
+                        print(f"Warning: Score not found for {key}, using default 0.0")
+                        head_score_list.append(0.0)
         else:
             raise ValueError('head_score type not supported')
             
@@ -1049,6 +1213,35 @@ class SparseMM():
         _device = key_states.device
         bsz, num_heads, q_len, head_dim = query_states.shape
         
+        # CRITICAL FIX: If budget is a ratio, dynamically compute base_capacity based on actual sequence length
+        # Only apply dynamic budget in prefill phase (q_len > 1), keep fixed in decode phase
+        use_dynamic_budget = False
+        if hasattr(self, 'config') and self.config is not None:
+            budget_ratio = getattr(self.config, 'budget_ratio', None)
+            if budget_ratio is not None and 0 < budget_ratio < 1.0:
+                # Only use dynamic budget in prefill phase
+                if q_len > 1:  # Prefill phase
+                    # Budget is a ratio: compute dynamic budget based on actual sequence length
+                    dynamic_budget = max(64, int(q_len * budget_ratio))  # Ensure minimum budget
+                    dynamic_base_capacity = dynamic_budget - self.window_size
+                    if dynamic_base_capacity < 1:
+                        dynamic_base_capacity = 1
+                    # Store original for potential restore
+                    if not hasattr(self, '_original_base_capacity'):
+                        self._original_base_capacity = self.base_capacity
+                    # Update base_capacity for this prefill call
+                    self.base_capacity = dynamic_base_capacity
+                    # Recompute head_adaptive_capacity with new base_capacity
+                    self._compute_head_adaptive_capacity()
+                    use_dynamic_budget = True
+                    if not hasattr(self, '_budget_ratio_logged') or not self._budget_ratio_logged:
+                        if self.layer_idx == 0:
+                            print(f"[SparseMM] Dynamic budget (ratio={budget_ratio}): "
+                                  f"q_len={q_len} -> budget={dynamic_budget}, base_capacity={dynamic_base_capacity}")
+                        self._budget_ratio_logged = True
+                # In decode phase (q_len == 1), keep using the base_capacity from prefill
+                # (already set during prefill, no need to change)
+        
         if getattr(self, 'head_lens', None) is None:
             self.reset_token_usage_stats()
             self._current_sample_started = True
@@ -1063,6 +1256,29 @@ class SparseMM():
                 self.total_token_budget += total_used
                 self.total_heads_counted += num_kv_heads
                 self.head_token_usage.extend([used_per_head] * num_kv_heads)
+                
+                # CRITICAL: Initialize metadata even when no compression is needed
+                # This ensures decode phase has valid head_lens
+                def init_metadata(num_heads, k_lens, klen_sum, max_seqlen_k):
+                    self.head_lens = torch.tensor(k_lens, dtype=torch.int32, device=_device)
+                    self.klen_sum = klen_sum
+                    self.max_seqlen_k = max_seqlen_k
+                    self.cu_headlens = torch.cumsum(self.head_lens, dim=0, dtype=torch.int32)
+                    self.cu_klen = self.cu_headlens - self.head_lens
+                    self.cu_klen = torch.cat(
+                        [self.cu_klen, torch.tensor([self.klen_sum], dtype=torch.int32, device=_device)], dim=0)
+                    self.layer_qlens = torch.ones(num_heads//self.num_key_value_groups, dtype=torch.int32,device=_device)
+                    self.qlen_sum = num_heads//self.num_key_value_groups
+                    self.cu_qlen = torch.cumsum(self.layer_qlens, dim=0, dtype=torch.int32) - self.layer_qlens
+                    self.cu_qlen = torch.cat(
+                        [self.cu_qlen, torch.tensor([self.qlen_sum], dtype=torch.int32, device=_device)], dim=0)
+                    self.cu_offset = torch.arange(0, num_heads//self.num_key_value_groups + 1, dtype=torch.int32, device=_device)
+                    self.cu_head_offset = torch.arange(1, num_heads//self.num_key_value_groups +1, dtype=torch.int32, device=_device)
+                
+                k_lens = [q_len] * num_kv_heads
+                klen_sum = q_len * num_kv_heads
+                max_seqlen_k = q_len
+                init_metadata(num_heads, k_lens, klen_sum, max_seqlen_k)
 
             return origin_key_states.reshape(-1, head_dim), origin_value_states.reshape(-1, head_dim)
       

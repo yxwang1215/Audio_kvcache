@@ -15,23 +15,29 @@ from collections import defaultdict
 from pathlib import Path
 
 # 根据图中的数据，定义已有的组合（不需要重新搜索）
+# 对于 alpha 0.4-0.9，已完成 cutoff 0 到 0.8，但 cutoff 0.9 和 1 还未完成
+COMPLETED_CUTOFFS = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7, 0.8]
 EXISTING_COMBINATIONS = {
-    0.4: [0.3],
-    0.5: [0.1, 0.15, 0.3],
-    0.55: [0.05, 0.1, 0.15, 0.3],
-    0.6: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6],
-    0.65: [0.3],
-    0.7: [0.3],
-    0.8: [0.3],
-    0.9: [0.3],
+    0.0: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7, 0.8,0.9,1.0],
+    0.1: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7, 0.8,0.9,1.0],
+    0.2: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7, 0.8,0.9,1.0],
+    0.3: [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6,0.7, 0.8,0.9,1.0],
+    0.4: COMPLETED_CUTOFFS,
+    0.5: COMPLETED_CUTOFFS,
+    0.55: COMPLETED_CUTOFFS,
+    0.6: COMPLETED_CUTOFFS,
+    0.65: COMPLETED_CUTOFFS,
+    0.7: COMPLETED_CUTOFFS,
+    0.8: COMPLETED_CUTOFFS,
+    0.9: COMPLETED_CUTOFFS,
 }
 
 # 所有需要搜索的参数值
-ALPHA_VALUES = [0.4, 0.5, 0.55, 0.6, 0.65, 0.7, 0.8, 0.9]
-CUTOFF_VALUES = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7, 0.8]
+ALPHA_VALUES = [0,0.1,0.2,0.3,0.4, 0.5, 0.55, 0.6, 0.65, 0.7, 0.8, 0.9,1]
+CUTOFF_VALUES = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7, 0.8, 0.9, 1]
 
 # GPU列表
-GPUS = [0, 1, 2, 3]
+GPUS = [0, 1, 4, 6]
 
 # 基础路径
 BASE_DIR = "/mnt/users/wangyuxuan-20250915/Audio"
@@ -135,26 +141,59 @@ def run_experiment(alpha, cutoff, gpu_id):
     
     # 创建错误日志文件
     error_log_file = f"{results_dir}/error.log"
+    output_log_file = f"{results_dir}/output.log"
     os.makedirs(results_dir, exist_ok=True)
     
     try:
-        # 运行实验
-        result = subprocess.run(
-            cmd,
-            shell=True,
-            executable='/bin/bash',
-            capture_output=True,
-            text=True,
-            timeout=7200  # 2小时超时
-        )
+        # 运行实验，实时输出到文件
+        print(f"[GPU {gpu_id}] Command: {cmd[:100]}...")  # 显示命令的前100个字符
+        print(f"[GPU {gpu_id}] Output will be saved to: {output_log_file}")
+        
+        # 使用Popen实时写入输出
+        with open(output_log_file, 'w', encoding='utf-8') as out_file, \
+             open(error_log_file, 'w', encoding='utf-8') as err_file:
+            process = subprocess.Popen(
+                cmd,
+                shell=True,
+                executable='/bin/bash',
+                stdout=out_file,
+                stderr=err_file,
+                text=True
+            )
+            
+            # 等待进程完成，但定期检查状态
+            while True:
+                return_code = process.poll()
+                if return_code is not None:
+                    break
+                # 每30秒打印一次状态
+                time.sleep(30)
+                elapsed = time.time() - start_time
+                print(f"[GPU {gpu_id}] Still running: alpha={alpha}, cutoff={cutoff}, elapsed={elapsed:.0f}s")
         
         elapsed_time = time.time() - start_time
+        result = type('obj', (object,), {'returncode': return_code, 'stdout': '', 'stderr': ''})()
+        
+        # 读取输出文件内容（用于错误检查）
+        try:
+            with open(output_log_file, 'r', encoding='utf-8') as f:
+                output_content = f.read()
+                result.stdout = output_content
+        except:
+            result.stdout = ''
+        
+        try:
+            with open(error_log_file, 'r', encoding='utf-8') as f:
+                error_content = f.read()
+                result.stderr = error_content
+        except:
+            result.stderr = ''
         
         # 保存错误输出（如果有）
         if result.returncode != 0 or result.stderr:
-            with open(error_log_file, 'w', encoding='utf-8') as f:
-                f.write(f"Return code: {result.returncode}\n")
-                f.write(f"STDOUT:\n{result.stdout}\n")
+            with open(error_log_file, 'a', encoding='utf-8') as f:
+                f.write(f"\n\nReturn code: {result.returncode}\n")
+                f.write(f"STDOUT (last 1000 chars):\n{result.stdout[-1000:]}\n")
                 f.write(f"STDERR:\n{result.stderr}\n")
         
         # 检查结果
@@ -179,11 +218,6 @@ def run_experiment(alpha, cutoff, gpu_id):
                     print(f"[GPU {gpu_id}] Error: {result.stderr[:200]}")
             return False, None
             
-    except subprocess.TimeoutExpired:
-        elapsed_time = time.time() - start_time
-        log_result(alpha, cutoff, None, gpu_id, elapsed_time, status='timeout')
-        print(f"[GPU {gpu_id}] Timeout: alpha={alpha}, cutoff={cutoff}")
-        return False, None
     except Exception as e:
         elapsed_time = time.time() - start_time
         log_result(alpha, cutoff, None, gpu_id, elapsed_time, status=f'error: {str(e)}')

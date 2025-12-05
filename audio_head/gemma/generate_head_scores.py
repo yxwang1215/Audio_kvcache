@@ -114,7 +114,7 @@ def convert_to_visual_head_format(layer_head_stats):
 def generate_head_scores_from_ranking(ranking_file):
     """
     从 head_ranking_analysis.json 生成分数文件
-    使用 top_20_by_avg_ratio 中的数据
+    优先使用 significant_heads，如果不存在则使用 top_20_by_avg_ratio
     """
     with open(ranking_file, 'r') as f:
         ranking_data = json.load(f)
@@ -122,9 +122,15 @@ def generate_head_scores_from_ranking(ranking_file):
     # 创建完整的 layer-head 映射
     visual_format = {}
     
-    # 从 significant_heads 中提取所有头的信息
+    # 优先从 significant_heads 中提取所有头的信息
+    heads_list = None
     if 'significant_heads' in ranking_data:
-        for head_info in ranking_data['significant_heads']:
+        heads_list = ranking_data['significant_heads']
+    elif 'top_20_by_avg_ratio' in ranking_data:
+        heads_list = ranking_data['top_20_by_avg_ratio']
+    
+    if heads_list:
+        for head_info in heads_list:
             layer_head = head_info.get('layer_head', '')
             if layer_head.startswith("L") and "_H" in layer_head:
                 parts = layer_head[1:].split("_H")
@@ -140,10 +146,81 @@ def generate_head_scores_from_ranking(ranking_file):
     
     return visual_format
 
-def ensure_all_heads_present(visual_format, num_layers=36, num_heads=16):
+def detect_num_layers_and_heads(word_attention_file=None, stats_file=None):
+    """
+    自动检测实际的层数和头数
+    从 word_attention_analysis.json 或 layer_head_attention_stats.json 中检测
+    """
+    num_layers = None
+    num_heads = None
+    
+    # 方法1: 从 word_attention_analysis.json 检测
+    if word_attention_file and os.path.exists(word_attention_file):
+        try:
+            with open(word_attention_file, 'r') as f:
+                data = json.load(f)
+            
+            all_layers = set()
+            all_heads = set()
+            
+            if isinstance(data, list) and len(data) > 0:
+                for sample in data:
+                    tokens = sample.get('tokens', [])
+                    for token in tokens:
+                        layer_head_stats = token.get('layer_head_stats', {})
+                        for key in layer_head_stats.keys():
+                            if key.startswith('L') and '_H' in key:
+                                parts = key[1:].split('_H')
+                                if len(parts) == 2:
+                                    layer = int(parts[0])
+                                    head = int(parts[1])
+                                    all_layers.add(layer)
+                                    all_heads.add(head)
+            
+            if all_layers:
+                num_layers = max(all_layers) + 1
+            if all_heads:
+                num_heads = max(all_heads) + 1
+        except Exception as e:
+            print(f"Warning: Failed to detect from word_attention_analysis.json: {e}")
+    
+    # 方法2: 从 layer_head_attention_stats.json 检测
+    if (num_layers is None or num_heads is None) and stats_file and os.path.exists(stats_file):
+        try:
+            with open(stats_file, 'r') as f:
+                data = json.load(f)
+            
+            all_layers = set()
+            all_heads = set()
+            
+            for key in data.keys():
+                if key.startswith('L') and '_H' in key:
+                    parts = key[1:].split('_H')
+                    if len(parts) == 2:
+                        layer = int(parts[0])
+                        head = int(parts[1])
+                        all_layers.add(layer)
+                        all_heads.add(head)
+            
+            if all_layers:
+                num_layers = max(all_layers) + 1
+            if all_heads:
+                num_heads = max(all_heads) + 1
+        except Exception as e:
+            print(f"Warning: Failed to detect from layer_head_attention_stats.json: {e}")
+    
+    # 默认值（如果检测失败）
+    if num_layers is None:
+        num_layers = 30  # Gemma3n-E2B 实际有 30 层
+    if num_heads is None:
+        num_heads = 8  # Gemma3n-E2B 有 8 个 attention heads
+    
+    return num_layers, num_heads
+
+def ensure_all_heads_present(visual_format, num_layers=30, num_heads=8):
     """
     确保所有 layer-head 组合都存在，缺失的用 [0.0, 0.0] 填充
-    注意: Qwen2.5-Omni-3B 实际只有 16 个 attention heads
+    注意: Gemma3n-E2B 实际有 30 层，8 个 attention heads
     """
     complete_format = {}
     
@@ -157,16 +234,33 @@ def ensure_all_heads_present(visual_format, num_layers=36, num_heads=16):
     
     return complete_format
 
-def process_batch(audio_head_dir, batch_name, batch_dir, head_score_dir, num_layers=36, num_heads=16):
+def process_batch(audio_head_dir, batch_name, batch_dir, head_score_dir, num_layers=None, num_heads=None):
     """处理单个批次的结果
-    注意: Qwen2.5-Omni-3B 实际只有 16 个 attention heads
+    如果 num_layers 或 num_heads 为 None，会自动从数据中检测
     """
     print(f"\n{'='*60}")
     print(f"Processing {batch_name}")
     print(f"{'='*60}")
     
-    # 方法1: 从 word_attention_analysis.json 提取每个样本的原始分数（与 visual_head 格式一致）
+    # 自动检测层数和头数
     word_attention_file = batch_dir / "word_attention_analysis.json"
+    stats_file = batch_dir / "layer_head_attention_stats.json"
+    
+    if num_layers is None or num_heads is None:
+        detected_layers, detected_heads = detect_num_layers_and_heads(
+            word_attention_file if word_attention_file.exists() else None,
+            stats_file if stats_file.exists() else None
+        )
+        if num_layers is None:
+            num_layers = detected_layers
+        if num_heads is None:
+            num_heads = detected_heads
+        print(f"Auto-detected: {num_layers} layers, {num_heads} heads")
+    else:
+        print(f"Using specified: {num_layers} layers, {num_heads} heads")
+    
+    # 方法1: 从 word_attention_analysis.json 提取每个样本的原始分数（与 visual_head 格式一致）
+    per_sample_scores = None
     if word_attention_file.exists():
         print(f"\nLoading word_attention_analysis.json...")
         print(f"Extracting per-sample scores (visual_head format)...")
@@ -231,7 +325,7 @@ def process_batch(audio_head_dir, batch_name, batch_dir, head_score_dir, num_lay
         print(f"Warning: {stats_file} not found")
     
     # 方法3: 生成聚合版本（每个 head 一个平均值，便于直接使用）
-    if word_attention_file.exists() and per_sample_scores:
+    if per_sample_scores:
         print(f"\nGenerating aggregated version (mean scores)...")
         aggregated_format = {}
         for key, scores in per_sample_scores.items():
@@ -298,15 +392,15 @@ def main():
     head_score_dir.mkdir(parents=True, exist_ok=True)
     print(f"Created head_score directory: {head_score_dir}")
     
-    # 处理主结果目录
+    # 处理主结果目录（自动检测层数和头数）
     results_dir = audio_head_dir / "word_attention_results"
     if results_dir.exists():
-        process_batch(audio_head_dir, "main", results_dir, head_score_dir)
+        process_batch(audio_head_dir, "main", results_dir, head_score_dir, num_layers=None, num_heads=None)
     
-    # 处理 batch1 结果目录
+    # 处理 batch1 结果目录（自动检测层数和头数）
     batch1_dir = audio_head_dir / "word_attention_results_batch1"
     if batch1_dir.exists():
-        process_batch(audio_head_dir, "batch1", batch1_dir, head_score_dir)
+        process_batch(audio_head_dir, "batch1", batch1_dir, head_score_dir, num_layers=None, num_heads=None)
     
     print("\n" + "="*60)
     print("Head score files generated successfully!")

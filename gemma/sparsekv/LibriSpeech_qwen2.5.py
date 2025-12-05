@@ -47,15 +47,12 @@ def convert_numpy_types(obj):
     else:
         return obj
 
-sys.path.append("/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Modeling")
-sys.path.append("/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/SparseMM")
-sys.path.append("/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/AudioAdaptiveKVCache")
-sys.path.append("/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Modeling/Qwen2_5_Omni")
 
 # 根据环境变量决定是否使用 sparsekv 版本
 USE_SPARSEKV = os.environ.get("USE_SPARSEKV", "true").lower() == "true"
 
 if USE_SPARSEKV:
+    # Import from current directory (added to sys.path at line 120)
     from modeling_qwen2_5_omni_sparsekv import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniFlashAttention2SparseMM
     print("Using sparsekv version of the model")
 else:
@@ -63,12 +60,9 @@ else:
     print("Using standard version of the model (sparsekv disabled)")
 
 from processing_qwen2_5_omni import Qwen2_5OmniProcessor
-
-sys.path.append("/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Effallm/utils")
 from qwen_omni_utils import process_mm_info
-
-# Import SparseMM utilities
-from sparsemm.sparsemm_utils import (
+# Import SparseMM utilities from current directory
+from sparsemm_utils import (
     SparseMM,
     DynamicCacheSplitHeadFlatten,
     init_sparsemm
@@ -883,6 +877,14 @@ def main():
     if sample_limit > 0:
         print(f"Sample limit: {sample_limit}")
     if USE_SPARSEKV:
+        use_fft_filter = os.environ.get("USE_FFT_FILTER", "false").lower() == "true"
+        print(f"FFT-based spectral filtering: {'ENABLED' if use_fft_filter else 'DISABLED (using Conv1d)'}")
+        if use_fft_filter:
+            print(f"  - Filter type: {os.environ.get('FFT_FILTER_TYPE', 'lowpass')}")
+            print(f"  - Cutoff ratio: {os.environ.get('FFT_CUTOFF_RATIO', '0.3')}")
+            print(f"  - Alpha (mixing): {os.environ.get('FFT_ALPHA', '0.5')}")
+            print(f"  - Adaptive cutoff: {os.environ.get('FFT_ADAPTIVE_CUTOFF', 'true')}")
+            print(f"  - Use saliency: {os.environ.get('FFT_USE_SALIENCY', 'false')}")
         print(f"Audio-aware TopK selection: {'ENABLED' if USE_AUDIO_AWARE_TOPK else 'DISABLED'}")
         if USE_AUDIO_AWARE_TOPK:
             print(f"  - Boundary boost: {ENV_AUDIO_BOUNDARY_BOOST}")
@@ -1517,55 +1519,3 @@ def main():
 if __name__ == "__main__":
     main()
     
-'''
-# Example 1: Using absolute budget value (>= 1.0)
-conda activate Qwen3_2 &&
-CUDA_VISIBLE_DEVICES=0 \
-USE_SPARSEKV=true \
-BUDGET=4096 \
-RATIO=0.5 \
-WINDOW_SIZE=32 \
-KERNEL_SIZE=5 \
-POOLING=maxpool \
-HEAD_SCORE_FILE=aggregated \
-RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv/LibriSpeech_4096_ratio0.5_window32_avgpool \
-python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv/LibriSpeech_qwen2.5.py
-
-# Example 2: Using budget as ratio of prefill tokens (< 1.0, e.g., 0.7 = 70%)
-conda activate Qwen3_2 &&
-CUDA_VISIBLE_DEVICES=1 \
-USE_SPARSEKV=true \
-BUDGET=0.7 \
-RATIO=0.5 \
-WINDOW_SIZE=32 \
-KERNEL_SIZE=5 \
-POOLING=maxpool \
-HEAD_SCORE_FILE=aggregated \
-RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv/LibriSpeech_budget0.7_ratio0.5_window32_kernel5_maxpool \
-python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv/LibriSpeech_qwen2.5.py
-
-# Example 2.1: With audio-aware TopK selection enabled (from WHY_IMPROVEMENTS.md)
-
-conda activate Qwen3_2 &&
-CUDA_VISIBLE_DEVICES=3 \
-USE_SPARSEKV=true \
-USE_AUDIO_AWARE_TOPK=true \
-AUDIO_BOUNDARY_BOOST=1.0 \
-AUDIO_CONTINUITY_WEIGHT=0.15 \
-AUDIO_SMOOTH_WINDOW=5 \
-BUDGET=0.7 \
-RATIO=0.5 \
-WINDOW_SIZE=32 \
-KERNEL_SIZE=5 \
-POOLING=maxpool \
-HEAD_SCORE_FILE=aggregated \
-RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv/LibriSpeech_budget0.7_audio_aware_boundary1_continuity0.15_smooth5 \
-python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv/LibriSpeech_qwen2.5.py
-
-# Example 3: Baseline without SparseMM
-CUDA_VISIBLE_DEVICES=1 \
-USE_SPARSEKV=false \
-RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv/LibriSpeech_vanilla \
-python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv/LibriSpeech_qwen2.5.py
-
-'''

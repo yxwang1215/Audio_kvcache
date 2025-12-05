@@ -1,0 +1,12 @@
+{
+  "global_summary": {
+    "count": 0,
+    "avg_wall_time": 0.0,
+    "avg_prefill_time": 0.0,
+    "avg_total_gpu_time": 0.0,
+    "avg_decode_time": 0.0,
+    "total_decode_tokens": 0,
+    "avg_tps": 0.0
+  },
+  "detailed_records": []
+}
