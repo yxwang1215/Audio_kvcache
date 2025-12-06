@@ -6,10 +6,10 @@
 # 基础配置
 # ============================================
 # GPU 设置
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=0
 
 # 模型路径配置
-export MODEL_PATH="/mnt/public/models/gemma-3n-E2B-it"
+export MODEL_PATH="/mnt/public/models/gemma-3n-E4B-it"
 
 # 数据集配置（已有默认值，可选）
 # 默认路径: /mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart/kespeech
@@ -52,6 +52,10 @@ export HEAD_SCORE_FILE="aggregated"
 # export AUDIO_CONTINUITY_WEIGHT=0.1
 # export AUDIO_SMOOTH_WINDOW=5
 
+# 重复检测配置（防止模型陷入重复循环）
+export NO_REPEAT_NGRAM_SIZE=3
+export REPETITION_PENALTY=1.1
+
 # ============================================
 # 运行命令
 # ============================================
@@ -63,6 +67,6 @@ conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/gemma/sparsekv_fft_dataset && \
 python code/gemma_kespeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/KeSpeech_Results \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/KeSpeech_Results/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/KeSpeech_Results/full_cache \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/KeSpeech_Results/full_cache/timing_stats.json
 

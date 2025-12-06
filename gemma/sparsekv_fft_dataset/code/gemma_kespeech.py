@@ -825,6 +825,9 @@ def load_kespeech_dataset(base_dir, split="test"):
     dataset = []
     split_dir = os.path.join(base_dir, split)
     
+    print(f"[Dataset Loading] Base directory: {base_dir}")
+    print(f"[Dataset Loading] Split directory: {split_dir}")
+    
     # Check if split directory exists
     if not os.path.exists(split_dir):
         print(f"Error: Dataset path does not exist: {split_dir}")
@@ -845,14 +848,32 @@ def load_kespeech_dataset(base_dir, split="test"):
         print(f"Could not load from saved dataset: {e}")
         hf_dataset = None
     
+    # If saved dataset not available, try to load from HuggingFace cache (without downloading)
+    if hf_dataset is None:
+        try:
+            from datasets import load_dataset
+            print(f"Attempting to load KeSpeech dataset from HuggingFace cache (no download)...")
+            # Use download_mode to avoid downloading if not in cache
+            # This will raise an error if dataset is not in cache, which we'll catch
+            hf_dataset = load_dataset("TwinkStart/kespeech", split=split, download_mode="reuse_cache_if_exists")
+            print(f"Loaded {len(hf_dataset)} samples from HuggingFace cache")
+        except Exception as e:
+            print(f"Failed to load from HuggingFace cache: {e}")
+            print(f"Note: Transcription will be empty. This may affect evaluation accuracy.")
+            print(f"To get transcriptions, you can:")
+            print(f"  1. Download dataset metadata from HuggingFace: datasets.load_dataset('TwinkStart/kespeech', split='{split}')")
+            print(f"  2. Or provide .txt files with same names as .wav files in {split_dir}")
+            hf_dataset = None
+    
     # If we have HuggingFace dataset metadata, use it
     if hf_dataset is not None:
         print("Using HuggingFace dataset metadata from local cache...")
+        print(f"[Dataset Loading] Audio files will be loaded from: {split_dir}")
         for idx, item in enumerate(hf_dataset):
             audio_id = str(item.get("id", item.get("audio_id", f"kespeech_{idx}")))
             transcription = item.get("Text", item.get("text", ""))
             
-            # Try to find local audio file by index
+            # Try to find local audio file by index (strictly from split_dir)
             local_audio_path = os.path.join(split_dir, f"{idx}.wav")
             if not os.path.exists(local_audio_path):
                 # Try to find by audio_id if index doesn't work
@@ -887,9 +908,10 @@ def load_kespeech_dataset(base_dir, split="test"):
     
     # If no HuggingFace metadata, load directly from local files
     print("No HuggingFace metadata found, loading directly from local audio files...")
+    print(f"[Dataset Loading] Loading audio files from: {split_dir}")
     print("Note: Transcription will be empty. This may affect evaluation accuracy.")
     
-    # Get all .wav files in the split directory
+    # Get all .wav files in the split directory (strictly from split_dir)
     import glob
     audio_files = sorted(glob.glob(os.path.join(split_dir, "*.wav")), 
                         key=lambda x: int(os.path.splitext(os.path.basename(x))[0]) if os.path.splitext(os.path.basename(x))[0].isdigit() else float('inf'))

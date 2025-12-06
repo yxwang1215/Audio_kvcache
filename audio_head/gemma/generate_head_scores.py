@@ -414,3 +414,22 @@ def main():
 if __name__ == "__main__":
     main()
 
+'''
+# 基本用法（自动检测层数和头数）
+python generate_head_scores.py \
+    --input_file word_attention_results/word_attention_analysis.json \
+    --output_file head_score/audio_head_scores.json
+
+# 指定层数和头数
+python generate_head_scores.py \
+    --input_file word_attention_results/word_attention_analysis.json \
+    --output_file head_score/audio_head_scores.json \
+    --num_layers 36 \
+    --num_heads 16
+
+# 自定义输出路径
+python generate_head_scores.py \
+    --input_file /path/to/word_attention_analysis.json \
+    --output_file /custom/path/audio_head_scores.json
+
+'''

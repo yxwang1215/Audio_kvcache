@@ -4,7 +4,7 @@
 
 export CUDA_VISIBLE_DEVICES=7
 # 模型路径配置
-export MODEL_PATH="/mnt/public/models/gemma-3n-E2B-it"
+export MODEL_PATH="/mnt/public/models/gemma-3n-E4B-it"
 export SAMPLE_LIMIT=0
 export USE_SPARSEKV="false"
 # export BUDGET=1.0
@@ -21,6 +21,10 @@ export FFT_ALPHA="0.5"
 export FFT_ADAPTIVE_CUTOFF="true"
 export FFT_USE_SALIENCY="false"
 
+# 重复检测配置（防止模型陷入重复循环）
+export NO_REPEAT_NGRAM_SIZE=3
+export REPETITION_PENALTY=1.1
+
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 
 # 激活环境并运行（只处理西班牙语）
@@ -29,6 +33,6 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/gemma/sparsekv_fft_dataset
 python code/gemma_multilingual_librispeech.py \
     --model-path "${MODEL_PATH}" \
     --languages spanish \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/MultilingualLibriSpeech/Spanish/vanilla/full_cache \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/MultilingualLibriSpeech/Spanish/vanilla/full_cache/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/MultilingualLibriSpeech/Spanish/vanilla/full_cache \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/MultilingualLibriSpeech/Spanish/vanilla/full_cache/timing_stats.json
 
