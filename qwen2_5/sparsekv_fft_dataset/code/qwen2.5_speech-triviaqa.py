@@ -27,6 +27,8 @@ import jiwer
 import argparse
 from typing import Dict, Any
 from datasets import load_dataset
+import ast
+from copy import deepcopy
 
 
 random.seed(42)
@@ -417,12 +419,76 @@ class GlobalTimingStats:
         
         return output_file
 
-def load_speech_triviaqa_dataset(split="test"):
-    """Load speech-triviaqa dataset from UltraEval-Audio registry"""
-    print(f"Loading speech-triviaqa dataset from UltraEval-Audio registry (split={split})...")
+def load_speech_triviaqa_dataset(split="test", twinkstart_path=None):
+    """Load speech-triviaqa dataset from local path, UltraEval-Audio registry, or HuggingFace directly
     
-    # UltraEval-Audio root directory
-    ultraeval_root = "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio"
+    Args:
+        split: Dataset split to load (default: "test")
+        twinkstart_path: Path to TwinkStart root directory (default: /mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart)
+    """
+    print(f"Loading speech-triviaqa dataset (split={split})...")
+    
+    # Default TwinkStart path
+    default_twinkstart_path = "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart"
+    if twinkstart_path is None:
+        twinkstart_path = default_twinkstart_path
+    
+    # Try loading from local path first
+    dataset = None
+    local_dataset_path = os.path.join(twinkstart_path, "speech-triavia-qa", split)
+    if os.path.exists(local_dataset_path):
+        try:
+            from datasets import load_from_disk
+            print(f"Attempting to load speech-triviaqa from local path: {local_dataset_path}")
+            dataset = load_from_disk(local_dataset_path)
+            print(f"Successfully loaded {len(dataset)} samples from local path")
+            
+            # Convert to list format
+            dataset_list = []
+            for idx, item in enumerate(dataset):
+                # Extract required fields
+                audio_data = item.get("audio", {})
+                question_text = item.get("QuestionText", item.get("question", ""))
+                answer = item.get("answer", "")
+                
+                # Get audio array and sampling rate
+                audio_array = audio_data.get("array", None) if isinstance(audio_data, dict) else None
+                sampling_rate = audio_data.get("sampling_rate", 16000) if isinstance(audio_data, dict) else 16000
+                
+                # Calculate duration if audio array is available
+                duration = 0.0
+                if audio_array is not None:
+                    try:
+                        duration = len(audio_array) / sampling_rate
+                    except:
+                        duration = 0.0
+                
+                dataset_list.append({
+                    "id": item.get("id", f"sample_{idx}"),
+                    "QuestionText": question_text,
+                    "answer": answer,
+                    "duration": duration,
+                    "audio": {
+                        "array": audio_array,
+                        "sampling_rate": sampling_rate,
+                        "path": None
+                    }
+                })
+            
+            print(f"Converted {len(dataset_list)} samples to list format")
+            return dataset_list
+        except Exception as e:
+            print(f"Warning: Failed to load from local path: {e}")
+            print("Falling back to UltraEval-Audio registry...")
+            dataset = None
+    else:
+        print(f"Local path not found: {local_dataset_path}, trying UltraEval-Audio registry...")
+        dataset = None
+    
+    # Try UltraEval-Audio registry if local path failed or doesn't exist
+    if dataset is None:
+        # Try UltraEval-Audio registry first
+        ultraeval_root = "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio"
     
     # Try to find UltraEval-Audio root
     possible_paths = [
@@ -438,30 +504,69 @@ def load_speech_triviaqa_dataset(split="test"):
             ultraeval_root = path
             break
     
-    if not ultraeval_root:
-        print("Error: UltraEval-Audio root directory not found.")
-        return []
+    # Try loading from UltraEval-Audio registry
+    if ultraeval_root:
+        try:
+            # Add UltraEval-Audio to Python path
+            if ultraeval_root not in sys.path:
+                sys.path.insert(0, ultraeval_root)
+            
+            from audio_evals.registry import registry
+            
+            print(f"Loading speech-triviaqa dataset from UltraEval-Audio registry...")
+            dataset_obj = registry.get_dataset("speech-triviaqa")
+            if dataset_obj is not None:
+                # Load dataset data
+                dataset_data = dataset_obj.load(limit=0)
+                print(f"Loaded {len(dataset_data)} samples from UltraEval-Audio registry")
+                
+                # Convert to list format
+                dataset_list = []
+                for idx, item in enumerate(dataset_data):
+                    # Extract required fields
+                    audio_data = item.get("audio", {})
+                    question_text = item.get("QuestionText", item.get("question", ""))
+                    answer = item.get("answer", "")
+                    
+                    # Get audio array and sampling rate
+                    audio_array = audio_data.get("array", None) if isinstance(audio_data, dict) else None
+                    sampling_rate = audio_data.get("sampling_rate", 16000) if isinstance(audio_data, dict) else 16000
+                    
+                    # Calculate duration if audio array is available
+                    duration = 0.0
+                    if audio_array is not None:
+                        try:
+                            duration = len(audio_array) / sampling_rate
+                        except:
+                            duration = 0.0
+                    
+                    dataset_list.append({
+                        "id": item.get("id", f"sample_{idx}"),
+                        "QuestionText": question_text,
+                        "answer": answer,
+                        "duration": duration,
+                        "audio": {
+                            "array": audio_array,
+                            "sampling_rate": sampling_rate,
+                            "path": None
+                        }
+                    })
+                
+                print(f"Converted {len(dataset_list)} samples to list format")
+                return dataset_list
+        except Exception as e:
+            print(f"Warning: Failed to load from UltraEval-Audio registry: {e}")
+            print("Falling back to HuggingFace direct loading...")
     
-    # Add UltraEval-Audio to Python path
-    if ultraeval_root not in sys.path:
-        sys.path.insert(0, ultraeval_root)
-    
+    # Fallback: Load directly from HuggingFace
     try:
-        from audio_evals.registry import registry
-        
-        print(f"Loading speech-triviaqa dataset from UltraEval-Audio registry...")
-        dataset_obj = registry.get_dataset("speech-triviaqa")
-        if dataset_obj is None:
-            print(f"Error: Dataset 'speech-triviaqa' not found in registry")
-            return []
-        
-        # Load dataset data
-        dataset_data = dataset_obj.load(limit=0)
-        print(f"Loaded {len(dataset_data)} samples from dataset 'speech-triviaqa'")
+        print(f"Loading speech-triviaqa dataset directly from HuggingFace: TwinkStart/speech-triavia-qa")
+        dataset = load_dataset("TwinkStart/speech-triavia-qa", split=split, trust_remote_code=True)
+        print(f"Successfully loaded {len(dataset)} samples from HuggingFace")
         
         # Convert to list format
         dataset_list = []
-        for idx, item in enumerate(dataset_data):
+        for idx, item in enumerate(dataset):
             # Extract required fields
             audio_data = item.get("audio", {})
             question_text = item.get("QuestionText", item.get("question", ""))
@@ -495,7 +600,7 @@ def load_speech_triviaqa_dataset(split="test"):
         return dataset_list
         
     except Exception as e:
-        print(f"Error loading speech-triviaqa dataset: {e}")
+        print(f"Error loading speech-triviaqa dataset from HuggingFace: {e}")
         traceback.print_exc()
         return []
 
@@ -739,9 +844,311 @@ def calculate_speech_triviaqa_metrics(results):
         'valid_samples': int(total_count)
     }
 
+# ==================== Judge Functions ====================
+# Alpaca eval prompt from UltraEval-Audio
+ALPACA_EVAL_PROMPT = """<|im_start|>system
+You are a helpful assistant, that ranks models by the quality of their answers.
+<|im_end|>
+<|im_start|>user
+I want you to create a leaderboard of different of large-language models. To do so, I will give you the instructions (prompts) given to the models, and the responses of two models. Please rank the models based on which responses would be preferred by humans. All inputs and outputs should be python dictionaries.
+
+Here is the prompt:
+{{
+    "instruction": ""\"{instruction}\"\"",
+}}
+
+Here are the outputs of the models:
+[
+    {{
+        "model": "model_1",
+        "answer": ""\"{output_1}\"\""
+    }},
+    {{
+        "model": "model_2",
+        "answer": ""\"{output_2}\"\""
+    }}
+]
+
+Now please rank the models by the quality of their answers, so that the model with rank 1 has the best output. Then return a list of the model names and ranks, i.e., produce the following output:
+[
+    {{'model': <model-name>, 'rank': <model-rank>}},
+    {{'model': <model-name>, 'rank': <model-rank>}}
+]
+
+Your response must be a valid Python dictionary and should contain nothing else because we will directly execute it in Python. Please provide the ranking that the majority of humans would give.
+<|im_end|>"""
+
+
+def call_api_judge(api_model, instruction, output_1, output_2):
+    """Call API model as judge (following UltraEval-Audio AlpacaEvaluator pattern)"""
+    try:
+        # Format prompt
+        prompt = deepcopy(ALPACA_EVAL_PROMPT)
+        prompt = prompt.replace("{instruction}", instruction)
+        prompt = prompt.replace("{output_1}", output_1)
+        prompt = prompt.replace("{output_2}", output_2)
+        
+        # Call API model
+        res = api_model.inference(prompt, temperature=0, maxTokens=100)
+        
+        # Parse response (following AlpacaEvaluator logic)
+        if res.startswith("```python"):
+            res = res[9:-3].strip()
+        elif res.startswith("```"):
+            res = res[3:-3].strip()
+        
+        try:
+            res = ast.literal_eval(res)
+            if isinstance(res, dict):
+                for k in res:
+                    res = res[k]
+                    break
+            # Return 1 if model_1 (prediction) is ranked higher, 0 otherwise
+            if isinstance(res, list) and len(res) >= 2:
+                model_1_rank = next((item.get("rank") for item in res if item.get("model") == "model_1"), None)
+                model_2_rank = next((item.get("rank") for item in res if item.get("model") == "model_2"), None)
+                if model_1_rank is not None and model_2_rank is not None:
+                    # Lower rank number means better (rank 1 is best)
+                    return 1 if model_1_rank < model_2_rank else 0
+            return 0
+        except Exception as e:
+            print(f"Error parsing judge response: {e}, response: {res[:200]}")
+            return 0
+    except Exception as e:
+        print(f"Error calling API judge: {e}")
+        traceback.print_exc()
+        return 0
+
+
+def call_local_judge(model, tokenizer, instruction, output_1, output_2):
+    """Call local model as judge (following alimeeting pattern)"""
+    try:
+        # Format prompt
+        prompt = deepcopy(ALPACA_EVAL_PROMPT)
+        prompt = prompt.replace("{instruction}", instruction)
+        prompt = prompt.replace("{output_1}", output_1)
+        prompt = prompt.replace("{output_2}", output_2)
+        
+        # Convert to messages format
+        messages = [{"role": "user", "content": prompt}]
+        text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+        
+        with torch.no_grad():
+            generated_ids = model.generate(
+                model_inputs.input_ids,
+                max_new_tokens=4096,
+                do_sample=False,
+                temperature=0.1
+            )
+        generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in
+                         zip(model_inputs.input_ids, generated_ids)]
+        res = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        
+        # Parse response (following AlpacaEvaluator logic)
+        if res.startswith("```python"):
+            res = res[9:-3].strip()
+        elif res.startswith("```"):
+            res = res[3:-3].strip()
+        
+        try:
+            res = ast.literal_eval(res)
+            if isinstance(res, dict):
+                for k in res:
+                    res = res[k]
+                    break
+            # Return 1 if model_1 (prediction) is ranked higher, 0 otherwise
+            if isinstance(res, list) and len(res) >= 2:
+                model_1_rank = next((item.get("rank") for item in res if item.get("model") == "model_1"), None)
+                model_2_rank = next((item.get("rank") for item in res if item.get("model") == "model_2"), None)
+                if model_1_rank is not None and model_2_rank is not None:
+                    # Lower rank number means better (rank 1 is best)
+                    return 1 if model_1_rank < model_2_rank else 0
+            return 0
+        except Exception as e:
+            print(f"Error parsing judge response: {e}, response: {res[:200]}")
+            return 0
+    except Exception as e:
+        print(f"Error calling local judge: {e}")
+        traceback.print_exc()
+        return 0
+
+
+def run_llm_judge(judge_model_path=None, judge_api_model=None, input_file=None, output_file=None):
+    """Run LLM judge evaluation (supports both API and local models)"""
+    print(f"=== Starting LLM Judge Evaluation ===")
+    
+    # Determine judge type
+    use_api = judge_api_model is not None
+    use_local = judge_model_path is not None
+    
+    if not use_api and not use_local:
+        print("Error: Must provide either judge_model_path (for local model) or judge_api_model (for API model)")
+        return
+    
+    # Load local model if needed
+    judge_model = None
+    judge_tokenizer = None
+    if use_local:
+        print(f"Loading Local Judge Model: {judge_model_path} ...")
+        try:
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            judge_tokenizer = AutoTokenizer.from_pretrained(judge_model_path, trust_remote_code=True)
+            judge_model = AutoModelForCausalLM.from_pretrained(
+                judge_model_path, torch_dtype=torch.bfloat16, device_map="auto",
+                trust_remote_code=True
+            ).eval()
+            print("Local judge model loaded successfully")
+        except Exception as e:
+            print(f"Local model load failed: {e}")
+            return
+    
+    # Load API model if needed
+    api_model = None
+    if use_api:
+        print(f"Using API Judge Model: {judge_api_model}")
+        try:
+            # Try to load from UltraEval-Audio registry
+            ultraeval_root = "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio"
+            if os.path.exists(ultraeval_root):
+                if ultraeval_root not in sys.path:
+                    sys.path.insert(0, ultraeval_root)
+                from audio_evals.registry import registry
+                api_model = registry.get_model(judge_api_model)
+                if api_model is None:
+                    print(f"Warning: Could not load API model '{judge_api_model}' from registry")
+                else:
+                    print(f"API judge model '{judge_api_model}' loaded successfully")
+            else:
+                print(f"Warning: UltraEval-Audio root not found at {ultraeval_root}")
+        except Exception as e:
+            print(f"API model load failed: {e}")
+            traceback.print_exc()
+            if not use_local:
+                return
+    
+    if not api_model and not judge_model:
+        print("Error: Failed to load any judge model")
+        return
+    
+    os.makedirs(os.path.dirname(output_file), exist_ok=True) if output_file else None
+    if not os.path.exists(input_file):
+        print(f"Error: Input file not found: {input_file}")
+        return
+    
+    # Process input file
+    processed_count = 0
+    if output_file and os.path.exists(output_file):
+        with open(output_file, 'r', encoding='utf-8') as f:
+            processed_count = sum(1 for _ in f)
+    print(f"Resuming from line {processed_count}...")
+    
+    results = []
+    total_correct = 0
+    total_processed = 0
+    
+    # Read input file (could be single JSON or JSONL)
+    with open(input_file, 'r', encoding='utf-8') as f_in:
+        content = f_in.read().strip()
+    
+    try:
+        # Try to parse as JSON first
+        try:
+            data = json.loads(content)
+            if isinstance(data, dict) and "detailed_results" in data:
+                data_list = data["detailed_results"]
+            elif isinstance(data, list):
+                data_list = data
+            else:
+                # Single result object
+                data_list = [data]
+        except json.JSONDecodeError:
+            # Try JSONL format
+            data_list = []
+            with open(input_file, 'r', encoding='utf-8') as f_in:
+                for line in f_in:
+                    if line.strip():
+                        try:
+                            data_list.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+    except Exception as e:
+        print(f"Error reading input file: {e}")
+        traceback.print_exc()
+        return
+    
+    # Open output file
+    if output_file:
+        f_out = open(output_file, 'a', encoding='utf-8')
+    else:
+        f_out = None
+    
+    try:
+        for idx, data in enumerate(tqdm(data_list, desc="Judge Evaluating")):
+            if idx < processed_count:
+                continue
+            
+            try:
+                # Extract data
+                instruction = data.get("question", data.get("QuestionText", ""))
+                pred = data.get("hypothesis", data.get("response_text", ""))
+                ref = data.get("reference", data.get("answer", ""))
+                
+                if not instruction or not pred or not ref:
+                    print(f"Warning: Missing data at index {idx}")
+                    continue
+                
+                # Call judge
+                if use_api and api_model:
+                    judge_score = call_api_judge(api_model, instruction, pred, ref)
+                elif use_local and judge_model:
+                    judge_score = call_local_judge(judge_model, judge_tokenizer, instruction, pred, ref)
+                else:
+                    judge_score = 0
+                
+                total_correct += judge_score
+                total_processed += 1
+                
+                # Update result
+                output_item = data.copy()
+                output_item["judge_score"] = judge_score
+                output_item["judge_method"] = "api" if use_api else "local"
+                
+                results.append(output_item)
+                
+                if f_out:
+                    f_out.write(json.dumps(output_item, ensure_ascii=False) + '\n')
+                    f_out.flush()
+                
+            except Exception as e:
+                print(f"\n[Error processing index {idx}]: {e}")
+                traceback.print_exc()
+                continue
+            
+            if (idx + 1) % 5 == 0 and use_local:
+                torch.cuda.empty_cache()
+    
+    finally:
+        if f_out:
+            f_out.close()
+    
+    # Print statistics
+    if total_processed > 0:
+        accuracy = (total_correct / total_processed * 100.0)
+        print(f"\n=== Judge Evaluation Results ===")
+        print(f"Total processed: {total_processed}")
+        print(f"Correct (prediction preferred): {total_correct}")
+        print(f"Accuracy: {accuracy:.2f}%")
+        print("=" * 40)
+    else:
+        print("No samples processed")
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='speech-triviaqa AQA Evaluation with Qwen2.5-Omni')
+    parser.add_argument('--mode', type=str, default='inference',
+                        choices=['inference', 'judge'],
+                        help='运行模式: inference (推理) 或 judge (打分)')
     parser.add_argument('--output-file', '-o', type=str, default=None,
                         help='Output file path for results JSON (overrides --output-dir)')
     parser.add_argument('--output-dir', '-d', type=str, default=None,
@@ -752,7 +1159,37 @@ def main():
                         help='Dataset split to use (default: test)')
     parser.add_argument('--model-path', '-m', type=str, default=None,
                         help='Path to the model directory (default: from MODEL_PATH env or hardcoded path)')
+    parser.add_argument('--twinkstart-path', type=str, default=None,
+                        help='Path to TwinkStart root directory (default: /mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart)')
+    # Judge mode arguments
+    parser.add_argument('--judge-model-path', type=str, default=None,
+                        help='Judge model path (for local model, used in judge mode)')
+    parser.add_argument('--judge-api-model', type=str, default=None,
+                        help='Judge API model name (e.g., gpt4o-mini, qwen-audio, used in judge mode)')
+    parser.add_argument('--input-file', type=str, default=None,
+                        help='Input file path (for judge mode, should be inference results JSON)')
     args = parser.parse_args()
+    
+    # Handle judge mode
+    if args.mode == 'judge':
+        if not args.input_file:
+            print("Error: judge mode requires --input-file")
+            return
+        if not args.output_file:
+            if args.output_dir:
+                output_file = os.path.join(args.output_dir, 'judge_results.jsonl')
+            else:
+                output_file = './judge_results.jsonl'
+        else:
+            output_file = args.output_file
+        
+        run_llm_judge(
+            judge_model_path=args.judge_model_path,
+            judge_api_model=args.judge_api_model,
+            input_file=args.input_file,
+            output_file=output_file
+        )
+        return
     
     gpu_temp = os.environ.get("CUDA_VISIBLE_DEVICES")
     gpu_id = gpu_temp[-1] if gpu_temp else "0"
@@ -943,7 +1380,7 @@ def main():
 
     
     print(f"Loading speech-triviaqa dataset (split={args.split})")
-    dataset = load_speech_triviaqa_dataset(split=args.split)
+    dataset = load_speech_triviaqa_dataset(split=args.split, twinkstart_path=args.twinkstart_path)
     
     if not dataset:
         print("Error: Failed to load any data")
@@ -955,7 +1392,6 @@ def main():
         print(f"Applying sample limit, processing {len(dataset)} samples")
 
     results = []
-    total_correct = 0
     processed_samples = 0
 
     
@@ -1203,22 +1639,13 @@ def main():
             # Calculate TPS (Tokens Per Second) using decode time
             sample_tps = decode_token_count / decode_time if decode_time > 0 else 0.0
             
-            # Calculate prefix match score
-            match = prefix_match(hypothesis, reference, ignore_case=True)
-            
-            total_correct += match
+            # Inference mode: no evaluation, just save results
             processed_samples += 1
-
-            current_accuracy = (total_correct / processed_samples * 100.0) if processed_samples > 0 else 0.0
             
-            # ===== 实时输出准确率 =====
-            # 在每个样本处理后立即输出，格式清晰醒目
+            # Print sample info
             print(f"\n{'='*80}")
             print(f"[Sample {idx+1}/{len(dataset)}] ID={doc.get('id', f'sample_{idx}')} | "
                   f"Duration={doc.get('duration', 0):.1f}s")
-            print(f"{'='*80}")
-            print(f"  📊 当前样本匹配: {'✅ 正确' if match == 1 else '❌ 错误'}")
-            print(f"  📈 平均准确率 (已处理 {processed_samples} 个样本): {current_accuracy:.2f}%")
             print(f"{'='*80}")
             
             # Print question, reference and hypothesis (truncated if too long)
@@ -1230,22 +1657,11 @@ def main():
             print(f"  💬 模型回答: {hyp_display}")
             print(f"{'='*80}\n")
             
-            # 更新进度条，始终显示最新的准确率信息
-            update_interval = 10 if is_screen_env else 1
+            # Update progress bar
             sample_count = idx + 1
-            
-            # 进度条始终显示最新的准确率
             progress_bar.set_postfix({
-                '匹配': '✅' if match == 1 else '❌',
-                '准确率': f'{current_accuracy:.2f}%',
                 '样本': f'{sample_count}/{len(dataset)}'
             })
-            
-            if sample_count % update_interval == 0 or sample_count == len(dataset):
-                if is_screen_env:
-                    # 在非交互式环境中，额外输出进度信息
-                    print(f"  📊 进度更新: {sample_count}/{len(dataset)} ({sample_count/len(dataset)*100:.1f}%)")
-                    print(f"  📈 当前平均准确率: {current_accuracy:.2f}%")
 
             
             results.append({
@@ -1254,7 +1670,6 @@ def main():
                 "question": question_text,
                 "reference": reference,
                 "hypothesis": hypothesis,
-                "match": match,
                 "response_text": resp,
                 "duration": doc.get("duration", 0),
                 "decode_token_count": decode_token_count,
@@ -1275,7 +1690,7 @@ def main():
                 save_results_realtime(
                     output_file, 
                     results, 
-                    total_correct, 
+                    0,  # total_correct not used in inference mode
                     processed_samples,
                     timing_stats,
                     gpu_id,
@@ -1332,12 +1747,7 @@ def main():
             continue
 
     
-    final_accuracy = (total_correct / processed_samples * 100.0) if processed_samples > 0 else 0.0
-    
-    # Calculate detailed metrics
-    detailed_metrics = calculate_speech_triviaqa_metrics(results)
-
-    
+    # Inference mode: save results without evaluation metrics
     final_results = {
         "model_name": f"Qwen2.5-Omni-3B",
         "dataset": "speech-triviaqa",
@@ -1349,12 +1759,6 @@ def main():
             "percentage": 100.0
         },
         "total_samples": len(results),
-        "valid_samples": detailed_metrics['valid_samples'],
-        
-        # AQA metrics
-        "accuracy": detailed_metrics['accuracy'],
-        "correct_count": detailed_metrics['correct_count'],
-        "total_count": detailed_metrics['total_count'],
         
         # Timing statistics
         "timing_stats": timing_stats.get_summary(),
@@ -1387,11 +1791,10 @@ def main():
     timing_stats.export_to_json(timing_output_file)
 
     
-    print(f"\n=== speech-triviaqa AQA Evaluation Results Summary (Qwen2.5-Omni) ===")
+    print(f"\n=== speech-triviaqa Inference Results Summary (Qwen2.5-Omni) ===")
     print(f"Total samples: {len(results)}")
     print(f"Processed samples: {processed_samples}")
-    print(f"Accuracy: {detailed_metrics['accuracy']:.2f}%")
-    print(f"Correct: {detailed_metrics['correct_count']}/{detailed_metrics['total_count']}")
+    print(f"Note: Evaluation will be performed in judge mode")
     
     timing_summary = timing_stats.get_summary()
     print(f"\n=== Inference Time Statistics ===")

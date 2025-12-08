@@ -417,54 +417,82 @@ class GlobalTimingStats:
         
         return output_file
 
-def load_clothoaqa_dataset(split="test"):
-    """Load ClothoAQA dataset from Huggingface (following UltraEval-Audio format)"""
-    print(f"Loading ClothoAQA dataset from Huggingface (split={split})...")
+def load_clothoaqa_dataset(split="test", twinkstart_path=None):
+    """Load ClothoAQA dataset from local path or Huggingface (following UltraEval-Audio format)
     
-    try:
-        # Load dataset from Huggingface
-        dataset = load_dataset("TwinkStart/ClothoAQA", split=split, trust_remote_code=True)
-        print(f"Successfully loaded {len(dataset)} samples from Huggingface")
+    Args:
+        split: Dataset split to load (default: "test")
+        twinkstart_path: Path to TwinkStart root directory (default: /mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart)
+    """
+    print(f"Loading ClothoAQA dataset (split={split})...")
+    
+    # Default TwinkStart path
+    default_twinkstart_path = "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart"
+    if twinkstart_path is None:
+        twinkstart_path = default_twinkstart_path
+    
+    # Try loading from local path first
+    dataset = None
+    local_dataset_path = os.path.join(twinkstart_path, "ClothoAQA", split)
+    if os.path.exists(local_dataset_path):
+        try:
+            from datasets import load_from_disk
+            print(f"Attempting to load ClothoAQA from local path: {local_dataset_path}")
+            dataset = load_from_disk(local_dataset_path)
+            print(f"Successfully loaded {len(dataset)} samples from local path")
+        except Exception as e:
+            print(f"Warning: Failed to load from local path: {e}")
+            print("Falling back to HuggingFace...")
+            dataset = None
+    else:
+        print(f"Local path not found: {local_dataset_path}, loading from HuggingFace...")
+        dataset = None
+    
+    # Fallback to HuggingFace if local path failed or doesn't exist
+    if dataset is None:
+        try:
+            # Load dataset from Huggingface
+            dataset = load_dataset("TwinkStart/ClothoAQA", split=split, trust_remote_code=True)
+            print(f"Successfully loaded {len(dataset)} samples from Huggingface")
+        except Exception as e:
+            print(f"Error loading ClothoAQA dataset from HuggingFace: {e}")
+            traceback.print_exc()
+            return []
+    
+    # Convert to list of dictionaries
+    dataset_list = []
+    for idx, item in enumerate(dataset):
+        # Extract required fields
+        audio_data = item.get("audio", {})
+        question_text = item.get("QuestionText", item.get("question", ""))
+        answer = item.get("answer", "")
         
-        # Convert to list of dictionaries
-        dataset_list = []
-        for idx, item in enumerate(dataset):
-            # Extract required fields
-            audio_data = item.get("audio", {})
-            question_text = item.get("QuestionText", item.get("question", ""))
-            answer = item.get("answer", "")
-            
-            # Get audio array and sampling rate
-            audio_array = audio_data.get("array", None) if isinstance(audio_data, dict) else None
-            sampling_rate = audio_data.get("sampling_rate", 16000) if isinstance(audio_data, dict) else 16000
-            
-            # Calculate duration if audio array is available
-            duration = 0.0
-            if audio_array is not None:
-                try:
-                    duration = len(audio_array) / sampling_rate
-                except:
-                    duration = 0.0
-            
-            dataset_list.append({
-                "id": item.get("id", f"sample_{idx}"),
-                "QuestionText": question_text,
-                "answer": answer,
-                "duration": duration,
-                "audio": {
-                    "array": audio_array,
-                    "sampling_rate": sampling_rate,
-                    "path": None  # Will be set if needed
-                }
-            })
+        # Get audio array and sampling rate
+        audio_array = audio_data.get("array", None) if isinstance(audio_data, dict) else None
+        sampling_rate = audio_data.get("sampling_rate", 16000) if isinstance(audio_data, dict) else 16000
         
-        print(f"Converted {len(dataset_list)} samples to list format")
-        return dataset_list
+        # Calculate duration if audio array is available
+        duration = 0.0
+        if audio_array is not None:
+            try:
+                duration = len(audio_array) / sampling_rate
+            except:
+                duration = 0.0
         
-    except Exception as e:
-        print(f"Error loading ClothoAQA dataset: {e}")
-        traceback.print_exc()
-        return []
+        dataset_list.append({
+            "id": item.get("id", f"sample_{idx}"),
+            "QuestionText": question_text,
+            "answer": answer,
+            "duration": duration,
+            "audio": {
+                "array": audio_array,
+                "sampling_rate": sampling_rate,
+                "path": None  # Will be set if needed
+            }
+        })
+    
+    print(f"Converted {len(dataset_list)} samples to list format")
+    return dataset_list
 
 def prepare_audio_for_qwen_omni(audio_path, target_sr=16000):
     """Process audio files according to Qwen2.5-Omni requirements"""
@@ -719,6 +747,8 @@ def main():
                         help='Dataset split to use (default: test)')
     parser.add_argument('--model-path', '-m', type=str, default=None,
                         help='Path to the model directory (default: from MODEL_PATH env or hardcoded path)')
+    parser.add_argument('--twinkstart-path', type=str, default=None,
+                        help='Path to TwinkStart root directory (default: /mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart)')
     args = parser.parse_args()
     
     gpu_temp = os.environ.get("CUDA_VISIBLE_DEVICES")
@@ -910,7 +940,7 @@ def main():
 
     
     print(f"Loading ClothoAQA dataset: TwinkStart/ClothoAQA (split={args.split})")
-    dataset = load_clothoaqa_dataset(split=args.split)
+    dataset = load_clothoaqa_dataset(split=args.split, twinkstart_path=args.twinkstart_path)
     
     if not dataset:
         print("Error: Failed to load any data")

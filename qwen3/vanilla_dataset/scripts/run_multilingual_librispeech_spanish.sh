@@ -6,7 +6,7 @@ export CUDA_VISIBLE_DEVICES=1
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 export USE_SPARSEKV="false"
-export BUDGET=0.7
+# export BUDGET=0.7
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -23,12 +23,12 @@ source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 
 # 激活环境并运行（只处理西班牙语）
 conda activate Qwen3_2 && \
-cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/vanilla_dataset && \
 python code/qwen3_multilingual_librispeech.py \
     --model-path "${MODEL_PATH}" \
     --languages spanish \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/MultilingualLibriSpeech/Spanish/vanilla/full_cache \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/MultilingualLibriSpeech/Spanish/vanilla/full_cache/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/Spanish/vanilla/full_cache \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/Spanish/vanilla/full_cache/timing_stats.json
 
 # ============================================
 # 常用配置示例

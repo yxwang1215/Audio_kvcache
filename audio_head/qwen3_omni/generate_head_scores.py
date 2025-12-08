@@ -79,6 +79,50 @@ def extract_per_sample_scores(word_attention_file):
     # 让我检查一下 visual_head 的实际格式...
     return dict(head_scores)
 
+def detect_num_layers_and_heads(word_attention_file):
+    """
+    自动检测实际的层数和头数
+    从 word_attention_analysis.json 中检测
+    """
+    num_layers = None
+    num_heads = None
+    
+    try:
+        with open(word_attention_file, 'r') as f:
+            data = json.load(f)
+        
+        all_layers = set()
+        all_heads = set()
+        
+        if isinstance(data, list) and len(data) > 0:
+            for sample in data:
+                tokens = sample.get('tokens', [])
+                for token in tokens:
+                    layer_head_stats = token.get('layer_head_stats', {})
+                    for key in layer_head_stats.keys():
+                        if key.startswith('L') and '_H' in key:
+                            parts = key[1:].split('_H')
+                            if len(parts) == 2:
+                                layer = int(parts[0])
+                                head = int(parts[1])
+                                all_layers.add(layer)
+                                all_heads.add(head)
+        
+        if all_layers:
+            num_layers = max(all_layers) + 1
+        if all_heads:
+            num_heads = max(all_heads) + 1
+    except Exception as e:
+        print(f"Warning: Failed to detect from word_attention_analysis.json: {e}")
+    
+    # 默认值（如果检测失败）
+    if num_layers is None:
+        num_layers = 36  # Qwen3-Omni 默认 36 层（根据实际模型调整）
+    if num_heads is None:
+        num_heads = 16  # Qwen3-Omni 默认 16 个 attention heads（根据实际模型调整）
+    
+    return num_layers, num_heads
+
 def convert_to_visual_head_format(layer_head_stats):
     """
     将 layer_head_stats 转换为 visual_head 格式（聚合版本）

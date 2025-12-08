@@ -2,13 +2,13 @@
 # CoVoST2 English-to-Chinese Speech Translation Evaluation with Qwen2.5-Omni
 # 英语到中文语音翻译评估脚本
 
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=1
 # 模型路径配置
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
-export SAMPLE_LIMIT=0
+export SAMPLE_LIMIT=4898
 
 export USE_SPARSEKV="false"
-export BUDGET=0.7
+# export BUDGET=0.7
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -26,12 +26,12 @@ source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 
 # 激活环境并运行（英语到中文）
 conda activate Qwen3_2 && \
-cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/vanilla_dataset && \
 python code/qwen3_covost2.py \
     --direction en_zh \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/CoVoST2/EN_ZH/vanilla/full_cache \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/CoVoST2/EN_ZH/vanilla/full_cache/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/EN_ZH/vanilla/full_cache \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/EN_ZH/vanilla/full_cache/timing_stats.json
 
 # ============================================
 # 常用配置示例

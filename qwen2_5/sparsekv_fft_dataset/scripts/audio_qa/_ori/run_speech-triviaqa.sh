@@ -1,11 +1,10 @@
 #!/bin/bash
 # speech-triviaqa Evaluation with Qwen2.5-Omni
-export CUDA_VISIBLE_DEVICES=7
-export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-7B"
+export CUDA_VISIBLE_DEVICES=2
+export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
 export SAMPLE_LIMIT=0
-# export USE_SPARSEKV="true"
 export USE_SPARSEKV="false"
-export BUDGET=0.7
+# export BUDGET=0.7
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -24,11 +23,11 @@ source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 
 # 激活环境并运行
 conda activate Qwen3_2 && \
-cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_fft_dataset && \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
 python code/qwen2.5_speech-triviaqa.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_triviaqa_Results \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_triviaqa_Results/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_triviaqa_Results/vanilla/full_cache \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_triviaqa_Results/vanilla/full_cache/timing_stats.json
 
 # 或者指定具体的输出文件
 # python code/qwen2.5_speech-triviaqa.py \

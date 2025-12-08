@@ -94,22 +94,14 @@ if USE_SPARSEKV:
     from model.modeling_qwen3_omni_sparsekv import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeFlashAttention2SparseMM
     print("Using sparsekv version of the model")
 else:
-    # Try importing from transformers first, then fallback to local file
-    try:
-        from transformers import Qwen3OmniMoeForConditionalGeneration
-        print("Using standard version of the model from transformers (sparsekv disabled)")
-    except ImportError:
-        # Fallback to local modeling file
-        modeling_path = "/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Modeling"
-        if modeling_path not in sys.path:
-            sys.path.insert(0, modeling_path)
-        from modeling_qwen3_omni import Qwen3OmniMoeForConditionalGeneration
-        print("Using standard version of the model from local file (sparsekv disabled)")
+    # Use local modeling file from model directory
+    from model.modeling_qwen3_omni_moe import Qwen3OmniMoeForConditionalGeneration
+    print("Using standard version of the model from local model directory (sparsekv disabled)")
 
 try:
     from processing_qwen3_omni_moe import Qwen3OmniMoeProcessor
 except ImportError:
-    from model.processing_qwen3_omni_moe import
+    from model.processing_qwen3_omni_moe import Qwen3OmniMoeProcessor
 from qwen_omni_utils import process_mm_info
 # Import SparseMM utilities from model directory
 from model.sparsemm_utils import (
@@ -917,18 +909,169 @@ def main():
     print(f"Using model path: {model_path}")
     device_map = {"": 0}  
     
+    print("Loading processor...")
+    import time
+    start_time = time.time()
     processor = Qwen3OmniMoeProcessor.from_pretrained(
         model_path, 
         trust_remote_code=True
     )
-    model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-        model_path,
-        device_map=device_map,
-        attn_implementation="flash_attention_2",
-        torch_dtype=torch.bfloat16,
-        trust_remote_code=True
+    print(f"Processor loaded successfully. (took {time.time() - start_time:.1f}s)")
+    
+    # Note: Using local modeling file from model directory, which should handle config issues
+    print("Loading model (this may take several minutes for large models like 30B)...")
+    print("  - Loading config...")
+    sys.stdout.flush()
+    
+    # Load config first and disable talker to speed up loading
+    # Use Qwen3OmniMoeConfig instead of AutoConfig to ensure correct config type
+    from model.configuration_qwen3_omni_moe import (
+        Qwen3OmniMoeConfig, 
+        Qwen3OmniMoeThinkerConfig,
+        Qwen3OmniMoeTextConfig
     )
+    from transformers import AutoConfig
+    
+    try:
+        config = Qwen3OmniMoeConfig.from_pretrained(model_path, trust_remote_code=True)
+        print("  - Successfully loaded Qwen3OmniMoeConfig")
+    except Exception as e:
+        # Fallback: Load base config and convert to Qwen3OmniMoeConfig
+        print(f"  - Warning: Failed to load Qwen3OmniMoeConfig directly: {e}")
+        print("  - Trying AutoConfig and converting to Qwen3OmniMoeConfig...")
+        base_config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+        
+        # Convert Qwen3MoeConfig to Qwen3OmniMoeConfig
+        if hasattr(base_config, 'model_type') and base_config.model_type == 'qwen3_moe':
+            # Extract base config attributes and create Qwen3OmniMoeConfig
+            # First, create Qwen3OmniMoeTextConfig from base Qwen3MoeConfig
+            base_config_dict = base_config.to_dict()
+            text_config = Qwen3OmniMoeTextConfig(**base_config_dict)
+            # Create thinker_config with the text_config
+            thinker_config = Qwen3OmniMoeThinkerConfig(text_config=text_config.to_dict())
+            # Create Qwen3OmniMoeConfig with the thinker_config
+            config = Qwen3OmniMoeConfig(
+                thinker_config=thinker_config.to_dict(),
+                enable_audio_output=False  # Disable talker for faster loading
+            )
+            print("  - Successfully converted Qwen3MoeConfig to Qwen3OmniMoeConfig")
+        else:
+            # If it's already Qwen3OmniMoeConfig or unknown type, use as is
+            config = base_config
+            if not hasattr(config, 'thinker_config'):
+                print("  - Warning: Config does not have thinker_config, this may cause errors")
+    
+    # Disable talker during loading to speed up (we'll disable it anyway)
+    if hasattr(config, 'enable_audio_output'):
+        original_enable_audio = config.enable_audio_output
+        config.enable_audio_output = False
+        print("  - Talker disabled in config to speed up loading")
+    else:
+        # Try to set it if it doesn't exist
+        try:
+            config.enable_audio_output = False
+            print("  - Talker disabled in config to speed up loading")
+        except:
+            pass
+    
+    print("  - Loading model weights (this step can take 5-10 minutes for 30B models)...")
+    sys.stdout.flush()
+    
+    start_time = time.time()
+    
+    # Create a progress indicator using tqdm
+    import threading
+    
+    # Flag to control progress bar
+    loading_complete = threading.Event()
+    progress_bar = None
+    
+    def show_progress():
+        """Display a progress bar while loading"""
+        nonlocal progress_bar
+        # Check if we're in an interactive environment
+        is_interactive = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+        
+        if is_interactive:
+            # Use tqdm for interactive terminals
+            try:
+                progress_bar = tqdm(
+                    desc="    Loading model weights",
+                    unit="",
+                    bar_format='{desc}: {elapsed} elapsed',
+                    ncols=120,
+                    leave=False,
+                    position=0
+                )
+                while not loading_complete.is_set():
+                    progress_bar.refresh()
+                    time.sleep(0.5)
+                progress_bar.close()
+            except Exception:
+                # Fallback to simple print if tqdm fails
+                is_interactive = False
+        
+        if not is_interactive:
+            # For non-interactive environments, show periodic updates
+            dots = 0
+            last_elapsed = 0
+            update_count = 0
+            while not loading_complete.is_set():
+                elapsed = time.time() - start_time
+                # Print every 2 seconds to show progress
+                if int(elapsed) >= int(last_elapsed) + 2 or update_count == 0:
+                    dots = (dots + 1) % 4
+                    print(f"    Loading model weights{'.' * dots} ({elapsed:.1f}s elapsed)", flush=True)
+                    last_elapsed = elapsed
+                    update_count += 1
+                time.sleep(0.5)
+            # Print final message
+            final_elapsed = time.time() - start_time
+            print(f"    Loading model weights completed ({final_elapsed:.1f}s elapsed)", flush=True)
+    
+    # Start progress indicator in a separate thread
+    progress_thread = threading.Thread(target=show_progress, daemon=True)
+    progress_thread.start()
+    
+    # Print immediate feedback that loading has started
+    is_interactive_check = hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
+    if not is_interactive_check:
+        print("    [Progress] Model weight loading started...", flush=True)
+    
+    # Use low_cpu_mem_usage to speed up loading
+    try:
+        model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
+            model_path,
+            device_map=device_map,
+            attn_implementation="flash_attention_2",
+            torch_dtype=torch.bfloat16,
+            trust_remote_code=True,
+            low_cpu_mem_usage=True,
+            config=config  # Use modified config
+        )
+        # Signal that loading is complete
+        loading_complete.set()
+        progress_thread.join(timeout=1.0)  # Wait for progress thread to finish
+        
+        load_time = time.time() - start_time
+        print(f"  - Model weights loaded. (took {load_time:.1f}s)")
+        sys.stdout.flush()
+    except Exception as e:
+        # Signal that loading failed
+        loading_complete.set()
+        progress_thread.join(timeout=1.0)
+        print(f"  - ERROR loading model: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+    
+    print("  - Disabling talker...")
+    sys.stdout.flush()
+    disable_start = time.time()
     model.disable_talker()
+    print(f"  - Talker disabled. (took {time.time() - disable_start:.1f}s)")
+    print(f"Model loaded successfully. (total time: {time.time() - start_time:.1f}s)")
+    sys.stdout.flush()
     
     
     if hasattr(model, 'thinker') and hasattr(model.thinker, 'model') and hasattr(model.thinker.model, 'config'):
@@ -1258,8 +1401,38 @@ def main():
             decode_time = decode_start_event.elapsed_time(decode_end_event) / 1000.0
             total_time = prefill_time + decode_time
             
+            # Handle different return types from model.generate()
+            # The return structure should be: GenerateDecoderOnlyOutput with sequences attribute
+            if hasattr(out_ids, 'sequences'):
+                generated_sequences = out_ids.sequences
+            elif isinstance(out_ids, tuple) and len(out_ids) > 0:
+                # If it's a tuple, check if first element has sequences
+                first_element = out_ids[0]
+                if hasattr(first_element, 'sequences'):
+                    generated_sequences = first_element.sequences
+                elif isinstance(first_element, torch.Tensor):
+                    generated_sequences = first_element
+                else:
+                    # Fallback: try to extract tensor from nested structure
+                    generated_sequences = first_element
+                    while isinstance(generated_sequences, tuple) and len(generated_sequences) > 0:
+                        generated_sequences = generated_sequences[0]
+            elif isinstance(out_ids, torch.Tensor):
+                generated_sequences = out_ids
+            else:
+                # Last resort: try to access sequences directly
+                generated_sequences = out_ids.sequences if hasattr(out_ids, 'sequences') else out_ids
+            
+            # Get input length
+            input_ids_tensor = inputs["input_ids"] if isinstance(inputs, dict) else inputs.input_ids
+            input_length = input_ids_tensor.shape[1]
+            
+            # Extract generated tokens (excluding input tokens)
+            generated_tokens = generated_sequences[:, input_length:]
+            
+            # Decode only the generated tokens (not the full sequence including input)
             resp = processor.batch_decode(
-                out_ids, 
+                generated_tokens, 
                 skip_special_tokens=True, 
                 clean_up_tokenization_spaces=False
             )[0]
@@ -1275,9 +1448,8 @@ def main():
             hypothesis = clean_response(resp)
             
             # Calculate decode token count (generated tokens only, excluding input)
-            input_token_count = inputs.input_ids.shape[1] if hasattr(inputs, 'input_ids') else 0
-            output_token_count = out_ids.shape[1] if hasattr(out_ids, 'shape') else len(out_ids[0]) if isinstance(out_ids, list) else 0
-            decode_token_count = max(0, output_token_count - input_token_count)
+            generated_length = generated_sequences.shape[1]
+            decode_token_count = generated_length - input_length
             
             # Calculate TPS (Tokens Per Second) using decode time
             sample_tps = decode_token_count / decode_time if decode_time > 0 else 0.0

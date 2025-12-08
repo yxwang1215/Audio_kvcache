@@ -1,71 +1,41 @@
 #!/bin/bash
-# LibriSpeech ASR Evaluation with Qwen2.5-Omni
-# 运行脚本示例
+# LibriSpeech ASR Evaluation with Qwen2.5-Omni=================================
 
-# ============================================
-# 基础配置
-# ============================================
-# GPU 设置
-export CUDA_VISIBLE_DEVICES=3
-
-# 模型路径配置
-export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-7B"
-
-# 数据集配置（已有默认值，可选）
-# 默认路径: /mnt/users/wangyuxuan-20250915/Datasets/AudioMarathon/librispeech-long
-
-# 样本限制（0表示处理全部样本）
+export CUDA_VISIBLE_DEVICES=4
+export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
 export SAMPLE_LIMIT=0
-
-# ============================================
-# SparseKV 配置
-# ============================================
-# 是否使用 SparseKV（默认 true）
-# export USE_SPARSEKV="true"
-export USE_SPARSEKV="false"
-
-# 预算配置（可以是绝对数值或比例，如 0.2 表示 20%）
-export BUDGET=0.7
-# export BUDGET=0.2  # 使用比例模式
-
-# SparseMM 参数
+export USE_SPARSEKV="true"
+export BUDGET=0.5
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
 
-# Head Score 配置
-export HEAD_SCORE_FILE="aggregated"
-# export HEAD_SCORE_BATCH=None  # 可选
+# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk32_alpha1_beta1_gamma1.json"
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk32_alpha0_beta0_gamma1.json"
+# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk32_alpha0_beta1_gamma0.json"
+# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk32_alpha1_beta0_gamma0.json"
+
+# Head Score 聚合方式配置（当 JSON 中有多个分数时如何聚合）
+# 可选值: mean (平均值，默认), first (第一个值), second (第二个值), max (最大值), min (最小值), sum (求和)
+export HEAD_SCORE_AGGREGATION="mean"
 
 # FFT 滤波配置（可选）
-# export USE_FFT_FILTER="true"
-# export FFT_FILTER_TYPE="lowpass"
-# export FFT_CUTOFF_RATIO="0.3"
-# export FFT_ALPHA="0.5"
-# export FFT_ADAPTIVE_CUTOFF="true"
-# export FFT_USE_SALIENCY="false"
-
-# Audio-aware TopK 配置（可选）
-# export USE_AUDIO_AWARE_TOPK="true"
-# export AUDIO_BOUNDARY_BOOST=1.3
-# export AUDIO_CONTINUITY_WEIGHT=0.1
-# export AUDIO_SMOOTH_WINDOW=5
+export USE_FFT_FILTER="true"
+export FFT_FILTER_TYPE="lowpass"
+export FFT_CUTOFF_RATIO="0.7"
+export FFT_ALPHA="0.5"
+export FFT_ADAPTIVE_CUTOFF="true"
+export FFT_USE_SALIENCY="false"
 
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
-
 # 激活环境并运行
 conda activate Qwen3_2 && \
-cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_fft_dataset && \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
 python code/qwen2.5_librispeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/LibriSpeech_Results \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/LibriSpeech_Results/timing_stats.json
-
-# 或者指定具体的输出文件
-# python code/qwen2.5_librispeech.py \
-#     --output-file ./LibriSpeech_Results/librispeech_results_qwen25.json \
-#     --timing-output-file ./LibriSpeech_Results/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/sparsekv_fft/ASR_Alignment/budget0.5_topk32_alpha0_beta0_gamma1 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/sparsekv_fft/ASR_Alignment/budget0.5_topk32_alpha0_beta0_gamma1/timing_stats.json
 
 # ============================================
 # 常用配置示例
@@ -82,6 +52,21 @@ python code/qwen2.5_librispeech.py \
 
 # 示例4: 启用 FFT 滤波
 # conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=0 USE_FFT_FILTER="true" python code/qwen2.5_librispeech.py
+
+# 示例5: 直接指定 head score JSON 文件路径（推荐方式）
+# conda activate Qwen3_2 && \
+# CUDA_VISIBLE_DEVICES=0 \
+# HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk32_alpha1_beta1_gamma1.json" \
+# python code/qwen2.5_librispeech.py
+
+# 示例5b: 使用 alpha, beta, gamma 组合（备选方式）
+# conda activate Qwen3_2 && \
+# CUDA_VISIBLE_DEVICES=0 \
+# HEAD_SCORE_FILE="topk32" \
+# HEAD_SCORE_ALPHA="1" \
+# HEAD_SCORE_BETA="1" \
+# HEAD_SCORE_GAMMA="1" \
+# python code/qwen2.5_librispeech.py
 
 # 示例6: 完整配置示例
 # conda activate Qwen3_2 && \

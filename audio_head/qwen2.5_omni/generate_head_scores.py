@@ -232,3 +232,18 @@ def main():
 if __name__ == "__main__":
     main()
 
+'''     This is the old version of batch_generate_head_scores.py: Prefer to use batch_generate_head_scores.py Instead 
+
+    # 需要手动指定输入和输出文件
+    python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/generate_head_scores.py \
+    --input_file /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/results/topk64/results_custom_weights_topk64_alpha1_beta1_gamma1/word_attention_analysis_topk64_alpha1_beta1_gamma1.json \
+    --output_file /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk64_alpha1_beta1_gamma1.json
+    
+    可以不生成 word_attention_analysis{param_suffix}.json，后续仍可处理 attention_score，但有限制：
+    可以使用 batch_generate_head_scores.py 处理 attention_score
+    该脚本优先使用 layer_head_attention_stats{param_suffix}.json（包含 importance_score）
+    即使没有详细文件，也能生成聚合的 head scores
+    不能使用 generate_head_scores.py 处理每个样本的分数
+    该脚本需要从 word_attention_analysis{param_suffix}.json 中提取每个样本的原始数据
+    如果没有详细文件，无法生成每个样本的分数
+'''

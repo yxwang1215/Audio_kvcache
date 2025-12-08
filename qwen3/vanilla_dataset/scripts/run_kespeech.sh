@@ -6,7 +6,7 @@
 # 基础配置
 # ============================================
 # GPU 设置
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=4
 
 # 模型路径配置
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
@@ -25,7 +25,7 @@ export SAMPLE_LIMIT=0
 export USE_SPARSEKV="false"
 
 # 预算配置（可以是绝对数值或比例，如 0.2 表示 20%）
-export BUDGET=0.7
+# export BUDGET=0.7
 # export BUDGET=0.2  # 使用比例模式
 
 # SparseMM 参数
@@ -72,11 +72,11 @@ source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 
 # 激活环境并运行
 conda activate Qwen3_2 && \
-cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/vanilla_dataset && \
 python code/qwen3_kespeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/KeSpeech_Results \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/KeSpeech_Results/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/KeSpeech_Results/vanilla/full_cache \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/KeSpeech_Results/vanilla/full_cache/timing_stats.json
 
 # 或者指定具体的输出文件
 # python code/qwen2.5_kespeech.py \

@@ -1,0 +1,4617 @@
+{
+  "weights": {
+    "alpha": 1.0,
+    "beta": 1.0,
+    "gamma": 1.0
+  },
+  "top_heads": [
+    {
+      "layer_head": "L25_H5",
+      "importance_score": 1.4240472132492246,
+      "avg_hit_ratio": 0.0700513251681558,
+      "avg_attn_ratio": 0.5191857638430102,
+      "avg_coverage_ratio": 0.8348101242380586,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H7",
+      "importance_score": 1.3597996907019438,
+      "avg_hit_ratio": 0.06698467774319847,
+      "avg_attn_ratio": 0.5058031574892274,
+      "avg_coverage_ratio": 0.7870118554695179,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H4",
+      "importance_score": 1.3275763036675143,
+      "avg_hit_ratio": 0.06724977411906435,
+      "avg_attn_ratio": 0.45552492413577517,
+      "avg_coverage_ratio": 0.8048016054126746,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H15",
+      "importance_score": 1.3002463585120219,
+      "avg_hit_ratio": 0.06459410450757956,
+      "avg_attn_ratio": 0.47638232030220246,
+      "avg_coverage_ratio": 0.7592699337022399,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H8",
+      "importance_score": 1.2982843226611425,
+      "avg_hit_ratio": 0.06711016715189239,
+      "avg_attn_ratio": 0.44531014161307236,
+      "avg_coverage_ratio": 0.7858640138961775,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H3",
+      "importance_score": 1.2608539686513307,
+      "avg_hit_ratio": 0.06316352524846904,
+      "avg_attn_ratio": 0.4382028881402909,
+      "avg_coverage_ratio": 0.7594875552625708,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H4",
+      "importance_score": 1.2602562390882153,
+      "avg_hit_ratio": 0.07104896596727237,
+      "avg_attn_ratio": 0.3511016889513687,
+      "avg_coverage_ratio": 0.8381055841695743,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H3",
+      "importance_score": 1.2559967683061364,
+      "avg_hit_ratio": 0.06546939313321956,
+      "avg_attn_ratio": 0.4266804616158186,
+      "avg_coverage_ratio": 0.7638469135570982,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H1",
+      "importance_score": 1.2474896463578413,
+      "avg_hit_ratio": 0.06768271257905832,
+      "avg_attn_ratio": 0.3695839010683437,
+      "avg_coverage_ratio": 0.8102230327104394,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H12",
+      "importance_score": 1.233501718442814,
+      "avg_hit_ratio": 0.0660121348258207,
+      "avg_attn_ratio": 0.3900386510961147,
+      "avg_coverage_ratio": 0.7774509325208786,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H11",
+      "importance_score": 1.22479268170001,
+      "avg_hit_ratio": 0.06719330388515209,
+      "avg_attn_ratio": 0.331543580580248,
+      "avg_coverage_ratio": 0.82605579723461,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H10",
+      "importance_score": 1.2210846884541409,
+      "avg_hit_ratio": 0.06645762222668407,
+      "avg_attn_ratio": 0.35712701588714224,
+      "avg_coverage_ratio": 0.7975000503403146,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H7",
+      "importance_score": 1.2136996446002626,
+      "avg_hit_ratio": 0.06339724927216144,
+      "avg_attn_ratio": 0.4036246036097434,
+      "avg_coverage_ratio": 0.7466777917183577,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H0",
+      "importance_score": 1.2071197346065528,
+      "avg_hit_ratio": 0.06735016564601948,
+      "avg_attn_ratio": 0.3434239026172758,
+      "avg_coverage_ratio": 0.7963456663432574,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H3",
+      "importance_score": 1.1627181628766308,
+      "avg_hit_ratio": 0.05714944533681357,
+      "avg_attn_ratio": 0.4096997193210492,
+      "avg_coverage_ratio": 0.695868998218768,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H8",
+      "importance_score": 1.1626897355225645,
+      "avg_hit_ratio": 0.06431645919084429,
+      "avg_attn_ratio": 0.3333827853595001,
+      "avg_coverage_ratio": 0.76499049097222,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H7",
+      "importance_score": 1.1585800720689974,
+      "avg_hit_ratio": 0.06218157062543921,
+      "avg_attn_ratio": 0.3611080136736252,
+      "avg_coverage_ratio": 0.735290487769933,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H11",
+      "importance_score": 1.1379686438511056,
+      "avg_hit_ratio": 0.06404508834454373,
+      "avg_attn_ratio": 0.32404630124495465,
+      "avg_coverage_ratio": 0.7498772542616071,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H5",
+      "importance_score": 1.11592949959306,
+      "avg_hit_ratio": 0.06832898303383195,
+      "avg_attn_ratio": 0.22256785514170635,
+      "avg_coverage_ratio": 0.8250326614175217,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H9",
+      "importance_score": 1.1123873293270143,
+      "avg_hit_ratio": 0.06472116253388215,
+      "avg_attn_ratio": 0.2792770560751256,
+      "avg_coverage_ratio": 0.7683891107180065,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H2",
+      "importance_score": 1.1099011253938509,
+      "avg_hit_ratio": 0.0634835232406385,
+      "avg_attn_ratio": 0.30722271680175645,
+      "avg_coverage_ratio": 0.7391948853514559,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H3",
+      "importance_score": 1.0975280431076246,
+      "avg_hit_ratio": 0.06427253789780142,
+      "avg_attn_ratio": 0.25580883793932496,
+      "avg_coverage_ratio": 0.7774466672704982,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H15",
+      "importance_score": 1.0925934782471205,
+      "avg_hit_ratio": 0.061612162433490616,
+      "avg_attn_ratio": 0.3289323689555433,
+      "avg_coverage_ratio": 0.7020489468580867,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H14",
+      "importance_score": 1.0925513733741772,
+      "avg_hit_ratio": 0.06582233209517117,
+      "avg_attn_ratio": 0.23688809727473115,
+      "avg_coverage_ratio": 0.789840944004275,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H2",
+      "importance_score": 1.0838065365418503,
+      "avg_hit_ratio": 0.07003093313924305,
+      "avg_attn_ratio": 0.17603768011134757,
+      "avg_coverage_ratio": 0.8377379232912596,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H6",
+      "importance_score": 1.0732681439155791,
+      "avg_hit_ratio": 0.06407802931432587,
+      "avg_attn_ratio": 0.2659305080729466,
+      "avg_coverage_ratio": 0.7432596065283067,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H3",
+      "importance_score": 1.071972846135701,
+      "avg_hit_ratio": 0.06389136381889368,
+      "avg_attn_ratio": 0.26891888198361547,
+      "avg_coverage_ratio": 0.7391626003331918,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H12",
+      "importance_score": 1.0634903344470756,
+      "avg_hit_ratio": 0.0500514506575645,
+      "avg_attn_ratio": 0.3960495924013554,
+      "avg_coverage_ratio": 0.6173892913881558,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H1",
+      "importance_score": 1.0544122492580976,
+      "avg_hit_ratio": 0.06378626643911253,
+      "avg_attn_ratio": 0.25233509694344836,
+      "avg_coverage_ratio": 0.7382908858755367,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H14",
+      "importance_score": 1.0411296108555703,
+      "avg_hit_ratio": 0.06061609025198273,
+      "avg_attn_ratio": 0.27770165115387463,
+      "avg_coverage_ratio": 0.7028118694497129,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H6",
+      "importance_score": 1.0407910644167375,
+      "avg_hit_ratio": 0.07020034384097983,
+      "avg_attn_ratio": 0.14469679314854006,
+      "avg_coverage_ratio": 0.8258939274272177,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H9",
+      "importance_score": 1.038647304075772,
+      "avg_hit_ratio": 0.062440392530870394,
+      "avg_attn_ratio": 0.24518254416413995,
+      "avg_coverage_ratio": 0.7310243673807617,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H10",
+      "importance_score": 1.03826205734078,
+      "avg_hit_ratio": 0.06153686878827427,
+      "avg_attn_ratio": 0.2703001193954369,
+      "avg_coverage_ratio": 0.7064250691570687,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H12",
+      "importance_score": 1.0382527427239006,
+      "avg_hit_ratio": 0.06458626141953619,
+      "avg_attn_ratio": 0.2195195284025574,
+      "avg_coverage_ratio": 0.7541469529018071,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H2",
+      "importance_score": 1.0367660045435079,
+      "avg_hit_ratio": 0.062280393534785664,
+      "avg_attn_ratio": 0.25487486580225516,
+      "avg_coverage_ratio": 0.7196107452064671,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H15",
+      "importance_score": 1.0303063947374564,
+      "avg_hit_ratio": 0.06346156259411706,
+      "avg_attn_ratio": 0.19366831233741902,
+      "avg_coverage_ratio": 0.7731765198059205,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H7",
+      "importance_score": 1.026154255849446,
+      "avg_hit_ratio": 0.06313842736673025,
+      "avg_attn_ratio": 0.2405160056289836,
+      "avg_coverage_ratio": 0.7224998228537322,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H3",
+      "importance_score": 1.025730201426759,
+      "avg_hit_ratio": 0.06162000552153398,
+      "avg_attn_ratio": 0.23300103225534874,
+      "avg_coverage_ratio": 0.7311091636498764,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H10",
+      "importance_score": 1.0146932936210857,
+      "avg_hit_ratio": 0.060391777933942375,
+      "avg_attn_ratio": 0.2593892102968629,
+      "avg_coverage_ratio": 0.6949123053902805,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H15",
+      "importance_score": 1.0016279869469942,
+      "avg_hit_ratio": 0.06072118763176388,
+      "avg_attn_ratio": 0.24340355998894175,
+      "avg_coverage_ratio": 0.6975032393262885,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H12",
+      "importance_score": 0.995431530572499,
+      "avg_hit_ratio": 0.06322156409998995,
+      "avg_attn_ratio": 0.17115978665741846,
+      "avg_coverage_ratio": 0.7610501798150906,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H12",
+      "importance_score": 0.995096151616273,
+      "avg_hit_ratio": 0.06195882692500753,
+      "avg_attn_ratio": 0.16099704180533858,
+      "avg_coverage_ratio": 0.7721402828859268,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H9",
+      "importance_score": 0.9919034170940393,
+      "avg_hit_ratio": 0.06289686025499448,
+      "avg_attn_ratio": 0.15908933294860192,
+      "avg_coverage_ratio": 0.7699172238904429,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H6",
+      "importance_score": 0.9917088777653416,
+      "avg_hit_ratio": 0.061431771408493124,
+      "avg_attn_ratio": 0.22119550727931114,
+      "avg_coverage_ratio": 0.7090815990775373,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H4",
+      "importance_score": 0.9907902086354266,
+      "avg_hit_ratio": 0.06224902118261219,
+      "avg_attn_ratio": 0.21465775094290437,
+      "avg_coverage_ratio": 0.7138834365099099,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H14",
+      "importance_score": 0.9879500387431435,
+      "avg_hit_ratio": 0.06114314576849714,
+      "avg_attn_ratio": 0.22236294694286288,
+      "avg_coverage_ratio": 0.7044439460317834,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H1",
+      "importance_score": 0.986466242804358,
+      "avg_hit_ratio": 0.05781610782049995,
+      "avg_attn_ratio": 0.28168739532904336,
+      "avg_coverage_ratio": 0.6469627396548147,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H5",
+      "importance_score": 0.9811861460657221,
+      "avg_hit_ratio": 0.06082628501154502,
+      "avg_attn_ratio": 0.21921454193566142,
+      "avg_coverage_ratio": 0.7011453191185156,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H0",
+      "importance_score": 0.9783946326021865,
+      "avg_hit_ratio": 0.0611337340628451,
+      "avg_attn_ratio": 0.21531530499382143,
+      "avg_coverage_ratio": 0.70194559354552,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H12",
+      "importance_score": 0.9745342533553009,
+      "avg_hit_ratio": 0.059979231502861156,
+      "avg_attn_ratio": 0.2278972824646653,
+      "avg_coverage_ratio": 0.6866577393877744,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H1",
+      "importance_score": 0.9720937078850058,
+      "avg_hit_ratio": 0.06128588997088646,
+      "avg_attn_ratio": 0.16594884128482393,
+      "avg_coverage_ratio": 0.7448589766292955,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H15",
+      "importance_score": 0.9701223101682019,
+      "avg_hit_ratio": 0.06141765385001506,
+      "avg_attn_ratio": 0.196269925985176,
+      "avg_coverage_ratio": 0.7124347303330109,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H7",
+      "importance_score": 0.9641861483863783,
+      "avg_hit_ratio": 0.06085608874610983,
+      "avg_attn_ratio": 0.20873045490608838,
+      "avg_coverage_ratio": 0.6945996047341801,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H8",
+      "importance_score": 0.9440884901091297,
+      "avg_hit_ratio": 0.05902864923200482,
+      "avg_attn_ratio": 0.20850743642183317,
+      "avg_coverage_ratio": 0.6765524044552916,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H8",
+      "importance_score": 0.9434611233381419,
+      "avg_hit_ratio": 0.06089687280393535,
+      "avg_attn_ratio": 0.16282673270726902,
+      "avg_coverage_ratio": 0.7197375178269375,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H7",
+      "importance_score": 0.939416641981293,
+      "avg_hit_ratio": 0.06312430980825218,
+      "avg_attn_ratio": 0.12383115428319943,
+      "avg_coverage_ratio": 0.7524611778898415,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H2",
+      "importance_score": 0.9364144326210657,
+      "avg_hit_ratio": 0.05351025248469029,
+      "avg_attn_ratio": 0.24822444969537114,
+      "avg_coverage_ratio": 0.6346797304410043,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H1",
+      "importance_score": 0.9220183303033938,
+      "avg_hit_ratio": 0.06146000652544925,
+      "avg_attn_ratio": 0.13516747926949765,
+      "avg_coverage_ratio": 0.7253908445084468,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H1",
+      "importance_score": 0.9131290218565099,
+      "avg_hit_ratio": 0.05911492320048188,
+      "avg_attn_ratio": 0.15859903350416568,
+      "avg_coverage_ratio": 0.6954150651518624,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H10",
+      "importance_score": 0.9111191337404345,
+      "avg_hit_ratio": 0.05856590703744604,
+      "avg_attn_ratio": 0.16893913357170487,
+      "avg_coverage_ratio": 0.6836140931312836,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H2",
+      "importance_score": 0.890048907669039,
+      "avg_hit_ratio": 0.05555572984640096,
+      "avg_attn_ratio": 0.1849416448614428,
+      "avg_coverage_ratio": 0.6495515329611953,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H14",
+      "importance_score": 0.8789960992929144,
+      "avg_hit_ratio": 0.058292967573536796,
+      "avg_attn_ratio": 0.15696295849340114,
+      "avg_coverage_ratio": 0.6637401732259766,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H6",
+      "importance_score": 0.8775883117871957,
+      "avg_hit_ratio": 0.05672591858247164,
+      "avg_attn_ratio": 0.17969026131468538,
+      "avg_coverage_ratio": 0.6411721318900386,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H12",
+      "importance_score": 0.8751513036555238,
+      "avg_hit_ratio": 0.05968119415721313,
+      "avg_attn_ratio": 0.13502240675486926,
+      "avg_coverage_ratio": 0.6804477027434415,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H3",
+      "importance_score": 0.8641795115978612,
+      "avg_hit_ratio": 0.056622389820299164,
+      "avg_attn_ratio": 0.14718896195048997,
+      "avg_coverage_ratio": 0.6603681598270721,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H13",
+      "importance_score": 0.8625130560378151,
+      "avg_hit_ratio": 0.05715258257203092,
+      "avg_attn_ratio": 0.15777970800126576,
+      "avg_coverage_ratio": 0.6475807654645185,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H10",
+      "importance_score": 0.8617502468022957,
+      "avg_hit_ratio": 0.058106302078104605,
+      "avg_attn_ratio": 0.14789167869615624,
+      "avg_coverage_ratio": 0.6557522660280348,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H0",
+      "importance_score": 0.8499335741724837,
+      "avg_hit_ratio": 0.0555055340829234,
+      "avg_attn_ratio": 0.1520027570729105,
+      "avg_coverage_ratio": 0.6424252830166498,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H6",
+      "importance_score": 0.8472851567063431,
+      "avg_hit_ratio": 0.05961844945286618,
+      "avg_attn_ratio": 0.08103585902895348,
+      "avg_coverage_ratio": 0.7066308482245234,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H5",
+      "importance_score": 0.8467025317978307,
+      "avg_hit_ratio": 0.05558239634574842,
+      "avg_attn_ratio": 0.15637292965070773,
+      "avg_coverage_ratio": 0.6347472058013746,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H9",
+      "importance_score": 0.8403305213468856,
+      "avg_hit_ratio": 0.05360907539403675,
+      "avg_attn_ratio": 0.14395868022639322,
+      "avg_coverage_ratio": 0.6427627657264556,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H0",
+      "importance_score": 0.8295364927681836,
+      "avg_hit_ratio": 0.055422397349663685,
+      "avg_attn_ratio": 0.14557767803444072,
+      "avg_coverage_ratio": 0.6285364173840792,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H1",
+      "importance_score": 0.8294448800381916,
+      "avg_hit_ratio": 0.05516514406184118,
+      "avg_attn_ratio": 0.14087011228840723,
+      "avg_coverage_ratio": 0.6334096236879432,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H4",
+      "importance_score": 0.8285880175052417,
+      "avg_hit_ratio": 0.055199653649232,
+      "avg_attn_ratio": 0.13161428312557671,
+      "avg_coverage_ratio": 0.641774080730433,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H6",
+      "importance_score": 0.8179760998702816,
+      "avg_hit_ratio": 0.05277927667904829,
+      "avg_attn_ratio": 0.18434393644187866,
+      "avg_coverage_ratio": 0.5808528867493546,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H4",
+      "importance_score": 0.811471202987457,
+      "avg_hit_ratio": 0.04926871047083626,
+      "avg_attn_ratio": 0.20699867987168616,
+      "avg_coverage_ratio": 0.5552038126449346,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H7",
+      "importance_score": 0.8074501879648965,
+      "avg_hit_ratio": 0.05332044975404076,
+      "avg_attn_ratio": 0.15220703884004827,
+      "avg_coverage_ratio": 0.6019226993708076,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H4",
+      "importance_score": 0.8070979256465005,
+      "avg_hit_ratio": 0.0538992696516414,
+      "avg_attn_ratio": 0.15771195411980624,
+      "avg_coverage_ratio": 0.5954867018750529,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H8",
+      "importance_score": 0.804134009813668,
+      "avg_hit_ratio": 0.05346319395643008,
+      "avg_attn_ratio": 0.114570569439015,
+      "avg_coverage_ratio": 0.6361002464182229,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H11",
+      "importance_score": 0.7994729731781032,
+      "avg_hit_ratio": 0.05274162985644012,
+      "avg_attn_ratio": 0.13400673207939096,
+      "avg_coverage_ratio": 0.6127246112422721,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H2",
+      "importance_score": 0.7981975523539867,
+      "avg_hit_ratio": 0.053392606164039756,
+      "avg_attn_ratio": 0.15961847366982163,
+      "avg_coverage_ratio": 0.5851864725201253,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H7",
+      "importance_score": 0.7973248456770938,
+      "avg_hit_ratio": 0.05271025750426664,
+      "avg_attn_ratio": 0.11335463212086377,
+      "avg_coverage_ratio": 0.6312599560519634,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H14",
+      "importance_score": 0.7968140143530833,
+      "avg_hit_ratio": 0.054580049693805845,
+      "avg_attn_ratio": 0.10570715312912665,
+      "avg_coverage_ratio": 0.6365268115301508,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H9",
+      "importance_score": 0.7893711193012771,
+      "avg_hit_ratio": 0.053852211123381184,
+      "avg_attn_ratio": 0.08798087386535046,
+      "avg_coverage_ratio": 0.6475380343125455,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H13",
+      "importance_score": 0.7859173277718603,
+      "avg_hit_ratio": 0.054980047184017666,
+      "avg_attn_ratio": 0.10416515169717072,
+      "avg_coverage_ratio": 0.6267721288906719,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H10",
+      "importance_score": 0.7831339436014594,
+      "avg_hit_ratio": 0.05589455124987451,
+      "avg_attn_ratio": 0.08474443622935955,
+      "avg_coverage_ratio": 0.6424949561222253,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H7",
+      "importance_score": 0.7787389206071027,
+      "avg_hit_ratio": 0.049044398152795904,
+      "avg_attn_ratio": 0.1664407347676866,
+      "avg_coverage_ratio": 0.5632537876866202,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H14",
+      "importance_score": 0.7784684307700904,
+      "avg_hit_ratio": 0.05163261720710772,
+      "avg_attn_ratio": 0.112022689223157,
+      "avg_coverage_ratio": 0.6148131243398257,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H4",
+      "importance_score": 0.7752599590050263,
+      "avg_hit_ratio": 0.050890661078205,
+      "avg_attn_ratio": 0.14650014603204456,
+      "avg_coverage_ratio": 0.5778691518947767,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H13",
+      "importance_score": 0.773595151616379,
+      "avg_hit_ratio": 0.054493775725328784,
+      "avg_attn_ratio": 0.11685507640103664,
+      "avg_coverage_ratio": 0.6022462994900136,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H5",
+      "importance_score": 0.7711747042238792,
+      "avg_hit_ratio": 0.05288907991165546,
+      "avg_attn_ratio": 0.13595265616821847,
+      "avg_coverage_ratio": 0.5823329681440054,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H4",
+      "importance_score": 0.7685493037526716,
+      "avg_hit_ratio": 0.05133301124385102,
+      "avg_attn_ratio": 0.1586629092408542,
+      "avg_coverage_ratio": 0.5585533832679663,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H13",
+      "importance_score": 0.7676537870874078,
+      "avg_hit_ratio": 0.051402030418632665,
+      "avg_attn_ratio": 0.12743930904163442,
+      "avg_coverage_ratio": 0.5888124476271407,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H1",
+      "importance_score": 0.7659732521980439,
+      "avg_hit_ratio": 0.05326554813773717,
+      "avg_attn_ratio": 0.0745584304142946,
+      "avg_coverage_ratio": 0.6381492736460121,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H7",
+      "importance_score": 0.7631398098987425,
+      "avg_hit_ratio": 0.053605938158819394,
+      "avg_attn_ratio": 0.1231903962372753,
+      "avg_coverage_ratio": 0.5863434755026478,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H5",
+      "importance_score": 0.7544882207098188,
+      "avg_hit_ratio": 0.04783813121172573,
+      "avg_attn_ratio": 0.18717239615985176,
+      "avg_coverage_ratio": 0.5194776933382413,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H2",
+      "importance_score": 0.7515831774645838,
+      "avg_hit_ratio": 0.05154791185623933,
+      "avg_attn_ratio": 0.12461967579149778,
+      "avg_coverage_ratio": 0.5754155898168467,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H12",
+      "importance_score": 0.7497292840813936,
+      "avg_hit_ratio": 0.050503212528862564,
+      "avg_attn_ratio": 0.13188746695665343,
+      "avg_coverage_ratio": 0.5673386045958776,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H15",
+      "importance_score": 0.7496620975127799,
+      "avg_hit_ratio": 0.052332220660576245,
+      "avg_attn_ratio": 0.08418315746681766,
+      "avg_coverage_ratio": 0.613146719385386,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H8",
+      "importance_score": 0.7491057676610253,
+      "avg_hit_ratio": 0.05186790984840879,
+      "avg_attn_ratio": 0.10974555056875519,
+      "avg_coverage_ratio": 0.5874923072438614,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H4",
+      "importance_score": 0.7489949711014046,
+      "avg_hit_ratio": 0.0522632014857946,
+      "avg_attn_ratio": 0.11017558152479223,
+      "avg_coverage_ratio": 0.5865561880908177,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H14",
+      "importance_score": 0.7381509776031433,
+      "avg_hit_ratio": 0.05341456681056119,
+      "avg_attn_ratio": 0.077259648138753,
+      "avg_coverage_ratio": 0.6074767626538291,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H4",
+      "importance_score": 0.7331850211051025,
+      "avg_hit_ratio": 0.051267129304286715,
+      "avg_attn_ratio": 0.10190077223626241,
+      "avg_coverage_ratio": 0.5800171195645534,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H9",
+      "importance_score": 0.732357289098099,
+      "avg_hit_ratio": 0.05019419485995382,
+      "avg_attn_ratio": 0.12158446581807866,
+      "avg_coverage_ratio": 0.5605786284200666,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H4",
+      "importance_score": 0.730545695509163,
+      "avg_hit_ratio": 0.04784754291737777,
+      "avg_attn_ratio": 0.15611727574168124,
+      "avg_coverage_ratio": 0.526580876850104,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H12",
+      "importance_score": 0.7226242539907811,
+      "avg_hit_ratio": 0.052376141953619115,
+      "avg_attn_ratio": 0.11135875658383548,
+      "avg_coverage_ratio": 0.5588893554533265,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H14",
+      "importance_score": 0.7143841293415427,
+      "avg_hit_ratio": 0.04793852273868086,
+      "avg_attn_ratio": 0.13320989333831074,
+      "avg_coverage_ratio": 0.5332357132645511,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H3",
+      "importance_score": 0.714312750225776,
+      "avg_hit_ratio": 0.05092517066559582,
+      "avg_attn_ratio": 0.10272524477375435,
+      "avg_coverage_ratio": 0.5606623347864259,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H5",
+      "importance_score": 0.7130439120738441,
+      "avg_hit_ratio": 0.049635766991265935,
+      "avg_attn_ratio": 0.09111534703915855,
+      "avg_coverage_ratio": 0.5722927980434196,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H2",
+      "importance_score": 0.711276357712841,
+      "avg_hit_ratio": 0.051717322557976106,
+      "avg_attn_ratio": 0.05914431546319354,
+      "avg_coverage_ratio": 0.6004147196916714,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H11",
+      "importance_score": 0.7085464116609199,
+      "avg_hit_ratio": 0.0489126342736673,
+      "avg_attn_ratio": 0.10215155710928733,
+      "avg_coverage_ratio": 0.5574822202779652,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H0",
+      "importance_score": 0.7064366309865234,
+      "avg_hit_ratio": 0.04832283405280594,
+      "avg_attn_ratio": 0.1432447412223453,
+      "avg_coverage_ratio": 0.5148690557113722,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H10",
+      "importance_score": 0.7024006529258797,
+      "avg_hit_ratio": 0.048073423853026806,
+      "avg_attn_ratio": 0.10287460360996709,
+      "avg_coverage_ratio": 0.5514526254628859,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H0",
+      "importance_score": 0.6972958023730029,
+      "avg_hit_ratio": 0.04943968979018171,
+      "avg_attn_ratio": 0.10127767768212002,
+      "avg_coverage_ratio": 0.5465784349007011,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H6",
+      "importance_score": 0.6948418737968184,
+      "avg_hit_ratio": 0.05087497490211826,
+      "avg_attn_ratio": 0.0917039806149621,
+      "avg_coverage_ratio": 0.5522629182797381,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H13",
+      "importance_score": 0.6935788434908687,
+      "avg_hit_ratio": 0.050700858347555465,
+      "avg_attn_ratio": 0.08943628290385423,
+      "avg_coverage_ratio": 0.5534417022394591,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H5",
+      "importance_score": 0.685759144916994,
+      "avg_hit_ratio": 0.04872283154301777,
+      "avg_attn_ratio": 0.10404344348295448,
+      "avg_coverage_ratio": 0.5329928698910217,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H5",
+      "importance_score": 0.6830969975075614,
+      "avg_hit_ratio": 0.051077326573637186,
+      "avg_attn_ratio": 0.08703865960644057,
+      "avg_coverage_ratio": 0.5449810113274836,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H9",
+      "importance_score": 0.6784289605313683,
+      "avg_hit_ratio": 0.049778511193655256,
+      "avg_attn_ratio": 0.08874958821168498,
+      "avg_coverage_ratio": 0.5399008611260281,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H3",
+      "importance_score": 0.6779940134500765,
+      "avg_hit_ratio": 0.048892242244754545,
+      "avg_attn_ratio": 0.08743001235413136,
+      "avg_coverage_ratio": 0.5416717588511906,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H10",
+      "importance_score": 0.668271988585706,
+      "avg_hit_ratio": 0.05132516815580765,
+      "avg_attn_ratio": 0.04390927254087076,
+      "avg_coverage_ratio": 0.5730375478890276,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L33_H13",
+      "importance_score": 0.6654758575332739,
+      "avg_hit_ratio": 0.047234213432386304,
+      "avg_attn_ratio": 0.11119902577842476,
+      "avg_coverage_ratio": 0.5070426183224628,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H9",
+      "importance_score": 0.6548369015810497,
+      "avg_hit_ratio": 0.04832283405280594,
+      "avg_attn_ratio": 0.08256230443955799,
+      "avg_coverage_ratio": 0.5239517630886857,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H15",
+      "importance_score": 0.6479918548215867,
+      "avg_hit_ratio": 0.04621461198674832,
+      "avg_attn_ratio": 0.08580536041957955,
+      "avg_coverage_ratio": 0.5159718824152588,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H5",
+      "importance_score": 0.6464937098183159,
+      "avg_hit_ratio": 0.04670872653348057,
+      "avg_attn_ratio": 0.0900846690120712,
+      "avg_coverage_ratio": 0.5097003142727641,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H7",
+      "importance_score": 0.6389499744117589,
+      "avg_hit_ratio": 0.04553540056219255,
+      "avg_attn_ratio": 0.08353438791443828,
+      "avg_coverage_ratio": 0.5098801859351281,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H9",
+      "importance_score": 0.6388260641485505,
+      "avg_hit_ratio": 0.0481816584680253,
+      "avg_attn_ratio": 0.07941335944596843,
+      "avg_coverage_ratio": 0.5112310462345567,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H0",
+      "importance_score": 0.6384562443120526,
+      "avg_hit_ratio": 0.04662872703543821,
+      "avg_attn_ratio": 0.0997225665719257,
+      "avg_coverage_ratio": 0.49210495070468874,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H11",
+      "importance_score": 0.6384146179266379,
+      "avg_hit_ratio": 0.04728754643108122,
+      "avg_attn_ratio": 0.0793251424648993,
+      "avg_coverage_ratio": 0.5118019290306574,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H8",
+      "importance_score": 0.6365392940811835,
+      "avg_hit_ratio": 0.04547736171067162,
+      "avg_attn_ratio": 0.08705818299237277,
+      "avg_coverage_ratio": 0.5040037493781391,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H6",
+      "importance_score": 0.6353190827419161,
+      "avg_hit_ratio": 0.04585539855436201,
+      "avg_attn_ratio": 0.08207185091709439,
+      "avg_coverage_ratio": 0.5073918332704597,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H15",
+      "importance_score": 0.6214388930557849,
+      "avg_hit_ratio": 0.045750301174580864,
+      "avg_attn_ratio": 0.08687505050845112,
+      "avg_coverage_ratio": 0.4888135413727529,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H8",
+      "importance_score": 0.615535240923778,
+      "avg_hit_ratio": 0.04411580162634274,
+      "avg_attn_ratio": 0.10959000084397978,
+      "avg_coverage_ratio": 0.4618294384534555,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H14",
+      "importance_score": 0.6138854363192179,
+      "avg_hit_ratio": 0.04382560736873808,
+      "avg_attn_ratio": 0.056273253243057555,
+      "avg_coverage_ratio": 0.5137865757074223,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H0",
+      "importance_score": 0.6118942508786214,
+      "avg_hit_ratio": 0.04660990362413412,
+      "avg_attn_ratio": 0.07746970135396661,
+      "avg_coverage_ratio": 0.48781464590052065,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H3",
+      "importance_score": 0.6072199949327101,
+      "avg_hit_ratio": 0.040283668808352574,
+      "avg_attn_ratio": 0.05195940085097496,
+      "avg_coverage_ratio": 0.5149769252733826,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H3",
+      "importance_score": 0.6062840897946504,
+      "avg_hit_ratio": 0.04520128501154502,
+      "avg_attn_ratio": 0.07106458037294656,
+      "avg_coverage_ratio": 0.4900182244101588,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H11",
+      "importance_score": 0.5981472040958777,
+      "avg_hit_ratio": 0.04435893735568718,
+      "avg_attn_ratio": 0.08231181318888776,
+      "avg_coverage_ratio": 0.47147645355130285,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H3",
+      "importance_score": 0.5934594615325733,
+      "avg_hit_ratio": 0.04307267091657464,
+      "avg_attn_ratio": 0.0780743562150534,
+      "avg_coverage_ratio": 0.47231243440094534,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H1",
+      "importance_score": 0.5922435155637535,
+      "avg_hit_ratio": 0.04416756600742897,
+      "avg_attn_ratio": 0.08576090893520041,
+      "avg_coverage_ratio": 0.46231504062112416,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H8",
+      "importance_score": 0.5905271671821561,
+      "avg_hit_ratio": 0.04027425710270053,
+      "avg_attn_ratio": 0.055086930418173315,
+      "avg_coverage_ratio": 0.49516597966128234,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H3",
+      "importance_score": 0.5795003937959988,
+      "avg_hit_ratio": 0.040449942274872,
+      "avg_attn_ratio": 0.08163780870951813,
+      "avg_coverage_ratio": 0.4574126428116087,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H10",
+      "importance_score": 0.5789444148446914,
+      "avg_hit_ratio": 0.04390090101395442,
+      "avg_attn_ratio": 0.08941166131811785,
+      "avg_coverage_ratio": 0.44563185251261916,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H3",
+      "importance_score": 0.5763684160474576,
+      "avg_hit_ratio": 0.04254875263527758,
+      "avg_attn_ratio": 0.06857884113585057,
+      "avg_coverage_ratio": 0.4652408222763294,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H4",
+      "importance_score": 0.5762041983684214,
+      "avg_hit_ratio": 0.04396992018873607,
+      "avg_attn_ratio": 0.07668139973448208,
+      "avg_coverage_ratio": 0.4555528784452033,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H7",
+      "importance_score": 0.5753670140064723,
+      "avg_hit_ratio": 0.04306482782853127,
+      "avg_attn_ratio": 0.06867491055933728,
+      "avg_coverage_ratio": 0.46362727561860373,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H12",
+      "importance_score": 0.5721968438138569,
+      "avg_hit_ratio": 0.042346400963758656,
+      "avg_attn_ratio": 0.08207548382402857,
+      "avg_coverage_ratio": 0.44777495902606973,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H0",
+      "importance_score": 0.5711727156670281,
+      "avg_hit_ratio": 0.04242483184419235,
+      "avg_attn_ratio": 0.06091910261100611,
+      "avg_coverage_ratio": 0.46782878121182964,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H5",
+      "importance_score": 0.5695316230482879,
+      "avg_hit_ratio": 0.04015817939965867,
+      "avg_attn_ratio": 0.06310183198059928,
+      "avg_coverage_ratio": 0.46627161166802994,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H5",
+      "importance_score": 0.5689745888415007,
+      "avg_hit_ratio": 0.04033229595422146,
+      "avg_attn_ratio": 0.070283596203822,
+      "avg_coverage_ratio": 0.4583586966834572,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H10",
+      "importance_score": 0.5659334272314696,
+      "avg_hit_ratio": 0.03975190743901215,
+      "avg_attn_ratio": 0.07630652695753869,
+      "avg_coverage_ratio": 0.4498749928349188,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H3",
+      "importance_score": 0.5624954428406864,
+      "avg_hit_ratio": 0.042200519526151996,
+      "avg_attn_ratio": 0.08244450933751979,
+      "avg_coverage_ratio": 0.43785041397701463,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H6",
+      "importance_score": 0.560553797747529,
+      "avg_hit_ratio": 0.04014563045878928,
+      "avg_attn_ratio": 0.07949537298351032,
+      "avg_coverage_ratio": 0.4409127943052294,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H8",
+      "importance_score": 0.5548708489844608,
+      "avg_hit_ratio": 0.039398968477060536,
+      "avg_attn_ratio": 0.10470054902144564,
+      "avg_coverage_ratio": 0.4107713314859546,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H14",
+      "importance_score": 0.5539994101069661,
+      "avg_hit_ratio": 0.038412308001204695,
+      "avg_attn_ratio": 0.03017204694307154,
+      "avg_coverage_ratio": 0.4854150551626899,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H0",
+      "importance_score": 0.5528361240519324,
+      "avg_hit_ratio": 0.04145856339724927,
+      "avg_attn_ratio": 0.0788743076108295,
+      "avg_coverage_ratio": 0.43250325304385356,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H0",
+      "importance_score": 0.546558644523563,
+      "avg_hit_ratio": 0.03860524796707158,
+      "avg_attn_ratio": 0.08952817000862646,
+      "avg_coverage_ratio": 0.4184252265478649,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H6",
+      "importance_score": 0.54142237471619,
+      "avg_hit_ratio": 0.04054405933139243,
+      "avg_attn_ratio": 0.07293599038792775,
+      "avg_coverage_ratio": 0.42794232499686985,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H9",
+      "importance_score": 0.5382908329438758,
+      "avg_hit_ratio": 0.038258583475554664,
+      "avg_attn_ratio": 0.026780671179904625,
+      "avg_coverage_ratio": 0.47325157828841646,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H13",
+      "importance_score": 0.535737910169335,
+      "avg_hit_ratio": 0.03974406435096878,
+      "avg_attn_ratio": 0.07694044315856848,
+      "avg_coverage_ratio": 0.4190534026597978,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H1",
+      "importance_score": 0.5357091297150839,
+      "avg_hit_ratio": 0.03769544975404076,
+      "avg_attn_ratio": 0.05979658858767068,
+      "avg_coverage_ratio": 0.43821709137337245,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H6",
+      "importance_score": 0.5329542586219141,
+      "avg_hit_ratio": 0.04152444533681357,
+      "avg_attn_ratio": 0.059775819695556696,
+      "avg_coverage_ratio": 0.43165399358954387,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H2",
+      "importance_score": 0.5323178973366466,
+      "avg_hit_ratio": 0.03986955375966268,
+      "avg_attn_ratio": 0.06637201968524269,
+      "avg_coverage_ratio": 0.4260763238917412,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H15",
+      "importance_score": 0.5306013577657525,
+      "avg_hit_ratio": 0.0408515083826925,
+      "avg_attn_ratio": 0.06918357990969372,
+      "avg_coverage_ratio": 0.4205662694733662,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H6",
+      "importance_score": 0.5273128130683709,
+      "avg_hit_ratio": 0.03932838068467021,
+      "avg_attn_ratio": 0.053011903882227554,
+      "avg_coverage_ratio": 0.4349725285014731,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H5",
+      "importance_score": 0.5260961096664202,
+      "avg_hit_ratio": 0.04028680604356992,
+      "avg_attn_ratio": 0.06967128651405247,
+      "avg_coverage_ratio": 0.4161380171087978,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H1",
+      "importance_score": 0.5243831785009327,
+      "avg_hit_ratio": 0.04036837415922096,
+      "avg_attn_ratio": 0.05771918846808729,
+      "avg_coverage_ratio": 0.4262956158736245,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H7",
+      "importance_score": 0.5242504664729298,
+      "avg_hit_ratio": 0.04081229294247565,
+      "avg_attn_ratio": 0.06926078042216142,
+      "avg_coverage_ratio": 0.41417739310829277,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H0",
+      "importance_score": 0.5215024578790036,
+      "avg_hit_ratio": 0.038633483084027705,
+      "avg_attn_ratio": 0.06937299762938118,
+      "avg_coverage_ratio": 0.4134959771655948,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H11",
+      "importance_score": 0.5205378075005218,
+      "avg_hit_ratio": 0.04026170816183114,
+      "avg_attn_ratio": 0.045006201080920814,
+      "avg_coverage_ratio": 0.43526989825776985,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H4",
+      "importance_score": 0.5187567774337883,
+      "avg_hit_ratio": 0.040426413010741895,
+      "avg_attn_ratio": 0.06523861601898338,
+      "avg_coverage_ratio": 0.4130917484040631,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H8",
+      "importance_score": 0.5150739676194149,
+      "avg_hit_ratio": 0.03570173677341632,
+      "avg_attn_ratio": 0.07627267021991892,
+      "avg_coverage_ratio": 0.4030995606260797,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H4",
+      "importance_score": 0.5126722462262608,
+      "avg_hit_ratio": 0.03794642857142857,
+      "avg_attn_ratio": 0.08165448998281719,
+      "avg_coverage_ratio": 0.3930713276720151,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H12",
+      "importance_score": 0.5120639340037223,
+      "avg_hit_ratio": 0.03982249523140247,
+      "avg_attn_ratio": 0.06596150119370016,
+      "avg_coverage_ratio": 0.4062799375786197,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H3",
+      "importance_score": 0.5102441162674166,
+      "avg_hit_ratio": 0.035902519827326576,
+      "avg_attn_ratio": 0.05093774073725389,
+      "avg_coverage_ratio": 0.4234038557028362,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H5",
+      "importance_score": 0.5101882829898132,
+      "avg_hit_ratio": 0.036820161128400766,
+      "avg_attn_ratio": 0.031402935072583564,
+      "avg_coverage_ratio": 0.44196518678882885,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H6",
+      "importance_score": 0.5078345491847303,
+      "avg_hit_ratio": 0.038184858447946994,
+      "avg_attn_ratio": 0.0509500316556835,
+      "avg_coverage_ratio": 0.41869965908109974,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H4",
+      "importance_score": 0.5077909414412481,
+      "avg_hit_ratio": 0.03565938409798213,
+      "avg_attn_ratio": 0.08274726396257401,
+      "avg_coverage_ratio": 0.389384293380692,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H13",
+      "importance_score": 0.5058917037685541,
+      "avg_hit_ratio": 0.0384358372653348,
+      "avg_attn_ratio": 0.05963956865277281,
+      "avg_coverage_ratio": 0.40781629785044643,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H15",
+      "importance_score": 0.5022692760297841,
+      "avg_hit_ratio": 0.03581781447645819,
+      "avg_attn_ratio": 0.09926801343556141,
+      "avg_coverage_ratio": 0.36718344811776454,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H2",
+      "importance_score": 0.500083996379497,
+      "avg_hit_ratio": 0.03701780694709367,
+      "avg_attn_ratio": 0.08796523235211928,
+      "avg_coverage_ratio": 0.375100957080284,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H11",
+      "importance_score": 0.4985665548075972,
+      "avg_hit_ratio": 0.037003689388615604,
+      "avg_attn_ratio": 0.07484626336600639,
+      "avg_coverage_ratio": 0.3867166020529752,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H3",
+      "importance_score": 0.49765470500184605,
+      "avg_hit_ratio": 0.03689074892079108,
+      "avg_attn_ratio": 0.07018212297350124,
+      "avg_coverage_ratio": 0.39058183310755373,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H13",
+      "importance_score": 0.49601029895884674,
+      "avg_hit_ratio": 0.03245156108824415,
+      "avg_attn_ratio": 0.0785231117724055,
+      "avg_coverage_ratio": 0.3850356260981971,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H8",
+      "importance_score": 0.4949115498862504,
+      "avg_hit_ratio": 0.03471507629756049,
+      "avg_attn_ratio": 0.06620895966730264,
+      "avg_coverage_ratio": 0.39398751392138726,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H2",
+      "importance_score": 0.4945249915313629,
+      "avg_hit_ratio": 0.03791819345447244,
+      "avg_attn_ratio": 0.06999387717232415,
+      "avg_coverage_ratio": 0.38661292090456634,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H9",
+      "importance_score": 0.49284764210872756,
+      "avg_hit_ratio": 0.038431131412508784,
+      "avg_attn_ratio": 0.06658639732070704,
+      "avg_coverage_ratio": 0.3878301133755117,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H2",
+      "importance_score": 0.4926645862272709,
+      "avg_hit_ratio": 0.037607607167955026,
+      "avg_attn_ratio": 0.0641468381928305,
+      "avg_coverage_ratio": 0.39091014086648534,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H14",
+      "importance_score": 0.4914637702750974,
+      "avg_hit_ratio": 0.03752760766991266,
+      "avg_attn_ratio": 0.05670431458056269,
+      "avg_coverage_ratio": 0.3972318480246221,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H14",
+      "importance_score": 0.49052404975494057,
+      "avg_hit_ratio": 0.038037408392731654,
+      "avg_attn_ratio": 0.0624932229492221,
+      "avg_coverage_ratio": 0.3899934184129868,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H3",
+      "importance_score": 0.49030192888415636,
+      "avg_hit_ratio": 0.03758878375665094,
+      "avg_attn_ratio": 0.06845897768484915,
+      "avg_coverage_ratio": 0.3842541674426563,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H0",
+      "importance_score": 0.4894092423815499,
+      "avg_hit_ratio": 0.03657388816383897,
+      "avg_attn_ratio": 0.06170147297703498,
+      "avg_coverage_ratio": 0.391133881240676,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H12",
+      "importance_score": 0.489389323051832,
+      "avg_hit_ratio": 0.03696290533079008,
+      "avg_attn_ratio": 0.05983498517508663,
+      "avg_coverage_ratio": 0.3925914325459553,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H5",
+      "importance_score": 0.48814780123412504,
+      "avg_hit_ratio": 0.036677416926011445,
+      "avg_attn_ratio": 0.06597544932876734,
+      "avg_coverage_ratio": 0.3854949349793463,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H7",
+      "importance_score": 0.48521233700175165,
+      "avg_hit_ratio": 0.03661780945688184,
+      "avg_attn_ratio": 0.06404907402349928,
+      "avg_coverage_ratio": 0.38454545352137054,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H10",
+      "importance_score": 0.4830618140691474,
+      "avg_hit_ratio": 0.03200921092259813,
+      "avg_attn_ratio": 0.05206616343773087,
+      "avg_coverage_ratio": 0.39898643970881836,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H0",
+      "importance_score": 0.48239575665820567,
+      "avg_hit_ratio": 0.03771584178295352,
+      "avg_attn_ratio": 0.056141807888908386,
+      "avg_coverage_ratio": 0.3885381069863437,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H1",
+      "importance_score": 0.4810551277023958,
+      "avg_hit_ratio": 0.03718251179600442,
+      "avg_attn_ratio": 0.05225605753055371,
+      "avg_coverage_ratio": 0.39161655837583764,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H3",
+      "importance_score": 0.47406470744881135,
+      "avg_hit_ratio": 0.03542252283907238,
+      "avg_attn_ratio": 0.07455465310177663,
+      "avg_coverage_ratio": 0.36408753150796236,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H6",
+      "importance_score": 0.4736992935558626,
+      "avg_hit_ratio": 0.03496134926212228,
+      "avg_attn_ratio": 0.06719149524282929,
+      "avg_coverage_ratio": 0.37154644905091105,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H4",
+      "importance_score": 0.4708649694397808,
+      "avg_hit_ratio": 0.03628526252384299,
+      "avg_attn_ratio": 0.05971382597392091,
+      "avg_coverage_ratio": 0.3748658809420169,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H7",
+      "importance_score": 0.4692744503057343,
+      "avg_hit_ratio": 0.03614408693906234,
+      "avg_attn_ratio": 0.0634586719801643,
+      "avg_coverage_ratio": 0.36967169138650763,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H9",
+      "importance_score": 0.4668781818535097,
+      "avg_hit_ratio": 0.036271144965364925,
+      "avg_attn_ratio": 0.06093811923415137,
+      "avg_coverage_ratio": 0.3696689176539934,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H10",
+      "importance_score": 0.4627955611498966,
+      "avg_hit_ratio": 0.034638214034735465,
+      "avg_attn_ratio": 0.05857795976970936,
+      "avg_coverage_ratio": 0.36957938734545176,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H11",
+      "importance_score": 0.46187454997762933,
+      "avg_hit_ratio": 0.0357331091255898,
+      "avg_attn_ratio": 0.05324410655489905,
+      "avg_coverage_ratio": 0.3728973342971405,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H1",
+      "importance_score": 0.4612736372836906,
+      "avg_hit_ratio": 0.03694878777231202,
+      "avg_attn_ratio": 0.0628444836872448,
+      "avg_coverage_ratio": 0.3614803658241338,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H2",
+      "importance_score": 0.4575199865396798,
+      "avg_hit_ratio": 0.033726847204095974,
+      "avg_attn_ratio": 0.05602261336950027,
+      "avg_coverage_ratio": 0.36777052596608356,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H4",
+      "importance_score": 0.457096924574864,
+      "avg_hit_ratio": 0.03512919134625038,
+      "avg_attn_ratio": 0.06238948611586824,
+      "avg_coverage_ratio": 0.3595782471127454,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H11",
+      "importance_score": 0.45648100535864156,
+      "avg_hit_ratio": 0.03140999899608473,
+      "avg_attn_ratio": 0.026216505870166436,
+      "avg_coverage_ratio": 0.3988545004923904,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H12",
+      "importance_score": 0.45532677259594934,
+      "avg_hit_ratio": 0.033739396144965364,
+      "avg_attn_ratio": 0.061698636438296595,
+      "avg_coverage_ratio": 0.3598887400126874,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H6",
+      "importance_score": 0.45236536807188815,
+      "avg_hit_ratio": 0.03414880534082924,
+      "avg_attn_ratio": 0.05248179540008841,
+      "avg_coverage_ratio": 0.3657347673309705,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H15",
+      "importance_score": 0.44959495229534296,
+      "avg_hit_ratio": 0.031259411705652045,
+      "avg_attn_ratio": 0.024384885835482525,
+      "avg_coverage_ratio": 0.3939506547542084,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H8",
+      "importance_score": 0.44636227917320337,
+      "avg_hit_ratio": 0.03378174882039956,
+      "avg_attn_ratio": 0.07369149637648341,
+      "avg_coverage_ratio": 0.3388890339763204,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H4",
+      "importance_score": 0.4427349962236753,
+      "avg_hit_ratio": 0.0350915445236422,
+      "avg_attn_ratio": 0.053213502771594395,
+      "avg_coverage_ratio": 0.3544299489284387,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H11",
+      "importance_score": 0.4417432726161903,
+      "avg_hit_ratio": 0.0327903824917177,
+      "avg_attn_ratio": 0.05756081793390972,
+      "avg_coverage_ratio": 0.3513920721905629,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L22_H8",
+      "importance_score": 0.44172147956475594,
+      "avg_hit_ratio": 0.032366855737375765,
+      "avg_attn_ratio": 0.04520810287409829,
+      "avg_coverage_ratio": 0.36414652095328187,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H10",
+      "importance_score": 0.44027808524761436,
+      "avg_hit_ratio": 0.03342410400562192,
+      "avg_attn_ratio": 0.04987145083548605,
+      "avg_coverage_ratio": 0.3569825304065064,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H4",
+      "importance_score": 0.4382105288475132,
+      "avg_hit_ratio": 0.033132341130408596,
+      "avg_attn_ratio": 0.05243697831881255,
+      "avg_coverage_ratio": 0.3526412093982921,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H1",
+      "importance_score": 0.4350102847175036,
+      "avg_hit_ratio": 0.0325864622025901,
+      "avg_attn_ratio": 0.04716192035586372,
+      "avg_coverage_ratio": 0.3552619021590498,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H4",
+      "importance_score": 0.4325164631299636,
+      "avg_hit_ratio": 0.034817036442124284,
+      "avg_attn_ratio": 0.050743898155570226,
+      "avg_coverage_ratio": 0.34695552853226913,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H15",
+      "importance_score": 0.4277857538728909,
+      "avg_hit_ratio": 0.03383037596626845,
+      "avg_attn_ratio": 0.0657027417913317,
+      "avg_coverage_ratio": 0.32825263611529076,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H6",
+      "importance_score": 0.42516350195079333,
+      "avg_hit_ratio": 0.03274646119867483,
+      "avg_attn_ratio": 0.053797273989475515,
+      "avg_coverage_ratio": 0.338619766762643,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H8",
+      "importance_score": 0.42404395522857374,
+      "avg_hit_ratio": 0.030122163939363518,
+      "avg_attn_ratio": 0.05217295375863107,
+      "avg_coverage_ratio": 0.34174883753057916,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H12",
+      "importance_score": 0.42359812004609565,
+      "avg_hit_ratio": 0.03250489408693906,
+      "avg_attn_ratio": 0.0668467994643642,
+      "avg_coverage_ratio": 0.3242464264947924,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H13",
+      "importance_score": 0.42353381285391345,
+      "avg_hit_ratio": 0.03213156309607469,
+      "avg_attn_ratio": 0.0608400873910216,
+      "avg_coverage_ratio": 0.3305621623668171,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H14",
+      "importance_score": 0.4208491399203067,
+      "avg_hit_ratio": 0.03278724525650035,
+      "avg_attn_ratio": 0.061492698417920336,
+      "avg_coverage_ratio": 0.326569196245886,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H6",
+      "importance_score": 0.4192757071955878,
+      "avg_hit_ratio": 0.029850793093062947,
+      "avg_attn_ratio": 0.04507247505622749,
+      "avg_coverage_ratio": 0.34435243904629736,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H1",
+      "importance_score": 0.41860451138892835,
+      "avg_hit_ratio": 0.032994302780845294,
+      "avg_attn_ratio": 0.057940564319084537,
+      "avg_coverage_ratio": 0.32766964428899853,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H5",
+      "importance_score": 0.4172586105349928,
+      "avg_hit_ratio": 0.030773140246963156,
+      "avg_attn_ratio": 0.05061469520270323,
+      "avg_coverage_ratio": 0.3358707750853264,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H0",
+      "importance_score": 0.4172174131886004,
+      "avg_hit_ratio": 0.03161078204999498,
+      "avg_attn_ratio": 0.06301145463017008,
+      "avg_coverage_ratio": 0.32259517650843533,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H13",
+      "importance_score": 0.41609251125223834,
+      "avg_hit_ratio": 0.031857055014556775,
+      "avg_attn_ratio": 0.05687416106136425,
+      "avg_coverage_ratio": 0.3273612951763173,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H7",
+      "importance_score": 0.41599707935734376,
+      "avg_hit_ratio": 0.03361547535388013,
+      "avg_attn_ratio": 0.05175067327183957,
+      "avg_coverage_ratio": 0.3306309307316241,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H5",
+      "importance_score": 0.41335099971091616,
+      "avg_hit_ratio": 0.03197940718803333,
+      "avg_attn_ratio": 0.061268084666006375,
+      "avg_coverage_ratio": 0.32010350785687647,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H12",
+      "importance_score": 0.41279578073214435,
+      "avg_hit_ratio": 0.0326523441421544,
+      "avg_attn_ratio": 0.05912552825777506,
+      "avg_coverage_ratio": 0.3210179083322149,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H14",
+      "importance_score": 0.4126717376267019,
+      "avg_hit_ratio": 0.030824904628049394,
+      "avg_attn_ratio": 0.05929248944332024,
+      "avg_coverage_ratio": 0.32255434355533225,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H13",
+      "importance_score": 0.4118481271101201,
+      "avg_hit_ratio": 0.03059118060435699,
+      "avg_attn_ratio": 0.06485187002358439,
+      "avg_coverage_ratio": 0.3164050764821787,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H6",
+      "importance_score": 0.41133925746544725,
+      "avg_hit_ratio": 0.030509612488705953,
+      "avg_attn_ratio": 0.057324953093120315,
+      "avg_coverage_ratio": 0.32350469188362097,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H7",
+      "importance_score": 0.41122889231573356,
+      "avg_hit_ratio": 0.03245156108824415,
+      "avg_attn_ratio": 0.04873363743093687,
+      "avg_coverage_ratio": 0.3300436937965526,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H14",
+      "importance_score": 0.41117186148745133,
+      "avg_hit_ratio": 0.03125,
+      "avg_attn_ratio": 0.06404034223503381,
+      "avg_coverage_ratio": 0.31588151925241753,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H14",
+      "importance_score": 0.4096139611753397,
+      "avg_hit_ratio": 0.030636670515008534,
+      "avg_attn_ratio": 0.06030244207768753,
+      "avg_coverage_ratio": 0.31867484858264367,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H10",
+      "importance_score": 0.40796254128050446,
+      "avg_hit_ratio": 0.029595108422849112,
+      "avg_attn_ratio": 0.0507010291022663,
+      "avg_coverage_ratio": 0.327666403755389,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H0",
+      "importance_score": 0.4025446196803517,
+      "avg_hit_ratio": 0.026953556369842386,
+      "avg_attn_ratio": 0.048841678890043407,
+      "avg_coverage_ratio": 0.3267493844204659,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H4",
+      "importance_score": 0.4015876368302039,
+      "avg_hit_ratio": 0.03045627949001104,
+      "avg_attn_ratio": 0.06142029983688427,
+      "avg_coverage_ratio": 0.3097110575033086,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H7",
+      "importance_score": 0.40143414001438354,
+      "avg_hit_ratio": 0.02975353880132517,
+      "avg_attn_ratio": 0.05716811021118416,
+      "avg_coverage_ratio": 0.31451249100187423,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H11",
+      "importance_score": 0.39998673588718353,
+      "avg_hit_ratio": 0.029810009035237426,
+      "avg_attn_ratio": 0.04737480466356243,
+      "avg_coverage_ratio": 0.32280192218838366,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H2",
+      "importance_score": 0.3987636391848317,
+      "avg_hit_ratio": 0.029444521132416423,
+      "avg_attn_ratio": 0.04936049593310251,
+      "avg_coverage_ratio": 0.31995862211931275,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H7",
+      "importance_score": 0.3985620249215073,
+      "avg_hit_ratio": 0.030387260315229394,
+      "avg_attn_ratio": 0.05087557264159298,
+      "avg_coverage_ratio": 0.3172991919646849,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H2",
+      "importance_score": 0.3983342907584835,
+      "avg_hit_ratio": 0.031722153900210825,
+      "avg_attn_ratio": 0.051810159138579816,
+      "avg_coverage_ratio": 0.31480197771969287,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H5",
+      "importance_score": 0.39825406506567235,
+      "avg_hit_ratio": 0.02972687230197771,
+      "avg_attn_ratio": 0.05391172144389324,
+      "avg_coverage_ratio": 0.3146154713198014,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H13",
+      "importance_score": 0.39712543880277035,
+      "avg_hit_ratio": 0.02929863969480976,
+      "avg_attn_ratio": 0.05127066070872635,
+      "avg_coverage_ratio": 0.31655613839923424,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H7",
+      "importance_score": 0.39658624422760347,
+      "avg_hit_ratio": 0.028845309205903023,
+      "avg_attn_ratio": 0.05018875559909325,
+      "avg_coverage_ratio": 0.31755217942260716,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H2",
+      "importance_score": 0.39553994420234817,
+      "avg_hit_ratio": 0.031020981829133622,
+      "avg_attn_ratio": 0.050662770514861594,
+      "avg_coverage_ratio": 0.31385619185835295,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H10",
+      "importance_score": 0.3949970672890762,
+      "avg_hit_ratio": 0.03080294398152796,
+      "avg_attn_ratio": 0.057434418643256026,
+      "avg_coverage_ratio": 0.3067597046642922,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H7",
+      "importance_score": 0.39467712420494067,
+      "avg_hit_ratio": 0.03070882692500753,
+      "avg_attn_ratio": 0.04595033667930717,
+      "avg_coverage_ratio": 0.318017960600626,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H6",
+      "importance_score": 0.39433231907002386,
+      "avg_hit_ratio": 0.028407664893083023,
+      "avg_attn_ratio": 0.04363201269689288,
+      "avg_coverage_ratio": 0.322292641480048,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H14",
+      "importance_score": 0.39283593830297414,
+      "avg_hit_ratio": 0.03029941772914366,
+      "avg_attn_ratio": 0.04636855854803466,
+      "avg_coverage_ratio": 0.31616796202579583,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H6",
+      "importance_score": 0.3915621685045419,
+      "avg_hit_ratio": 0.028434331392430477,
+      "avg_attn_ratio": 0.05501787703768761,
+      "avg_coverage_ratio": 0.3081099600744238,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H3",
+      "importance_score": 0.3910584882215388,
+      "avg_hit_ratio": 0.028443743098082522,
+      "avg_attn_ratio": 0.043688678085906374,
+      "avg_coverage_ratio": 0.31892606703754994,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H11",
+      "importance_score": 0.3896960018187616,
+      "avg_hit_ratio": 0.028548840477863668,
+      "avg_attn_ratio": 0.0471784295327051,
+      "avg_coverage_ratio": 0.3139687318081928,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H14",
+      "importance_score": 0.3847470101717715,
+      "avg_hit_ratio": 0.029350404075895994,
+      "avg_attn_ratio": 0.04893926826086347,
+      "avg_coverage_ratio": 0.306457337835012,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H13",
+      "importance_score": 0.38190585812314415,
+      "avg_hit_ratio": 0.027063359602449554,
+      "avg_attn_ratio": 0.044357416811244194,
+      "avg_coverage_ratio": 0.3104850817094504,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H10",
+      "importance_score": 0.3817749387099844,
+      "avg_hit_ratio": 0.03043431884348961,
+      "avg_attn_ratio": 0.04627007537284633,
+      "avg_coverage_ratio": 0.30507054449364845,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H9",
+      "importance_score": 0.38158739386123725,
+      "avg_hit_ratio": 0.028402959040257,
+      "avg_attn_ratio": 0.04290120232219711,
+      "avg_coverage_ratio": 0.31028323249878315,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H13",
+      "importance_score": 0.38129527841346106,
+      "avg_hit_ratio": 0.027618650235920087,
+      "avg_attn_ratio": 0.021720833687370694,
+      "avg_coverage_ratio": 0.33195579449017026,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H15",
+      "importance_score": 0.3810513289445347,
+      "avg_hit_ratio": 0.028015510490914566,
+      "avg_attn_ratio": 0.04704347152967484,
+      "avg_coverage_ratio": 0.3059923469239453,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H6",
+      "importance_score": 0.37964347491361994,
+      "avg_hit_ratio": 0.029435109426764382,
+      "avg_attn_ratio": 0.06063468906575953,
+      "avg_coverage_ratio": 0.289573676421096,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H0",
+      "importance_score": 0.37701598792707314,
+      "avg_hit_ratio": 0.028669624033731553,
+      "avg_attn_ratio": 0.05385501911540327,
+      "avg_coverage_ratio": 0.2944913447779383,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H12",
+      "importance_score": 0.3763621863269939,
+      "avg_hit_ratio": 0.028592761770906534,
+      "avg_attn_ratio": 0.0533796241100339,
+      "avg_coverage_ratio": 0.2943898004460535,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H14",
+      "importance_score": 0.3761656831297211,
+      "avg_hit_ratio": 0.028290018572432487,
+      "avg_attn_ratio": 0.053400646647943646,
+      "avg_coverage_ratio": 0.294475017909345,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H15",
+      "importance_score": 0.3759305327738781,
+      "avg_hit_ratio": 0.028994327878727036,
+      "avg_attn_ratio": 0.050704526733416105,
+      "avg_coverage_ratio": 0.29623167816173496,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H6",
+      "importance_score": 0.37313837670582045,
+      "avg_hit_ratio": 0.024842197068567412,
+      "avg_attn_ratio": 0.05731372170167417,
+      "avg_coverage_ratio": 0.29098245793557886,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H15",
+      "importance_score": 0.3731383335885311,
+      "avg_hit_ratio": 0.030244516112840077,
+      "avg_attn_ratio": 0.04632198002989184,
+      "avg_coverage_ratio": 0.2965718374457992,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H5",
+      "importance_score": 0.37274944896847384,
+      "avg_hit_ratio": 0.02705708513201486,
+      "avg_attn_ratio": 0.050117891385035786,
+      "avg_coverage_ratio": 0.2955744724514232,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H10",
+      "importance_score": 0.37244390481041467,
+      "avg_hit_ratio": 0.02726727989157715,
+      "avg_attn_ratio": 0.04944371237669786,
+      "avg_coverage_ratio": 0.2957329125421397,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H13",
+      "importance_score": 0.37185778147113735,
+      "avg_hit_ratio": 0.02807825519526152,
+      "avg_attn_ratio": 0.04253701028777487,
+      "avg_coverage_ratio": 0.301242515988101,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H11",
+      "importance_score": 0.3713702530481048,
+      "avg_hit_ratio": 0.028857858146772414,
+      "avg_attn_ratio": 0.048545805081634454,
+      "avg_coverage_ratio": 0.2939665898196979,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H9",
+      "importance_score": 0.3705794724665163,
+      "avg_hit_ratio": 0.028542566007428972,
+      "avg_attn_ratio": 0.04404588086922199,
+      "avg_coverage_ratio": 0.29799102558986534,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H13",
+      "importance_score": 0.3699785571201754,
+      "avg_hit_ratio": 0.028780995883947395,
+      "avg_attn_ratio": 0.04768147216033869,
+      "avg_coverage_ratio": 0.29351608907588933,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H6",
+      "importance_score": 0.3689538602894141,
+      "avg_hit_ratio": 0.029129228993072985,
+      "avg_attn_ratio": 0.05165022484576649,
+      "avg_coverage_ratio": 0.2881744064505746,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H9",
+      "importance_score": 0.36888152885485453,
+      "avg_hit_ratio": 0.028878250175685172,
+      "avg_attn_ratio": 0.048756966077114494,
+      "avg_coverage_ratio": 0.29124631260205486,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H11",
+      "importance_score": 0.3681610019278573,
+      "avg_hit_ratio": 0.029643735568718,
+      "avg_attn_ratio": 0.043421940694321544,
+      "avg_coverage_ratio": 0.2950953256648177,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H3",
+      "importance_score": 0.36801447822408995,
+      "avg_hit_ratio": 0.028519036743298865,
+      "avg_attn_ratio": 0.04900970156951789,
+      "avg_coverage_ratio": 0.2904857399112732,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H2",
+      "importance_score": 0.3672026066558571,
+      "avg_hit_ratio": 0.025202979118562393,
+      "avg_attn_ratio": 0.041945492795881265,
+      "avg_coverage_ratio": 0.3000541347414134,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H6",
+      "importance_score": 0.366949282234345,
+      "avg_hit_ratio": 0.02875119214938259,
+      "avg_attn_ratio": 0.05049830753151357,
+      "avg_coverage_ratio": 0.2876997825534488,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H3",
+      "importance_score": 0.36659623140732384,
+      "avg_hit_ratio": 0.02736139694809758,
+      "avg_attn_ratio": 0.04926719063468229,
+      "avg_coverage_ratio": 0.289967643824544,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H4",
+      "importance_score": 0.36606056285792055,
+      "avg_hit_ratio": 0.02740531824114045,
+      "avg_attn_ratio": 0.048820617117427884,
+      "avg_coverage_ratio": 0.2898346274993522,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H2",
+      "importance_score": 0.36602812828980713,
+      "avg_hit_ratio": 0.027741002409396646,
+      "avg_attn_ratio": 0.046312048697508955,
+      "avg_coverage_ratio": 0.2919750771829015,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H0",
+      "importance_score": 0.3640239308764579,
+      "avg_hit_ratio": 0.027036693103102097,
+      "avg_attn_ratio": 0.05046345565844236,
+      "avg_coverage_ratio": 0.2865237821149135,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H13",
+      "importance_score": 0.36363235200819133,
+      "avg_hit_ratio": 0.028385704246561592,
+      "avg_attn_ratio": 0.042129355346870775,
+      "avg_coverage_ratio": 0.293117292414759,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H15",
+      "importance_score": 0.36361932948496445,
+      "avg_hit_ratio": 0.027711198674831843,
+      "avg_attn_ratio": 0.04931737289036109,
+      "avg_coverage_ratio": 0.2865907579197715,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H13",
+      "importance_score": 0.3632740226663973,
+      "avg_hit_ratio": 0.025957484188334504,
+      "avg_attn_ratio": 0.04391496653580922,
+      "avg_coverage_ratio": 0.2934015719422536,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H7",
+      "importance_score": 0.3627437014295606,
+      "avg_hit_ratio": 0.028870407087641804,
+      "avg_attn_ratio": 0.04735326772958741,
+      "avg_coverage_ratio": 0.28652002661233134,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H14",
+      "importance_score": 0.36273949551106555,
+      "avg_hit_ratio": 0.02612375765485393,
+      "avg_attn_ratio": 0.04459250342687068,
+      "avg_coverage_ratio": 0.2920232344293409,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H2",
+      "importance_score": 0.3626265358831169,
+      "avg_hit_ratio": 0.028686878827426966,
+      "avg_attn_ratio": 0.047877055850806,
+      "avg_coverage_ratio": 0.2860626012048839,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H4",
+      "importance_score": 0.36223103069877377,
+      "avg_hit_ratio": 0.026941007428972995,
+      "avg_attn_ratio": 0.053324386989748514,
+      "avg_coverage_ratio": 0.2819656362800523,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H4",
+      "importance_score": 0.3618243483449274,
+      "avg_hit_ratio": 0.024790432687481177,
+      "avg_attn_ratio": 0.04180350233719369,
+      "avg_coverage_ratio": 0.2952304133202525,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H13",
+      "importance_score": 0.36170360869935364,
+      "avg_hit_ratio": 0.027733159321353278,
+      "avg_attn_ratio": 0.04551066062728295,
+      "avg_coverage_ratio": 0.2884597887507174,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H12",
+      "importance_score": 0.3617032083656043,
+      "avg_hit_ratio": 0.026948850517016364,
+      "avg_attn_ratio": 0.04730317528070774,
+      "avg_coverage_ratio": 0.2874511825678802,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H8",
+      "importance_score": 0.361586209409055,
+      "avg_hit_ratio": 0.025342586085734364,
+      "avg_attn_ratio": 0.0,
+      "avg_coverage_ratio": 0.33624362332332064,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H9",
+      "importance_score": 0.36068972501142105,
+      "avg_hit_ratio": 0.02809864722417428,
+      "avg_attn_ratio": 0.0496791655912099,
+      "avg_coverage_ratio": 0.28291191219603684,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H10",
+      "importance_score": 0.36065654532105484,
+      "avg_hit_ratio": 0.028264920690693706,
+      "avg_attn_ratio": 0.046218322430242084,
+      "avg_coverage_ratio": 0.28617330220011905,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H11",
+      "importance_score": 0.3603890895032914,
+      "avg_hit_ratio": 0.02775041411504869,
+      "avg_attn_ratio": 0.05010632839099171,
+      "avg_coverage_ratio": 0.282532346997251,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L32_H11",
+      "importance_score": 0.3596456403431526,
+      "avg_hit_ratio": 0.028514330890472846,
+      "avg_attn_ratio": 0.03967833832163778,
+      "avg_coverage_ratio": 0.291452971131042,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H0",
+      "importance_score": 0.3589659264333527,
+      "avg_hit_ratio": 0.02882334855938159,
+      "avg_attn_ratio": 0.05086311875667268,
+      "avg_coverage_ratio": 0.2792794591172984,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H2",
+      "importance_score": 0.35890544344124414,
+      "avg_hit_ratio": 0.026249247063547837,
+      "avg_attn_ratio": 0.04429435767017563,
+      "avg_coverage_ratio": 0.2883618387075207,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H5",
+      "importance_score": 0.35867851385659844,
+      "avg_hit_ratio": 0.028691584680252985,
+      "avg_attn_ratio": 0.04231582301014177,
+      "avg_coverage_ratio": 0.28767110616620367,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H12",
+      "importance_score": 0.3574009197088966,
+      "avg_hit_ratio": 0.02569709366529465,
+      "avg_attn_ratio": 0.043574267493299255,
+      "avg_coverage_ratio": 0.2881295585503027,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H10",
+      "importance_score": 0.35645181814106236,
+      "avg_hit_ratio": 0.023262599136632867,
+      "avg_attn_ratio": 0.03901899430357804,
+      "avg_coverage_ratio": 0.29417022470085147,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H6",
+      "importance_score": 0.35399694821306354,
+      "avg_hit_ratio": 0.02625395291637386,
+      "avg_attn_ratio": 0.04255829927536921,
+      "avg_coverage_ratio": 0.28518469602132046,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H6",
+      "importance_score": 0.35344934470209943,
+      "avg_hit_ratio": 0.02802178496134926,
+      "avg_attn_ratio": 0.04532608072287594,
+      "avg_coverage_ratio": 0.28010147901787424,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H7",
+      "importance_score": 0.3529641635014388,
+      "avg_hit_ratio": 0.027576297560485893,
+      "avg_attn_ratio": 0.05075771635241682,
+      "avg_coverage_ratio": 0.2746301495885361,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H11",
+      "importance_score": 0.35287215616943,
+      "avg_hit_ratio": 0.02710414366027507,
+      "avg_attn_ratio": 0.0471603221231903,
+      "avg_coverage_ratio": 0.27860769038596467,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H15",
+      "importance_score": 0.35162783144883447,
+      "avg_hit_ratio": 0.02963902971589198,
+      "avg_attn_ratio": 0.048856501061276,
+      "avg_coverage_ratio": 0.2731323006716665,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H3",
+      "importance_score": 0.35154291496848816,
+      "avg_hit_ratio": 0.02685787069571328,
+      "avg_attn_ratio": 0.048023272570027864,
+      "avg_coverage_ratio": 0.27666177170274703,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H11",
+      "importance_score": 0.35071667449327265,
+      "avg_hit_ratio": 0.02760296405983335,
+      "avg_attn_ratio": 0.04332071490171586,
+      "avg_coverage_ratio": 0.27979299553172343,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H7",
+      "importance_score": 0.3476899938282453,
+      "avg_hit_ratio": 0.027052379279188837,
+      "avg_attn_ratio": 0.043568566989308936,
+      "avg_coverage_ratio": 0.27706904755974754,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H3",
+      "importance_score": 0.34733202826374177,
+      "avg_hit_ratio": 0.02663669561289027,
+      "avg_attn_ratio": 0.04302513439232725,
+      "avg_coverage_ratio": 0.27767019825852424,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H9",
+      "importance_score": 0.34716941855903016,
+      "avg_hit_ratio": 0.02578023039855436,
+      "avg_attn_ratio": 0.04029674645018787,
+      "avg_coverage_ratio": 0.2810924417102879,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H10",
+      "importance_score": 0.34701976895755665,
+      "avg_hit_ratio": 0.028567663889167753,
+      "avg_attn_ratio": 0.04800207927299116,
+      "avg_coverage_ratio": 0.27045002579539773,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H5",
+      "importance_score": 0.3466165284438717,
+      "avg_hit_ratio": 0.026655519024194357,
+      "avg_attn_ratio": 0.04849150048119159,
+      "avg_coverage_ratio": 0.27146950893848576,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H2",
+      "importance_score": 0.3466135079975017,
+      "avg_hit_ratio": 0.027792766790482884,
+      "avg_attn_ratio": 0.04482721135361957,
+      "avg_coverage_ratio": 0.27399352985339925,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H1",
+      "importance_score": 0.3442703037707104,
+      "avg_hit_ratio": 0.02614414968376669,
+      "avg_attn_ratio": 0.03694524731235063,
+      "avg_coverage_ratio": 0.28118090677459306,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H1",
+      "importance_score": 0.3436511708564167,
+      "avg_hit_ratio": 0.02510258759160727,
+      "avg_attn_ratio": 0.04658993817349579,
+      "avg_coverage_ratio": 0.2719586450913137,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H12",
+      "importance_score": 0.3427746947426503,
+      "avg_hit_ratio": 0.024701021483786768,
+      "avg_attn_ratio": 0.038595750206746035,
+      "avg_coverage_ratio": 0.2794779230521175,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H14",
+      "importance_score": 0.3422913801544195,
+      "avg_hit_ratio": 0.023999849412709568,
+      "avg_attn_ratio": 0.03966965863411106,
+      "avg_coverage_ratio": 0.27862187210759887,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H5",
+      "importance_score": 0.34210178984009276,
+      "avg_hit_ratio": 0.02477631512900311,
+      "avg_attn_ratio": 0.04554844440007299,
+      "avg_coverage_ratio": 0.2717770303110167,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H8",
+      "importance_score": 0.3403046404950747,
+      "avg_hit_ratio": 0.02580846551551049,
+      "avg_attn_ratio": 0.03922733958565217,
+      "avg_coverage_ratio": 0.27526883539391206,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H0",
+      "importance_score": 0.33984758649048696,
+      "avg_hit_ratio": 0.02589473948398755,
+      "avg_attn_ratio": 0.04051885966394526,
+      "avg_coverage_ratio": 0.27343398734255414,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H2",
+      "importance_score": 0.33965584632508417,
+      "avg_hit_ratio": 0.02559513352073085,
+      "avg_attn_ratio": 0.04063302165070114,
+      "avg_coverage_ratio": 0.2734276911536522,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H5",
+      "importance_score": 0.3378452309125672,
+      "avg_hit_ratio": 0.024796707157915873,
+      "avg_attn_ratio": 0.0394155314466289,
+      "avg_coverage_ratio": 0.2736329923080224,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L25_H0",
+      "importance_score": 0.3377002980279475,
+      "avg_hit_ratio": 0.02621473747615701,
+      "avg_attn_ratio": 0.03855802144067543,
+      "avg_coverage_ratio": 0.27292753911111506,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H9",
+      "importance_score": 0.3374868721615585,
+      "avg_hit_ratio": 0.02610650286115852,
+      "avg_attn_ratio": 0.04399684850100134,
+      "avg_coverage_ratio": 0.26738352079939864,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H1",
+      "importance_score": 0.33738264026308407,
+      "avg_hit_ratio": 0.02612846350767995,
+      "avg_attn_ratio": 0.04002559816442983,
+      "avg_coverage_ratio": 0.27122857859097427,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H5",
+      "importance_score": 0.337203384764236,
+      "avg_hit_ratio": 0.026404540206806545,
+      "avg_attn_ratio": 0.043178979130955183,
+      "avg_coverage_ratio": 0.26761986542647426,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H0",
+      "importance_score": 0.3369732397619226,
+      "avg_hit_ratio": 0.025035137034434295,
+      "avg_attn_ratio": 0.040952621366942575,
+      "avg_coverage_ratio": 0.27098548136054573,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H3",
+      "importance_score": 0.33695991353509214,
+      "avg_hit_ratio": 0.02692218401766891,
+      "avg_attn_ratio": 0.043152773629990905,
+      "avg_coverage_ratio": 0.26688495588743233,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H10",
+      "importance_score": 0.33650062040905776,
+      "avg_hit_ratio": 0.02360769501054111,
+      "avg_attn_ratio": 0.03824018838904846,
+      "avg_coverage_ratio": 0.2746527370094682,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H14",
+      "importance_score": 0.3363018694779945,
+      "avg_hit_ratio": 0.02053477311514908,
+      "avg_attn_ratio": 0.03541021776113838,
+      "avg_coverage_ratio": 0.28035687860170705,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H2",
+      "importance_score": 0.3362789189319687,
+      "avg_hit_ratio": 0.024699452866178095,
+      "avg_attn_ratio": 0.045338725469150486,
+      "avg_coverage_ratio": 0.26624074059664016,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H15",
+      "importance_score": 0.33609686991613996,
+      "avg_hit_ratio": 0.02530807649834354,
+      "avg_attn_ratio": 0.04679184318046831,
+      "avg_coverage_ratio": 0.2639969502373281,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H5",
+      "importance_score": 0.33520827734172376,
+      "avg_hit_ratio": 0.02731590703744604,
+      "avg_attn_ratio": 0.04514984198234851,
+      "avg_coverage_ratio": 0.2627425283219292,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H7",
+      "importance_score": 0.33397954009042863,
+      "avg_hit_ratio": 0.02475121724726433,
+      "avg_attn_ratio": 0.04468965093529197,
+      "avg_coverage_ratio": 0.26453867190787234,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H12",
+      "importance_score": 0.33362450191692394,
+      "avg_hit_ratio": 0.025375527055516513,
+      "avg_attn_ratio": 0.04458182823795569,
+      "avg_coverage_ratio": 0.26366714662345175,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H0",
+      "importance_score": 0.3330991959794478,
+      "avg_hit_ratio": 0.026617872201586186,
+      "avg_attn_ratio": 0.04464549431370553,
+      "avg_coverage_ratio": 0.2618358294641561,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H4",
+      "importance_score": 0.3329983297261093,
+      "avg_hit_ratio": 0.02318573687380785,
+      "avg_attn_ratio": 0.04559806081292666,
+      "avg_coverage_ratio": 0.26421453203937484,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H12",
+      "importance_score": 0.33193978135710833,
+      "avg_hit_ratio": 0.021504178797309505,
+      "avg_attn_ratio": 0.0371535885741914,
+      "avg_coverage_ratio": 0.2732820139856074,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H9",
+      "importance_score": 0.3302901713534395,
+      "avg_hit_ratio": 0.025243763176387914,
+      "avg_attn_ratio": 0.039544765512600326,
+      "avg_coverage_ratio": 0.2655016426644513,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H13",
+      "importance_score": 0.32921302004692043,
+      "avg_hit_ratio": 0.026679048288324465,
+      "avg_attn_ratio": 0.04363605146158557,
+      "avg_coverage_ratio": 0.25889792029701036,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H10",
+      "importance_score": 0.32872448350660965,
+      "avg_hit_ratio": 0.022465741391426562,
+      "avg_attn_ratio": 0.04125164465787508,
+      "avg_coverage_ratio": 0.26500709745730805,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H2",
+      "importance_score": 0.32844542315580516,
+      "avg_hit_ratio": 0.02324691296054613,
+      "avg_attn_ratio": 0.04494976278173407,
+      "avg_coverage_ratio": 0.26024874741352494,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H10",
+      "importance_score": 0.32841027980174625,
+      "avg_hit_ratio": 0.023537107218150787,
+      "avg_attn_ratio": 0.04041932692267073,
+      "avg_coverage_ratio": 0.2644538456609247,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H11",
+      "importance_score": 0.32783873860492924,
+      "avg_hit_ratio": 0.02480455024595924,
+      "avg_attn_ratio": 0.04159321807800403,
+      "avg_coverage_ratio": 0.26144097028096597,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H6",
+      "importance_score": 0.3277738798169646,
+      "avg_hit_ratio": 0.027519827326573636,
+      "avg_attn_ratio": 0.04623634454738007,
+      "avg_coverage_ratio": 0.2540177079430109,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H12",
+      "importance_score": 0.32735412863105395,
+      "avg_hit_ratio": 0.025369252585081818,
+      "avg_attn_ratio": 0.04650794966792241,
+      "avg_coverage_ratio": 0.25547692637804975,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H3",
+      "importance_score": 0.3271870258760065,
+      "avg_hit_ratio": 0.024947294448348558,
+      "avg_attn_ratio": 0.041475978797878635,
+      "avg_coverage_ratio": 0.2607637526297793,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H1",
+      "importance_score": 0.32672451540868264,
+      "avg_hit_ratio": 0.023201423049894587,
+      "avg_attn_ratio": 0.029901401670683843,
+      "avg_coverage_ratio": 0.2736216906881042,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H2",
+      "importance_score": 0.32634182826418356,
+      "avg_hit_ratio": 0.02541003664290734,
+      "avg_attn_ratio": 0.047843409028206815,
+      "avg_coverage_ratio": 0.2530883825930694,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H4",
+      "importance_score": 0.32629882627077145,
+      "avg_hit_ratio": 0.026704146170063246,
+      "avg_attn_ratio": 0.043669549278369094,
+      "avg_coverage_ratio": 0.25592513082233914,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H0",
+      "importance_score": 0.32580247644781385,
+      "avg_hit_ratio": 0.025304939263126193,
+      "avg_attn_ratio": 0.04137618716814659,
+      "avg_coverage_ratio": 0.2591213500165411,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H1",
+      "importance_score": 0.3255854859585182,
+      "avg_hit_ratio": 0.027259436803533783,
+      "avg_attn_ratio": 0.04404527372674129,
+      "avg_coverage_ratio": 0.2542807754282431,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H8",
+      "importance_score": 0.3243037963031864,
+      "avg_hit_ratio": 0.024541022487702038,
+      "avg_attn_ratio": 0.039374569747900025,
+      "avg_coverage_ratio": 0.26038820406758434,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H5",
+      "importance_score": 0.32420748836010926,
+      "avg_hit_ratio": 0.024432787872703542,
+      "avg_attn_ratio": 0.04253212598318454,
+      "avg_coverage_ratio": 0.25724257450422117,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H0",
+      "importance_score": 0.32420243163795603,
+      "avg_hit_ratio": 0.025428860054211425,
+      "avg_attn_ratio": 0.0425795437436036,
+      "avg_coverage_ratio": 0.256194027840141,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H9",
+      "importance_score": 0.3238294632470834,
+      "avg_hit_ratio": 0.025872778837466116,
+      "avg_attn_ratio": 0.04653534409104244,
+      "avg_coverage_ratio": 0.2514213403185748,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H8",
+      "importance_score": 0.32238926434986775,
+      "avg_hit_ratio": 0.02284534685272563,
+      "avg_attn_ratio": 0.042889997434574154,
+      "avg_coverage_ratio": 0.256653920062568,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H1",
+      "importance_score": 0.321777282816638,
+      "avg_hit_ratio": 0.024352788374661177,
+      "avg_attn_ratio": 0.04026269318245422,
+      "avg_coverage_ratio": 0.2571618012595226,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H1",
+      "importance_score": 0.32149674428425024,
+      "avg_hit_ratio": 0.025257880734865977,
+      "avg_attn_ratio": 0.03637123390180151,
+      "avg_coverage_ratio": 0.25986762964758275,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H9",
+      "importance_score": 0.31938100581464857,
+      "avg_hit_ratio": 0.023712792390322257,
+      "avg_attn_ratio": 0.037476454050655486,
+      "avg_coverage_ratio": 0.25819175937367084,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H11",
+      "importance_score": 0.31936309083487757,
+      "avg_hit_ratio": 0.024552002810962755,
+      "avg_attn_ratio": 0.04136797815192859,
+      "avg_coverage_ratio": 0.25344310987198626,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H14",
+      "importance_score": 0.319298019039303,
+      "avg_hit_ratio": 0.023932398855536594,
+      "avg_attn_ratio": 0.041535343809357174,
+      "avg_coverage_ratio": 0.2538302763744092,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H12",
+      "importance_score": 0.31909670214435404,
+      "avg_hit_ratio": 0.025938660777030418,
+      "avg_attn_ratio": 0.034354392533931404,
+      "avg_coverage_ratio": 0.2588036488333922,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H8",
+      "importance_score": 0.3183942031485899,
+      "avg_hit_ratio": 0.02529552755747415,
+      "avg_attn_ratio": 0.03908256575403711,
+      "avg_coverage_ratio": 0.2540161098370786,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H3",
+      "importance_score": 0.3173601849485468,
+      "avg_hit_ratio": 0.02297240487902821,
+      "avg_attn_ratio": 0.04815075591425518,
+      "avg_coverage_ratio": 0.2462370241552634,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L7_H15",
+      "importance_score": 0.31686721134083173,
+      "avg_hit_ratio": 0.022028097078606566,
+      "avg_attn_ratio": 0.042181391858473825,
+      "avg_coverage_ratio": 0.25265772240375134,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H13",
+      "importance_score": 0.3156864466338548,
+      "avg_hit_ratio": 0.025624937255295653,
+      "avg_attn_ratio": 0.03197966028721591,
+      "avg_coverage_ratio": 0.25808184909134324,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H7",
+      "importance_score": 0.3147998629160434,
+      "avg_hit_ratio": 0.02603748368637687,
+      "avg_attn_ratio": 0.044034408636109565,
+      "avg_coverage_ratio": 0.24472797059355697,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H10",
+      "importance_score": 0.314715047838919,
+      "avg_hit_ratio": 0.026520617909848408,
+      "avg_attn_ratio": 0.039315412595282435,
+      "avg_coverage_ratio": 0.24887901733378817,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H12",
+      "importance_score": 0.3142153575519551,
+      "avg_hit_ratio": 0.023700243449452867,
+      "avg_attn_ratio": 0.044178057569726405,
+      "avg_coverage_ratio": 0.24633705653277585,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H13",
+      "importance_score": 0.3136463753556683,
+      "avg_hit_ratio": 0.023237501254894086,
+      "avg_attn_ratio": 0.04289385625721249,
+      "avg_coverage_ratio": 0.2475150178435617,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H2",
+      "importance_score": 0.31347394055778693,
+      "avg_hit_ratio": 0.02066026252384299,
+      "avg_attn_ratio": 0.036197722696441906,
+      "avg_coverage_ratio": 0.25661595533750203,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H2",
+      "importance_score": 0.31288848139645387,
+      "avg_hit_ratio": 0.021623393735568718,
+      "avg_attn_ratio": 0.032647303224836,
+      "avg_coverage_ratio": 0.25861778443604916,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H4",
+      "importance_score": 0.31240625468628613,
+      "avg_hit_ratio": 0.02243123180403574,
+      "avg_attn_ratio": 0.03856950497045484,
+      "avg_coverage_ratio": 0.25140551791179555,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H13",
+      "importance_score": 0.312143788260057,
+      "avg_hit_ratio": 0.025653172372251783,
+      "avg_attn_ratio": 0.03455316868323281,
+      "avg_coverage_ratio": 0.2519374472045724,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H6",
+      "importance_score": 0.3113848749601023,
+      "avg_hit_ratio": 0.024186514908141752,
+      "avg_attn_ratio": 0.05237462561223515,
+      "avg_coverage_ratio": 0.2348237344397254,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H15",
+      "importance_score": 0.3102676286074791,
+      "avg_hit_ratio": 0.02312456078706957,
+      "avg_attn_ratio": 0.04481556894296766,
+      "avg_coverage_ratio": 0.24232749887744184,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L8_H12",
+      "importance_score": 0.3094680349324326,
+      "avg_hit_ratio": 0.023540244453368137,
+      "avg_attn_ratio": 0.04432831003889177,
+      "avg_coverage_ratio": 0.2415994804401727,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H10",
+      "importance_score": 0.30911010439585795,
+      "avg_hit_ratio": 0.02485631462704548,
+      "avg_attn_ratio": 0.0426205107360451,
+      "avg_coverage_ratio": 0.2416332790327674,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H8",
+      "importance_score": 0.3074488982009118,
+      "avg_hit_ratio": 0.025199841883345047,
+      "avg_attn_ratio": 0.039459498606408815,
+      "avg_coverage_ratio": 0.24278955771115793,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H5",
+      "importance_score": 0.30642356135715476,
+      "avg_hit_ratio": 0.02554964361007931,
+      "avg_attn_ratio": 0.03465172036313855,
+      "avg_coverage_ratio": 0.24622219738393689,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H14",
+      "importance_score": 0.3063524784696704,
+      "avg_hit_ratio": 0.02477945236422046,
+      "avg_attn_ratio": 0.04277268729290779,
+      "avg_coverage_ratio": 0.23880033881254215,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H14",
+      "importance_score": 0.30620912749551105,
+      "avg_hit_ratio": 0.023781811565103905,
+      "avg_attn_ratio": 0.04704263265685116,
+      "avg_coverage_ratio": 0.23538468327355597,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H5",
+      "importance_score": 0.3056828450221892,
+      "avg_hit_ratio": 0.022294762072081118,
+      "avg_attn_ratio": 0.04117987527065534,
+      "avg_coverage_ratio": 0.24220820767945273,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H15",
+      "importance_score": 0.30390740168178276,
+      "avg_hit_ratio": 0.023149658668808352,
+      "avg_attn_ratio": 0.0392029924799644,
+      "avg_coverage_ratio": 0.24155475053301,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H11",
+      "importance_score": 0.3038387839492801,
+      "avg_hit_ratio": 0.022650838269250077,
+      "avg_attn_ratio": 0.034121297730097366,
+      "avg_coverage_ratio": 0.24706664794993266,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H2",
+      "importance_score": 0.3010868755740877,
+      "avg_hit_ratio": 0.02069477211123381,
+      "avg_attn_ratio": 0.03549302859688754,
+      "avg_coverage_ratio": 0.24489907486596635,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L16_H11",
+      "importance_score": 0.2998194119400738,
+      "avg_hit_ratio": 0.02561081969681759,
+      "avg_attn_ratio": 0.042316854134247614,
+      "avg_coverage_ratio": 0.23189173810900857,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L21_H8",
+      "importance_score": 0.2997979052943536,
+      "avg_hit_ratio": 0.02466808051400462,
+      "avg_attn_ratio": 0.04376936590197775,
+      "avg_coverage_ratio": 0.23136045887837117,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H11",
+      "importance_score": 0.2997055751597537,
+      "avg_hit_ratio": 0.021965352374259613,
+      "avg_attn_ratio": 0.041726976004322076,
+      "avg_coverage_ratio": 0.23601324678117203,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H0",
+      "importance_score": 0.29960466686869613,
+      "avg_hit_ratio": 0.020246147475153096,
+      "avg_attn_ratio": 0.0325757048619475,
+      "avg_coverage_ratio": 0.24678281453159556,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H4",
+      "importance_score": 0.2993662409226167,
+      "avg_hit_ratio": 0.020897123782752734,
+      "avg_attn_ratio": 0.027809272876786553,
+      "avg_coverage_ratio": 0.2506598442630774,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H15",
+      "importance_score": 0.29819918791184136,
+      "avg_hit_ratio": 0.024368474550747917,
+      "avg_attn_ratio": 0.03338048914108223,
+      "avg_coverage_ratio": 0.24045022422001122,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H9",
+      "importance_score": 0.29719431867079704,
+      "avg_hit_ratio": 0.02269319094468427,
+      "avg_attn_ratio": 0.04094617504329848,
+      "avg_coverage_ratio": 0.23355495268281432,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H8",
+      "importance_score": 0.29672441388258425,
+      "avg_hit_ratio": 0.024045339323361108,
+      "avg_attn_ratio": 0.03651202064505058,
+      "avg_coverage_ratio": 0.23616705391417256,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H7",
+      "importance_score": 0.2962304004482414,
+      "avg_hit_ratio": 0.02119045527557474,
+      "avg_attn_ratio": 0.03491822681723636,
+      "avg_coverage_ratio": 0.24012171835543028,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H5",
+      "importance_score": 0.29598098640555265,
+      "avg_hit_ratio": 0.020412420941672522,
+      "avg_attn_ratio": 0.031220076175683842,
+      "avg_coverage_ratio": 0.24434848928819627,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H10",
+      "importance_score": 0.2955339685843938,
+      "avg_hit_ratio": 0.022556721212729645,
+      "avg_attn_ratio": 0.04029970233789247,
+      "avg_coverage_ratio": 0.2326775450337717,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H9",
+      "importance_score": 0.2950868478920355,
+      "avg_hit_ratio": 0.02328769701837165,
+      "avg_attn_ratio": 0.04052262354445309,
+      "avg_coverage_ratio": 0.23127652732921075,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H12",
+      "importance_score": 0.2944291287029473,
+      "avg_hit_ratio": 0.024912784860957736,
+      "avg_attn_ratio": 0.04460245018917928,
+      "avg_coverage_ratio": 0.22491389365281028,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H13",
+      "importance_score": 0.29398002660511985,
+      "avg_hit_ratio": 0.021585746912960547,
+      "avg_attn_ratio": 0.03144251023569739,
+      "avg_coverage_ratio": 0.2409517694564619,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H2",
+      "importance_score": 0.29271054257951806,
+      "avg_hit_ratio": 0.022721426061640397,
+      "avg_attn_ratio": 0.040126842888625905,
+      "avg_coverage_ratio": 0.22986227362925177,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H3",
+      "importance_score": 0.29226574505600555,
+      "avg_hit_ratio": 0.021592021383395242,
+      "avg_attn_ratio": 0.03675131668088446,
+      "avg_coverage_ratio": 0.23392240699172584,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H6",
+      "importance_score": 0.2922510946699885,
+      "avg_hit_ratio": 0.023079070876418032,
+      "avg_attn_ratio": 0.040278000100002126,
+      "avg_coverage_ratio": 0.22889402369356834,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H11",
+      "importance_score": 0.29220419729751795,
+      "avg_hit_ratio": 0.023584165746411003,
+      "avg_attn_ratio": 0.03718669611150421,
+      "avg_coverage_ratio": 0.23143333543960276,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H1",
+      "importance_score": 0.291067928240382,
+      "avg_hit_ratio": 0.02350887210119466,
+      "avg_attn_ratio": 0.03426153286729697,
+      "avg_coverage_ratio": 0.2332975232718904,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H2",
+      "importance_score": 0.2903041278604497,
+      "avg_hit_ratio": 0.02364063598032326,
+      "avg_attn_ratio": 0.04097893340386775,
+      "avg_coverage_ratio": 0.22568455847625868,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H3",
+      "importance_score": 0.2894152690389458,
+      "avg_hit_ratio": 0.020131638389719906,
+      "avg_attn_ratio": 0.03995570671929976,
+      "avg_coverage_ratio": 0.22932792392992615,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H8",
+      "importance_score": 0.2889875244946213,
+      "avg_hit_ratio": 0.023756713683365124,
+      "avg_attn_ratio": 0.038132246237016776,
+      "avg_coverage_ratio": 0.22709856457423935,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H0",
+      "importance_score": 0.28880355641924094,
+      "avg_hit_ratio": 0.02293475805642004,
+      "avg_attn_ratio": 0.0380089666408171,
+      "avg_coverage_ratio": 0.22785983172200383,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H15",
+      "importance_score": 0.2874765484080279,
+      "avg_hit_ratio": 0.021596727236221264,
+      "avg_attn_ratio": 0.03323245373522909,
+      "avg_coverage_ratio": 0.23264736743657752,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H1",
+      "importance_score": 0.2874134519240147,
+      "avg_hit_ratio": 0.021761432085132013,
+      "avg_attn_ratio": 0.035891588950588936,
+      "avg_coverage_ratio": 0.2297604308882937,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H1",
+      "importance_score": 0.2870207897791467,
+      "avg_hit_ratio": 0.020782614697319547,
+      "avg_attn_ratio": 0.05012516911614827,
+      "avg_coverage_ratio": 0.2161130059656789,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H4",
+      "importance_score": 0.28687664226520865,
+      "avg_hit_ratio": 0.01908380182712579,
+      "avg_attn_ratio": 0.03356218264801259,
+      "avg_coverage_ratio": 0.23423065779007027,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H7",
+      "importance_score": 0.28672645551152176,
+      "avg_hit_ratio": 0.021453983033831944,
+      "avg_attn_ratio": 0.04062757079622903,
+      "avg_coverage_ratio": 0.22464490168146078,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L31_H13",
+      "importance_score": 0.2864279713646951,
+      "avg_hit_ratio": 0.022324565806645918,
+      "avg_attn_ratio": 0.03923459019064843,
+      "avg_coverage_ratio": 0.22486881536740078,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H9",
+      "importance_score": 0.285812034543553,
+      "avg_hit_ratio": 0.019824189338419836,
+      "avg_attn_ratio": 0.034266463367196257,
+      "avg_coverage_ratio": 0.2317213818379369,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H13",
+      "importance_score": 0.2855032707604543,
+      "avg_hit_ratio": 0.019047723622126294,
+      "avg_attn_ratio": 0.03344567630345199,
+      "avg_coverage_ratio": 0.233009870834876,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H6",
+      "importance_score": 0.28530968204211915,
+      "avg_hit_ratio": 0.022473584479469934,
+      "avg_attn_ratio": 0.030402786681335267,
+      "avg_coverage_ratio": 0.23243331088131397,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H12",
+      "importance_score": 0.28527056178559307,
+      "avg_hit_ratio": 0.021075946190141553,
+      "avg_attn_ratio": 0.03373143003429256,
+      "avg_coverage_ratio": 0.23046318556115897,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L29_H8",
+      "importance_score": 0.285086192528302,
+      "avg_hit_ratio": 0.022432800421644413,
+      "avg_attn_ratio": 0.03650224385233867,
+      "avg_coverage_ratio": 0.2261511482543189,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H15",
+      "importance_score": 0.28503215250827646,
+      "avg_hit_ratio": 0.02226338971990764,
+      "avg_attn_ratio": 0.031165133623473024,
+      "avg_coverage_ratio": 0.2316036291648958,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H15",
+      "importance_score": 0.2841414157817507,
+      "avg_hit_ratio": 0.02077163437405883,
+      "avg_attn_ratio": 0.042099308412880676,
+      "avg_coverage_ratio": 0.22127047299481117,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H11",
+      "importance_score": 0.2830911461856829,
+      "avg_hit_ratio": 0.020170853829936754,
+      "avg_attn_ratio": 0.03418204787312379,
+      "avg_coverage_ratio": 0.22873824448262234,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L26_H4",
+      "importance_score": 0.2825933363672189,
+      "avg_hit_ratio": 0.023008483084027708,
+      "avg_attn_ratio": 0.03591009439596124,
+      "avg_coverage_ratio": 0.22367475888722993,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H14",
+      "importance_score": 0.2823221521117421,
+      "avg_hit_ratio": 0.0206116353779741,
+      "avg_attn_ratio": 0.03975301850055868,
+      "avg_coverage_ratio": 0.22195749823320934,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H1",
+      "importance_score": 0.2821641419937573,
+      "avg_hit_ratio": 0.022387310510992874,
+      "avg_attn_ratio": 0.03468624827291729,
+      "avg_coverage_ratio": 0.22509058320984712,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H9",
+      "importance_score": 0.28214401442500175,
+      "avg_hit_ratio": 0.019414780142555967,
+      "avg_attn_ratio": 0.031812414928183604,
+      "avg_coverage_ratio": 0.23091681935426217,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H10",
+      "importance_score": 0.2819238480072752,
+      "avg_hit_ratio": 0.021883784258608572,
+      "avg_attn_ratio": 0.03086154320356171,
+      "avg_coverage_ratio": 0.22917852054510493,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H3",
+      "importance_score": 0.2816364639068662,
+      "avg_hit_ratio": 0.019643798313422348,
+      "avg_attn_ratio": 0.03331554853291749,
+      "avg_coverage_ratio": 0.22867711706052635,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H1",
+      "importance_score": 0.28149516390183804,
+      "avg_hit_ratio": 0.018926940066258408,
+      "avg_attn_ratio": 0.032767980220380896,
+      "avg_coverage_ratio": 0.22980024361519874,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H10",
+      "importance_score": 0.2812340812798524,
+      "avg_hit_ratio": 0.02212378275273567,
+      "avg_attn_ratio": 0.03623008800628749,
+      "avg_coverage_ratio": 0.22288021052082924,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H5",
+      "importance_score": 0.2807093444244242,
+      "avg_hit_ratio": 0.021326925007529366,
+      "avg_attn_ratio": 0.0354425267586445,
+      "avg_coverage_ratio": 0.22393989265825032,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H12",
+      "importance_score": 0.2795058972521858,
+      "avg_hit_ratio": 0.02091908442927417,
+      "avg_attn_ratio": 0.038575363982430576,
+      "avg_coverage_ratio": 0.22001144884048102,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H1",
+      "importance_score": 0.2793010518148943,
+      "avg_hit_ratio": 0.0196045828732055,
+      "avg_attn_ratio": 0.033576083365090874,
+      "avg_coverage_ratio": 0.2261203855765979,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H1",
+      "importance_score": 0.2791128313618657,
+      "avg_hit_ratio": 0.021490061238831442,
+      "avg_attn_ratio": 0.03897000360943933,
+      "avg_coverage_ratio": 0.21865276651359494,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H9",
+      "importance_score": 0.2785957022898173,
+      "avg_hit_ratio": 0.02275907288424857,
+      "avg_attn_ratio": 0.035473530068912205,
+      "avg_coverage_ratio": 0.22036309933665651,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H8",
+      "importance_score": 0.27852740245016977,
+      "avg_hit_ratio": 0.019855561690593312,
+      "avg_attn_ratio": 0.03732258505534779,
+      "avg_coverage_ratio": 0.22134925570422867,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H6",
+      "importance_score": 0.2780128872600453,
+      "avg_hit_ratio": 0.02103359351470736,
+      "avg_attn_ratio": 0.033968343268608314,
+      "avg_coverage_ratio": 0.2230109504767296,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H3",
+      "importance_score": 0.2775367117327671,
+      "avg_hit_ratio": 0.022053194960345347,
+      "avg_attn_ratio": 0.03452200156133119,
+      "avg_coverage_ratio": 0.2209615152110906,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H0",
+      "importance_score": 0.27732734699901584,
+      "avg_hit_ratio": 0.023769262624234514,
+      "avg_attn_ratio": 0.04434072403291586,
+      "avg_coverage_ratio": 0.2092173603418655,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H9",
+      "importance_score": 0.2771635164206754,
+      "avg_hit_ratio": 0.022072018371649432,
+      "avg_attn_ratio": 0.03381722836329759,
+      "avg_coverage_ratio": 0.22127426968572836,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H8",
+      "importance_score": 0.2767074613239878,
+      "avg_hit_ratio": 0.02265240688685875,
+      "avg_attn_ratio": 0.0398016729175359,
+      "avg_coverage_ratio": 0.2142533815195932,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H5",
+      "importance_score": 0.27641931723848,
+      "avg_hit_ratio": 0.022424957333601045,
+      "avg_attn_ratio": 0.03863023981698239,
+      "avg_coverage_ratio": 0.2153641200878966,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H15",
+      "importance_score": 0.276374421503585,
+      "avg_hit_ratio": 0.018343414315831745,
+      "avg_attn_ratio": 0.03674634188691897,
+      "avg_coverage_ratio": 0.2212846653008343,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H12",
+      "importance_score": 0.2755930487984344,
+      "avg_hit_ratio": 0.022374761570123483,
+      "avg_attn_ratio": 0.035173536849511314,
+      "avg_coverage_ratio": 0.21804475037879958,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H2",
+      "importance_score": 0.27462009342244986,
+      "avg_hit_ratio": 0.021683001204698325,
+      "avg_attn_ratio": 0.03523491230385372,
+      "avg_coverage_ratio": 0.2177021799138978,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H13",
+      "importance_score": 0.27298082486411357,
+      "avg_hit_ratio": 0.02282495482381287,
+      "avg_attn_ratio": 0.037407794265052655,
+      "avg_coverage_ratio": 0.212748075775248,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L12_H5",
+      "importance_score": 0.2727560097563097,
+      "avg_hit_ratio": 0.02250181959642606,
+      "avg_attn_ratio": 0.03350511111887791,
+      "avg_coverage_ratio": 0.21674907904100574,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H4",
+      "importance_score": 0.2725491082567677,
+      "avg_hit_ratio": 0.020989672221664493,
+      "avg_attn_ratio": 0.03713373860071269,
+      "avg_coverage_ratio": 0.2144256974343905,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H14",
+      "importance_score": 0.27190074186620933,
+      "avg_hit_ratio": 0.020318303885152093,
+      "avg_attn_ratio": 0.04162834139126824,
+      "avg_coverage_ratio": 0.209954096589789,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H0",
+      "importance_score": 0.2718671300095228,
+      "avg_hit_ratio": 0.019672033430378474,
+      "avg_attn_ratio": 0.022744543442579597,
+      "avg_coverage_ratio": 0.22945055313656473,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H1",
+      "importance_score": 0.27177472431966476,
+      "avg_hit_ratio": 0.022241429073386207,
+      "avg_attn_ratio": 0.03308474440972116,
+      "avg_coverage_ratio": 0.21644855083655737,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H14",
+      "importance_score": 0.27175674996122146,
+      "avg_hit_ratio": 0.01993085533580966,
+      "avg_attn_ratio": 0.03452779275953674,
+      "avg_coverage_ratio": 0.2172981018658751,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H14",
+      "importance_score": 0.27172531520848675,
+      "avg_hit_ratio": 0.02030104909145668,
+      "avg_attn_ratio": 0.04112930881468552,
+      "avg_coverage_ratio": 0.21029495730234457,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H13",
+      "importance_score": 0.2704192887999375,
+      "avg_hit_ratio": 0.021006927015359902,
+      "avg_attn_ratio": 0.029366094390064802,
+      "avg_coverage_ratio": 0.22004626739451277,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H10",
+      "importance_score": 0.2682556686735581,
+      "avg_hit_ratio": 0.01880458789278185,
+      "avg_attn_ratio": 0.02991958341119262,
+      "avg_coverage_ratio": 0.2195314973695836,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H11",
+      "importance_score": 0.2682102611604946,
+      "avg_hit_ratio": 0.019391250878425862,
+      "avg_attn_ratio": 0.03030339712029699,
+      "avg_coverage_ratio": 0.2185156131617718,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H10",
+      "importance_score": 0.2665992311637739,
+      "avg_hit_ratio": 0.02052222417427969,
+      "avg_attn_ratio": 0.03452619060617859,
+      "avg_coverage_ratio": 0.21155081638331558,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L27_H15",
+      "importance_score": 0.26633089839362883,
+      "avg_hit_ratio": 0.020941045075795604,
+      "avg_attn_ratio": 0.03422080163103688,
+      "avg_coverage_ratio": 0.21116905168679637,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H3",
+      "importance_score": 0.2663138495428957,
+      "avg_hit_ratio": 0.01647362212629254,
+      "avg_attn_ratio": 0.03340785085781456,
+      "avg_coverage_ratio": 0.21643237655878864,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H14",
+      "importance_score": 0.26627361327607924,
+      "avg_hit_ratio": 0.019519877522337116,
+      "avg_attn_ratio": 0.03985171506591503,
+      "avg_coverage_ratio": 0.2069020206878271,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H8",
+      "importance_score": 0.2658635113206705,
+      "avg_hit_ratio": 0.02094418231101295,
+      "avg_attn_ratio": 0.03801596823092549,
+      "avg_coverage_ratio": 0.20690336077873206,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H7",
+      "importance_score": 0.2656834214375252,
+      "avg_hit_ratio": 0.019714386105812668,
+      "avg_attn_ratio": 0.02944099449436037,
+      "avg_coverage_ratio": 0.21652804083735216,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H10",
+      "importance_score": 0.2647825062030155,
+      "avg_hit_ratio": 0.019384976407991167,
+      "avg_attn_ratio": 0.028747600673564078,
+      "avg_coverage_ratio": 0.21664992912146028,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H7",
+      "importance_score": 0.2639987407689936,
+      "avg_hit_ratio": 0.01920144814777633,
+      "avg_attn_ratio": 0.02860272306460481,
+      "avg_coverage_ratio": 0.21619456955661248,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H7",
+      "importance_score": 0.2636656676418214,
+      "avg_hit_ratio": 0.017486949101495834,
+      "avg_attn_ratio": 0.032109034870825955,
+      "avg_coverage_ratio": 0.21406968366949963,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H14",
+      "importance_score": 0.2635749252786228,
+      "avg_hit_ratio": 0.021789667202088144,
+      "avg_attn_ratio": 0.03521721724038125,
+      "avg_coverage_ratio": 0.20656804083615343,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H4",
+      "importance_score": 0.2628522584475932,
+      "avg_hit_ratio": 0.021428885152093163,
+      "avg_attn_ratio": 0.03624248396669851,
+      "avg_coverage_ratio": 0.20518088932880152,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H8",
+      "importance_score": 0.2623992449355515,
+      "avg_hit_ratio": 0.02104614245557675,
+      "avg_attn_ratio": 0.03125475289396923,
+      "avg_coverage_ratio": 0.2100983495860055,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H9",
+      "importance_score": 0.26216829834204036,
+      "avg_hit_ratio": 0.02052222417427969,
+      "avg_attn_ratio": 0.03100966476539141,
+      "avg_coverage_ratio": 0.21063640940236925,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H5",
+      "importance_score": 0.2621513667351896,
+      "avg_hit_ratio": 0.01801086738279289,
+      "avg_attn_ratio": 0.03488703755681908,
+      "avg_coverage_ratio": 0.2092534617955776,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H13",
+      "importance_score": 0.26201743792268717,
+      "avg_hit_ratio": 0.01984144413211525,
+      "avg_attn_ratio": 0.032766604826888465,
+      "avg_coverage_ratio": 0.20940938896368344,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H15",
+      "importance_score": 0.2618164651602173,
+      "avg_hit_ratio": 0.01849713884148178,
+      "avg_attn_ratio": 0.03217735317517878,
+      "avg_coverage_ratio": 0.2111419731435567,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H11",
+      "importance_score": 0.25865656406636645,
+      "avg_hit_ratio": 0.021361434594920188,
+      "avg_attn_ratio": 0.027245905507738262,
+      "avg_coverage_ratio": 0.21004922396370798,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H14",
+      "importance_score": 0.2585558697084576,
+      "avg_hit_ratio": 0.02029163738580464,
+      "avg_attn_ratio": 0.028721787132136852,
+      "avg_coverage_ratio": 0.20954244519051612,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H1",
+      "importance_score": 0.2584068925624411,
+      "avg_hit_ratio": 0.018539491516915974,
+      "avg_attn_ratio": 0.03267631038128766,
+      "avg_coverage_ratio": 0.20719109066423744,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L28_H2",
+      "importance_score": 0.2580483960763663,
+      "avg_hit_ratio": 0.02025242194558779,
+      "avg_attn_ratio": 0.028319903420645828,
+      "avg_coverage_ratio": 0.20947607071013272,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H9",
+      "importance_score": 0.2579320387764785,
+      "avg_hit_ratio": 0.018824979921694608,
+      "avg_attn_ratio": 0.034272141309305074,
+      "avg_coverage_ratio": 0.20483491754547883,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H13",
+      "importance_score": 0.25784340295314595,
+      "avg_hit_ratio": 0.018486158518221062,
+      "avg_attn_ratio": 0.03183003099568905,
+      "avg_coverage_ratio": 0.20752721343923583,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H11",
+      "importance_score": 0.2577931166354645,
+      "avg_hit_ratio": 0.017708124184318844,
+      "avg_attn_ratio": 0.03189169222307119,
+      "avg_coverage_ratio": 0.20819330022807447,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H11",
+      "importance_score": 0.25758624487557036,
+      "avg_hit_ratio": 0.021016338721011947,
+      "avg_attn_ratio": 0.03567906157124379,
+      "avg_coverage_ratio": 0.2008908445833146,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H8",
+      "importance_score": 0.25646845388673783,
+      "avg_hit_ratio": 0.018224199377572532,
+      "avg_attn_ratio": 0.030791126745959477,
+      "avg_coverage_ratio": 0.20745312776320582,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H1",
+      "importance_score": 0.255624033365737,
+      "avg_hit_ratio": 0.02189476458186929,
+      "avg_attn_ratio": 0.03093720979741904,
+      "avg_coverage_ratio": 0.20279205898644867,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H9",
+      "importance_score": 0.25523450569620476,
+      "avg_hit_ratio": 0.019615563196466217,
+      "avg_attn_ratio": 0.03995883162647494,
+      "avg_coverage_ratio": 0.19566011087326363,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L20_H15",
+      "importance_score": 0.255086719125745,
+      "avg_hit_ratio": 0.02078104607971087,
+      "avg_attn_ratio": 0.03771786154659029,
+      "avg_coverage_ratio": 0.1965878114994438,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L10_H9",
+      "importance_score": 0.2547945967640481,
+      "avg_hit_ratio": 0.020628890171669512,
+      "avg_attn_ratio": 0.03100526710181707,
+      "avg_coverage_ratio": 0.2031604394905615,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L30_H4",
+      "importance_score": 0.2541183423325977,
+      "avg_hit_ratio": 0.019441446641903424,
+      "avg_attn_ratio": 0.03687253787366196,
+      "avg_coverage_ratio": 0.19780435781703234,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H14",
+      "importance_score": 0.25395734290807165,
+      "avg_hit_ratio": 0.021306532978616604,
+      "avg_attn_ratio": 0.0337712679177036,
+      "avg_coverage_ratio": 0.19887954201175143,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H3",
+      "importance_score": 0.2521676636981343,
+      "avg_hit_ratio": 0.018348120168657764,
+      "avg_attn_ratio": 0.03330463748583355,
+      "avg_coverage_ratio": 0.200514906043643,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H8",
+      "importance_score": 0.2521275633802506,
+      "avg_hit_ratio": 0.0194367407890774,
+      "avg_attn_ratio": 0.036983445873244744,
+      "avg_coverage_ratio": 0.19570737671792846,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H1",
+      "importance_score": 0.2517112708128894,
+      "avg_hit_ratio": 0.01769400662584078,
+      "avg_attn_ratio": 0.02431139564393676,
+      "avg_coverage_ratio": 0.20970586854311188,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H11",
+      "importance_score": 0.25053711588355926,
+      "avg_hit_ratio": 0.019814777632767795,
+      "avg_attn_ratio": 0.038705396450217616,
+      "avg_coverage_ratio": 0.19201694180057385,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H12",
+      "importance_score": 0.24741559638761923,
+      "avg_hit_ratio": 0.019926149482983636,
+      "avg_attn_ratio": 0.03605184012931149,
+      "avg_coverage_ratio": 0.1914376067753241,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H14",
+      "importance_score": 0.24689318985288752,
+      "avg_hit_ratio": 0.020257127798413814,
+      "avg_attn_ratio": 0.028220501849372612,
+      "avg_coverage_ratio": 0.1984155602051011,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H15",
+      "importance_score": 0.2466840419662294,
+      "avg_hit_ratio": 0.01954968125690192,
+      "avg_attn_ratio": 0.03052887230917079,
+      "avg_coverage_ratio": 0.19660548840015668,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H11",
+      "importance_score": 0.24621851396480632,
+      "avg_hit_ratio": 0.020693203493625138,
+      "avg_attn_ratio": 0.02900514569507806,
+      "avg_coverage_ratio": 0.19652016477610312,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L0_H6",
+      "importance_score": 0.2451310321257112,
+      "avg_hit_ratio": 0.015675195763477562,
+      "avg_attn_ratio": 0.03070653918165099,
+      "avg_coverage_ratio": 0.19874929718058262,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H0",
+      "importance_score": 0.24418288206221545,
+      "avg_hit_ratio": 0.020302617709065354,
+      "avg_attn_ratio": 0.028965725996442225,
+      "avg_coverage_ratio": 0.19491453835670788,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H12",
+      "importance_score": 0.2441808860082612,
+      "avg_hit_ratio": 0.02205476357795402,
+      "avg_attn_ratio": 0.03696620552777387,
+      "avg_coverage_ratio": 0.1851599169025333,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H13",
+      "importance_score": 0.2433936896175314,
+      "avg_hit_ratio": 0.019570073285814678,
+      "avg_attn_ratio": 0.028995762929956256,
+      "avg_coverage_ratio": 0.19482785340176048,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H10",
+      "importance_score": 0.24281070834936208,
+      "avg_hit_ratio": 0.01877635277582572,
+      "avg_attn_ratio": 0.03685590454032948,
+      "avg_coverage_ratio": 0.18717845103320688,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H4",
+      "importance_score": 0.24221182010485892,
+      "avg_hit_ratio": 0.01841086487300472,
+      "avg_attn_ratio": 0.04300178205082591,
+      "avg_coverage_ratio": 0.18079917318102828,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H2",
+      "importance_score": 0.24190880169518675,
+      "avg_hit_ratio": 0.018688510189739986,
+      "avg_attn_ratio": 0.03229336908355562,
+      "avg_coverage_ratio": 0.19092692242189113,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H7",
+      "importance_score": 0.2415475618481191,
+      "avg_hit_ratio": 0.01639519124585885,
+      "avg_attn_ratio": 0.0325618387920136,
+      "avg_coverage_ratio": 0.19259053181024663,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H6",
+      "importance_score": 0.2408116908251468,
+      "avg_hit_ratio": 0.02016457935950206,
+      "avg_attn_ratio": 0.03139234340950252,
+      "avg_coverage_ratio": 0.18925476805614225,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H7",
+      "importance_score": 0.23919804741566314,
+      "avg_hit_ratio": 0.019659484489509084,
+      "avg_attn_ratio": 0.036023162581452994,
+      "avg_coverage_ratio": 0.18351540034470107,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H12",
+      "importance_score": 0.23846941699416047,
+      "avg_hit_ratio": 0.01968144513603052,
+      "avg_attn_ratio": 0.035171078903224164,
+      "avg_coverage_ratio": 0.18361689295490577,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H10",
+      "importance_score": 0.2383840215193557,
+      "avg_hit_ratio": 0.018688510189739986,
+      "avg_attn_ratio": 0.03748870076534311,
+      "avg_coverage_ratio": 0.1822068105642726,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H3",
+      "importance_score": 0.23820110665166416,
+      "avg_hit_ratio": 0.01806733761670515,
+      "avg_attn_ratio": 0.029470203148933137,
+      "avg_coverage_ratio": 0.19066356588602587,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H8",
+      "importance_score": 0.2377538674949786,
+      "avg_hit_ratio": 0.01516225780544122,
+      "avg_attn_ratio": 0.03279596310642264,
+      "avg_coverage_ratio": 0.18979564658311474,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H10",
+      "importance_score": 0.2375823987825369,
+      "avg_hit_ratio": 0.01679832597128802,
+      "avg_attn_ratio": 0.035636339739814976,
+      "avg_coverage_ratio": 0.1851477330714339,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L6_H0",
+      "importance_score": 0.2368160465767613,
+      "avg_hit_ratio": 0.016701071679550247,
+      "avg_attn_ratio": 0.026311446658565815,
+      "avg_coverage_ratio": 0.19380352823864525,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H6",
+      "importance_score": 0.2355717542926936,
+      "avg_hit_ratio": 0.014566183114145165,
+      "avg_attn_ratio": 0.034416600602400614,
+      "avg_coverage_ratio": 0.18658897057614782,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H9",
+      "importance_score": 0.2355023302345648,
+      "avg_hit_ratio": 0.01710420640497942,
+      "avg_attn_ratio": 0.03615793193510709,
+      "avg_coverage_ratio": 0.18224019189447827,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H15",
+      "importance_score": 0.23535421976557602,
+      "avg_hit_ratio": 0.018643020279088447,
+      "avg_attn_ratio": 0.026366856884266297,
+      "avg_coverage_ratio": 0.19034434260222127,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H9",
+      "importance_score": 0.23475279668042748,
+      "avg_hit_ratio": 0.019784973898202992,
+      "avg_attn_ratio": 0.033197170665957176,
+      "avg_coverage_ratio": 0.1817706521162673,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L17_H15",
+      "importance_score": 0.23431699194339223,
+      "avg_hit_ratio": 0.018192827025399056,
+      "avg_attn_ratio": 0.03259123494293084,
+      "avg_coverage_ratio": 0.18353292997506232,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H9",
+      "importance_score": 0.23376636265882408,
+      "avg_hit_ratio": 0.020344970384499547,
+      "avg_attn_ratio": 0.03371723851110288,
+      "avg_coverage_ratio": 0.17970415376322166,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H15",
+      "importance_score": 0.23331536058659552,
+      "avg_hit_ratio": 0.018351257403875113,
+      "avg_attn_ratio": 0.03724513463798964,
+      "avg_coverage_ratio": 0.17771896854473077,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H13",
+      "importance_score": 0.232815236686242,
+      "avg_hit_ratio": 0.019242232205601846,
+      "avg_attn_ratio": 0.027672149965346133,
+      "avg_coverage_ratio": 0.185900854515294,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L14_H1",
+      "importance_score": 0.23214385389526232,
+      "avg_hit_ratio": 0.01914968376669009,
+      "avg_attn_ratio": 0.03546329605090649,
+      "avg_coverage_ratio": 0.17753087407766574,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H7",
+      "importance_score": 0.23199395120549454,
+      "avg_hit_ratio": 0.019308114145166148,
+      "avg_attn_ratio": 0.028253590345497705,
+      "avg_coverage_ratio": 0.1844322467148307,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L5_H0",
+      "importance_score": 0.23198038982964808,
+      "avg_hit_ratio": 0.01694420740889469,
+      "avg_attn_ratio": 0.029479942392840228,
+      "avg_coverage_ratio": 0.18555624002791318,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L9_H0",
+      "importance_score": 0.23002618243856088,
+      "avg_hit_ratio": 0.019171644413211526,
+      "avg_attn_ratio": 0.03372675284044054,
+      "avg_coverage_ratio": 0.17712778518490882,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H5",
+      "importance_score": 0.22996024497356027,
+      "avg_hit_ratio": 0.01830890472844092,
+      "avg_attn_ratio": 0.03400632686682588,
+      "avg_coverage_ratio": 0.17764501337829347,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L19_H3",
+      "importance_score": 0.22896284515323723,
+      "avg_hit_ratio": 0.01821478767192049,
+      "avg_attn_ratio": 0.02897023561812678,
+      "avg_coverage_ratio": 0.18177782186318997,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L4_H13",
+      "importance_score": 0.2278284191272346,
+      "avg_hit_ratio": 0.017079108523240637,
+      "avg_attn_ratio": 0.03505365152554145,
+      "avg_coverage_ratio": 0.1756956590784525,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L11_H5",
+      "importance_score": 0.22675270867632902,
+      "avg_hit_ratio": 0.017791260917578558,
+      "avg_attn_ratio": 0.028423863178346016,
+      "avg_coverage_ratio": 0.18053758458040445,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H9",
+      "importance_score": 0.226550656509028,
+      "avg_hit_ratio": 0.01951360305190242,
+      "avg_attn_ratio": 0.03641837826662578,
+      "avg_coverage_ratio": 0.1706186751904998,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H4",
+      "importance_score": 0.22515617543794753,
+      "avg_hit_ratio": 0.015355197771308102,
+      "avg_attn_ratio": 0.03292615231420779,
+      "avg_coverage_ratio": 0.17687482535243162,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H6",
+      "importance_score": 0.22327780875049852,
+      "avg_hit_ratio": 0.015733234614998495,
+      "avg_attn_ratio": 0.028706681032490543,
+      "avg_coverage_ratio": 0.1788378931030095,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H8",
+      "importance_score": 0.22309454463730918,
+      "avg_hit_ratio": 0.01778812368236121,
+      "avg_attn_ratio": 0.03360928346479706,
+      "avg_coverage_ratio": 0.17169713749015092,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H2",
+      "importance_score": 0.22157598727494368,
+      "avg_hit_ratio": 0.017507341130408593,
+      "avg_attn_ratio": 0.036811823741019586,
+      "avg_coverage_ratio": 0.1672568224035155,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H14",
+      "importance_score": 0.21993520722020757,
+      "avg_hit_ratio": 0.01576460696717197,
+      "avg_attn_ratio": 0.03721693987116053,
+      "avg_coverage_ratio": 0.16695366038187506,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H12",
+      "importance_score": 0.21894484235594144,
+      "avg_hit_ratio": 0.01539598182913362,
+      "avg_attn_ratio": 0.03436689993957402,
+      "avg_coverage_ratio": 0.1691819605872338,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H15",
+      "importance_score": 0.2177661653728486,
+      "avg_hit_ratio": 0.01678577703041863,
+      "avg_attn_ratio": 0.03565770530748184,
+      "avg_coverage_ratio": 0.16532268303494813,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H12",
+      "importance_score": 0.21677558446663314,
+      "avg_hit_ratio": 0.01727204848910752,
+      "avg_attn_ratio": 0.03709656266471302,
+      "avg_coverage_ratio": 0.16240697331281262,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H15",
+      "importance_score": 0.2159649785058529,
+      "avg_hit_ratio": 0.01802184770605361,
+      "avg_attn_ratio": 0.02681038148285322,
+      "avg_coverage_ratio": 0.17113274931694605,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H7",
+      "importance_score": 0.2158732516804935,
+      "avg_hit_ratio": 0.015512059532175484,
+      "avg_attn_ratio": 0.03094660180046161,
+      "avg_coverage_ratio": 0.16941459034785641,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H9",
+      "importance_score": 0.21550762871358808,
+      "avg_hit_ratio": 0.015058729043268748,
+      "avg_attn_ratio": 0.031587622093348144,
+      "avg_coverage_ratio": 0.1688612775769712,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H11",
+      "importance_score": 0.21320857778383823,
+      "avg_hit_ratio": 0.015171669511093264,
+      "avg_attn_ratio": 0.030958525048033328,
+      "avg_coverage_ratio": 0.16707838322471164,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H8",
+      "importance_score": 0.21285359176377724,
+      "avg_hit_ratio": 0.017562242746712177,
+      "avg_attn_ratio": 0.02416816277895736,
+      "avg_coverage_ratio": 0.1711231862381077,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H12",
+      "importance_score": 0.21281105626553543,
+      "avg_hit_ratio": 0.017814790181708662,
+      "avg_attn_ratio": 0.028120291831584404,
+      "avg_coverage_ratio": 0.16687597425224235,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H0",
+      "importance_score": 0.21171505661315,
+      "avg_hit_ratio": 0.014738731051099288,
+      "avg_attn_ratio": 0.0306294005201961,
+      "avg_coverage_ratio": 0.1663469250418546,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H13",
+      "importance_score": 0.21009498309523394,
+      "avg_hit_ratio": 0.014172460094368036,
+      "avg_attn_ratio": 0.028591431835609204,
+      "avg_coverage_ratio": 0.1673310911652567,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H11",
+      "importance_score": 0.20986067540000655,
+      "avg_hit_ratio": 0.016479896596727238,
+      "avg_attn_ratio": 0.03589526114941759,
+      "avg_coverage_ratio": 0.15748551765386173,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H8",
+      "importance_score": 0.20932457101207833,
+      "avg_hit_ratio": 0.01640303433390222,
+      "avg_attn_ratio": 0.03481840673691295,
+      "avg_coverage_ratio": 0.15810312994126316,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H7",
+      "importance_score": 0.20853477914076446,
+      "avg_hit_ratio": 0.017668908744102,
+      "avg_attn_ratio": 0.03198920592019779,
+      "avg_coverage_ratio": 0.15887666447646467,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H11",
+      "importance_score": 0.2083740240062927,
+      "avg_hit_ratio": 0.015913625639995984,
+      "avg_attn_ratio": 0.030446736012854244,
+      "avg_coverage_ratio": 0.16201366235344247,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L3_H11",
+      "importance_score": 0.20772655328882178,
+      "avg_hit_ratio": 0.016807737676940066,
+      "avg_attn_ratio": 0.031294727110473174,
+      "avg_coverage_ratio": 0.15962408850140852,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H2",
+      "importance_score": 0.20748168038162396,
+      "avg_hit_ratio": 0.014064225479369542,
+      "avg_attn_ratio": 0.030818409372205684,
+      "avg_coverage_ratio": 0.16259904553004872,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L15_H1",
+      "importance_score": 0.20567830182138688,
+      "avg_hit_ratio": 0.016439112538901717,
+      "avg_attn_ratio": 0.025317927515443334,
+      "avg_coverage_ratio": 0.16392126176704183,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H13",
+      "importance_score": 0.20471299844379598,
+      "avg_hit_ratio": 0.017005383495632968,
+      "avg_attn_ratio": 0.03497647286620502,
+      "avg_coverage_ratio": 0.152731142081958,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H15",
+      "importance_score": 0.20416263969340337,
+      "avg_hit_ratio": 0.014630496436100792,
+      "avg_attn_ratio": 0.030859384016236096,
+      "avg_coverage_ratio": 0.1586727592410665,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L24_H10",
+      "importance_score": 0.19968831730909647,
+      "avg_hit_ratio": 0.017336361811063145,
+      "avg_attn_ratio": 0.03106655679465162,
+      "avg_coverage_ratio": 0.1512853987033817,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H0",
+      "importance_score": 0.19891615675587504,
+      "avg_hit_ratio": 0.013270504969380583,
+      "avg_attn_ratio": 0.03124855314527821,
+      "avg_coverage_ratio": 0.15439709864121623,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L2_H2",
+      "importance_score": 0.19666148864089286,
+      "avg_hit_ratio": 0.014696378375665094,
+      "avg_attn_ratio": 0.030093663142291695,
+      "avg_coverage_ratio": 0.15187144712293607,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H3",
+      "importance_score": 0.192635083270142,
+      "avg_hit_ratio": 0.014280694709366529,
+      "avg_attn_ratio": 0.023263385866533287,
+      "avg_coverage_ratio": 0.1550910026942422,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H10",
+      "importance_score": 0.19261915576607144,
+      "avg_hit_ratio": 0.017251656460194758,
+      "avg_attn_ratio": 0.027405667148208548,
+      "avg_coverage_ratio": 0.14796183215766814,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L13_H12",
+      "importance_score": 0.1914084111570457,
+      "avg_hit_ratio": 0.014892455576749323,
+      "avg_attn_ratio": 0.02100358952942956,
+      "avg_coverage_ratio": 0.15551236605086682,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L1_H5",
+      "importance_score": 0.1881786599104704,
+      "avg_hit_ratio": 0.0139167754241542,
+      "avg_attn_ratio": 0.01907639949071856,
+      "avg_coverage_ratio": 0.15518548499559764,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H6",
+      "importance_score": 0.18229302475472153,
+      "avg_hit_ratio": 0.015999899608473044,
+      "avg_attn_ratio": 0.030898460934475572,
+      "avg_coverage_ratio": 0.1353946642117729,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L18_H8",
+      "importance_score": 0.18191009531443392,
+      "avg_hit_ratio": 0.015646960646521435,
+      "avg_attn_ratio": 0.022392717499445203,
+      "avg_coverage_ratio": 0.14387041716846727,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H4",
+      "importance_score": 0.17965820141034866,
+      "avg_hit_ratio": 0.015188924304788676,
+      "avg_attn_ratio": 0.032143292284820935,
+      "avg_coverage_ratio": 0.13232598482073907,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L34_H1",
+      "importance_score": 0.1748425526356008,
+      "avg_hit_ratio": 0.014820299166750326,
+      "avg_attn_ratio": 0.032019800672313775,
+      "avg_coverage_ratio": 0.12800245279653671,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L35_H0",
+      "importance_score": 0.17409768995746613,
+      "avg_hit_ratio": 0.014643045376970183,
+      "avg_attn_ratio": 0.025354875435346747,
+      "avg_coverage_ratio": 0.1340997691451492,
+      "num_tokens": 9961
+    },
+    {
+      "layer_head": "L23_H14",
+      "importance_score": 0.16720085255597567,
+      "avg_hit_ratio": 0.015091670013050899,
+      "avg_attn_ratio": 0.02252000423450096,
+      "avg_coverage_ratio": 0.1295891783084238,
+      "num_tokens": 9961
+    }
+  ]
+}

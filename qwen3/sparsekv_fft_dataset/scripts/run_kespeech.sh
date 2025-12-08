@@ -1,5 +1,5 @@
 #!/bin/bash
-# speech-web-questions Evaluation with Qwen2.5-Omni
+# KeSpeech ASR Evaluation with Qwen2.5-Omni
 # 运行脚本示例
 
 # ============================================
@@ -9,11 +9,10 @@
 export CUDA_VISIBLE_DEVICES=4
 
 # 模型路径配置
-export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-7B"
+export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 
-# 数据集配置
-# 数据集从 UltraEval-Audio registry 加载: speech-web-questions
-# 默认使用 test split，可通过 --split 参数修改
+# 数据集配置（已有默认值，可选）
+# 默认路径: /mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart/kespeech
 
 # 样本限制（0表示处理全部样本）
 export SAMPLE_LIMIT=0
@@ -22,8 +21,7 @@ export SAMPLE_LIMIT=0
 # SparseKV 配置
 # ============================================
 # 是否使用 SparseKV（默认 true）
-# export USE_SPARSEKV="true"
-export USE_SPARSEKV="false"
+export USE_SPARSEKV="true"
 
 # 预算配置（可以是绝对数值或比例，如 0.2 表示 20%）
 export BUDGET=0.7
@@ -62,8 +60,8 @@ export HEAD_SCORE_FILE="aggregated"
 # ============================================
 # 输出配置
 # ============================================
-# 结果目录（可选，默认 ./speech_web_questions_Results）
-# export RESULTS_DIR="./speech_web_questions_Results"
+# 结果目录（可选，默认 ./KeSpeech_Results）
+# export RESULTS_DIR="./KeSpeech_Results"
 
 # ============================================
 # 运行命令
@@ -73,43 +71,43 @@ source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 
 # 激活环境并运行
 conda activate Qwen3_2 && \
-cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_fft_dataset && \
-python code/qwen2.5_speech-web-questions.py \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
+python code/qwen3_kespeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/KeSpeech_Results/sparsekv/budget0.7_ratio0.5_window32_kernel5 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/KeSpeech_Results/sparsekv/budget0.7_ratio0.5_window32_kernel5/timing_stats.json
 
 # 或者指定具体的输出文件
-# python code/qwen2.5_speech-web-questions.py \
-#     --output-file ./speech_web_questions_Results/speech_web_questions_results_qwen25.json \
-#     --timing-output-file ./speech_web_questions_Results/timing_stats.json
+# python code/qwen2.5_kespeech.py \
+#     --output-file ./KeSpeech_Results/kespeech_results_qwen25.json \
+#     --timing-output-file ./KeSpeech_Results/timing_stats.json
 
 # ============================================
 # 常用配置示例
 # ============================================
 
 # 示例1: 基础运行（使用默认配置）
-# conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=4 python code/qwen2.5_speech-web-questions.py
+# conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=0 python code/qwen2.5_kespeech.py
 
 # 示例2: 限制样本数量（测试用）
-# conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=4 SAMPLE_LIMIT=10 python code/qwen2.5_speech-web-questions.py
+# conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=0 SAMPLE_LIMIT=10 python code/qwen2.5_kespeech.py
 
 # 示例3: 使用比例预算模式
-# conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=4 BUDGET=0.2 python code/qwen2.5_speech-web-questions.py
+# conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=0 BUDGET=0.2 python code/qwen2.5_kespeech.py
 
 # 示例4: 启用 FFT 滤波
-# conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=4 USE_FFT_FILTER="true" python code/qwen2.5_speech-web-questions.py
+# conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=0 USE_FFT_FILTER="true" python code/qwen2.5_kespeech.py
 
 # 示例5: 启用 Audio-aware TopK
-# conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=4 USE_AUDIO_AWARE_TOPK="true" python code/qwen2.5_speech-web-questions.py
+# conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=0 USE_AUDIO_AWARE_TOPK="true" python code/qwen2.5_kespeech.py
 
 # 示例6: 完整配置示例
 # conda activate Qwen3_2 && \
-# CUDA_VISIBLE_DEVICES=4 \
+# CUDA_VISIBLE_DEVICES=0 \
 # BUDGET=2048 \
 # RATIO=0.2 \
 # WINDOW_SIZE=64 \
 # SAMPLE_LIMIT=100 \
-# python code/qwen2.5_speech-web-questions.py \
-#     --output-dir ./speech_web_questions_Results \
-#     --timing-output-file ./speech_web_questions_Results/timing_stats.json
+# python code/qwen2.5_kespeech.py \
+#     --output-dir ./KeSpeech_Results \
+#     --timing-output-file ./KeSpeech_Results/timing_stats.json

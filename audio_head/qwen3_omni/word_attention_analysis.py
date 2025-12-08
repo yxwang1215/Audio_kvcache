@@ -101,7 +101,7 @@ class WordAttentionAnalyzer:
     """分析生成单词 token 时的注意力分布 - 基于 top-k 注意力"""
     
     def __init__(self, model, processor, output_dir="./word_attention_analysis", num_layers=36, topk=128,
-                 alpha=1.0, beta=1.0, gamma=1.0):
+                 save_detailed_analysis=True, alpha=1.0, beta=1.0, gamma=1.0):
         self.model = model
         self.processor = processor
         self.output_dir = Path(output_dir)
@@ -113,9 +113,13 @@ class WordAttentionAnalyzer:
         self.topk = topk  # top-k 注意力位置（参考 SparseMM）
         
         # 权重参数用于计算加权importance score: S = α*S_hit + β*S_attn + γ*S_cov
+        # 固定使用默认值，权重信息会保存在输出文件中
         self.alpha = alpha  # weight for hit ratio
         self.beta = beta    # weight for attention ratio
         self.gamma = gamma  # weight for coverage ratio
+        
+        # 是否保存详细的 token 级别分析文件（最大的文件）
+        self.save_detailed_analysis = save_detailed_analysis
         
         # 当前样本信息
         self.current_audio_indices = None  # prefill 阶段的音频 token 位置
@@ -808,11 +812,18 @@ class WordAttentionAnalyzer:
     def save_results(self):
         """保存分析结果"""
         
-        # 1. 保存详细的 token 级别统计
-        output_file = self.output_dir / "word_attention_analysis.json"
-        with open(output_file, 'w') as f:
-            json.dump(self.sample_results, f, indent=2)
-        print(f"Saved detailed results to: {output_file}")
+        # 生成参数后缀用于文件名（包含topk和权重信息）
+        param_suffix = f"_topk{self.topk}_alpha{int(self.alpha) if self.alpha == int(self.alpha) else self.alpha}_beta{int(self.beta) if self.beta == int(self.beta) else self.beta}_gamma{int(self.gamma) if self.gamma == int(self.gamma) else self.gamma}"
+        
+        # 1. 保存详细的 token 级别统计（可选，文件较大）
+        if self.save_detailed_analysis:
+            output_file = self.output_dir / f"word_attention_analysis{param_suffix}.json"
+            with open(output_file, 'w') as f:
+                json.dump(self.sample_results, f, indent=2)
+            print(f"Saved detailed results to: {output_file}")
+        else:
+            print(f"Skipped saving detailed analysis file (word_attention_analysis{param_suffix}.json)")
+            print(f"  Note: You can still process attention_score using layer_head_attention_stats{param_suffix}.json")
         
         # 2. 计算汇总统计 - 基于 top-k 命中和注意力权重
         all_tokens = [token for sample in self.sample_results for token in sample['tokens']]
@@ -891,7 +902,7 @@ class WordAttentionAnalyzer:
                 }
             }
             
-            summary_file = self.output_dir / "word_attention_summary.json"
+            summary_file = self.output_dir / f"word_attention_summary{param_suffix}.json"
             with open(summary_file, 'w') as f:
                 json.dump(summary, f, indent=2)
             print(f"Saved summary to: {summary_file}")
@@ -907,13 +918,13 @@ class WordAttentionAnalyzer:
             )
             
             # 保存排序后的结果
-            layer_head_file = self.output_dir / "layer_head_attention_stats.json"
+            layer_head_file = self.output_dir / f"layer_head_attention_stats{param_suffix}.json"
             with open(layer_head_file, 'w') as f:
                 json.dump(layer_head_summary, f, indent=2)
             print(f"Saved layer/head statistics to: {layer_head_file}")
             
             # 保存排序后的top heads
-            top_heads_file = self.output_dir / "top_heads_by_importance.json"
+            top_heads_file = self.output_dir / f"top_heads_by_importance{param_suffix}.json"
             top_heads_data = {
                 'weights': {
                     'alpha': self.alpha,
@@ -1029,6 +1040,8 @@ def main():
                        help='WhisperX score threshold for high-quality words')
     parser.add_argument('--topk', type=int, default=32,
                        help='Top-k attention positions to check (default: 32)')
+    parser.add_argument('--skip_detailed_analysis', action='store_true',
+                       help='Skip saving detailed analysis file (word_attention_analysis_*.json) to save disk space. You can still process attention_score using layer_head_attention_stats_*.json')
     parser.add_argument('--alpha', type=float, default=1.0,
                        help='Weight for hit ratio in importance score (default: 1.0)')
     parser.add_argument('--beta', type=float, default=1.0,
@@ -1136,6 +1149,7 @@ def main():
     analyzer = WordAttentionAnalyzer(
         model, processor, args.output_dir, 
         topk=args.topk,
+        save_detailed_analysis=not args.skip_detailed_analysis,
         alpha=args.alpha,
         beta=args.beta,
         gamma=args.gamma
@@ -1212,16 +1226,56 @@ CUDA_VISIBLE_DEVICES=5 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache
 # 4. 处理从第500个开始的所有样本
 python word_attention_analysis.py --start_idx 500
 
-# 5. 处理第1000-1100个样本
-CUDA_VISIBLE_DEVICES=5 python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/audio_head/word_attention_analysis.py \
+# 5. 指定输出目录和topk参数
+CUDA_VISIBLE_DEVICES=5 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/word_attention_analysis.py \
     --start_idx 1 \
     --end_idx 500 \
     --topk 32 \
-    --output_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/audio_head/word_attention_results_batch1
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/results_topk32
+
+# 6. 跳过生成详细分析文件（节省磁盘空间，仍可使用 layer_head_attention_stats_*.json 处理 attention_score）
+python word_attention_analysis.py \
+    --num_samples 20 \
+    --topk 64 \
+    --skip_detailed_analysis \
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/results_topk64
+
+# 7. 使用不同的topk值进行对比实验
+python word_attention_analysis.py \
+    --num_samples 0 \
+    --topk 16 \
+    --skip_detailed_analysis \
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/results_topk16
+
+python word_attention_analysis.py \
+    --num_samples 50 \
+    --topk 32 \
+    --skip_detailed_analysis \
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/results_topk32
+
+python word_attention_analysis.py \
+    --num_samples 50 \
+    --topk 64 \
+    --skip_detailed_analysis \
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/results_topk64
+
+参数说明：
+- --topk: Top-k注意力位置数量（默认32，参考SparseMM）
+- --skip_detailed_analysis: 跳过生成详细的token级别分析文件（word_attention_analysis_*.json），节省磁盘空间。
+  即使跳过该文件，仍可使用 layer_head_attention_stats_*.json 通过 batch_generate_head_scores.py 处理 attention_score。
+  注意：如果跳过，generate_head_scores.py 将无法工作（因为它需要每个样本的原始数据）。
+- --output_dir: 输出目录，会自动添加参数后缀（如_topk32_alpha1_beta1_gamma1）
+- --start_idx: 起始样本索引（从0开始，包含）
+- --end_idx: 结束样本索引（不包含，类似Python切片，-1表示无限制）
+- --num_samples: 处理的样本数量（0或-1表示处理所有样本）
+- --score_threshold: WhisperX单词质量阈值（默认0.95）
 
 注意：
 - 样本按文件名排序
-- start_idx 是从0开始的索引（包含）
-- end_idx 是结束索引（不包含），类似Python切片
 - 如果同时指定start_idx/end_idx和num_samples，优先使用start_idx/end_idx
+- 输出目录会自动包含参数信息作为后缀，例如：word_attention_results_topk32_alpha1_beta1_gamma1
+- importance score计算公式：S = α·S_hit + β·S_attn + γ·S_cov（权重可通过命令行参数指定，权重信息保存在输出文件中）
+  - S_hit: 平均hit ratio (c_word / K)
+  - S_attn: 平均attention ratio (weight_word / weight_all_audio)
+  - S_cov: 平均coverage ratio (c_word / |A(w_i)|)
 '''

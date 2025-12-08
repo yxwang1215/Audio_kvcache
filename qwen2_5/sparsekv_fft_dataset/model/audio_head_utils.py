@@ -103,22 +103,45 @@ def process_audio_head_scores(
 
 
 def get_audio_head_score_path(
-    base_dir: str = "/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/audio_head/head_score",
+    base_dir: str = "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score",
     score_type: str = "aggregated",
-    batch: Optional[str] = None
+    batch: Optional[str] = None,
+    alpha: Optional[float] = None,
+    beta: Optional[float] = None,
+    gamma: Optional[float] = None
 ) -> str:
     """
     Get the path to audio head score file
     
     Args:
         base_dir: Base directory for head scores
-        score_type: Type of score file (aggregated, mean, from_ranking, etc.)
+        score_type: Type of score file (aggregated, mean, from_ranking, topk32, etc.)
         batch: Batch identifier (e.g., "batch1"), if None uses non-batch version
+        alpha: Alpha parameter value (if provided, will be included in filename)
+        beta: Beta parameter value (if provided, will be included in filename)
+        gamma: Gamma parameter value (if provided, will be included in filename)
     
     Returns:
         Path to the score file
     """
-    if batch:
+    # If alpha, beta, gamma are provided, construct filename with these parameters
+    if alpha is not None and beta is not None and gamma is not None:
+        # Determine naming format based on score_type
+        if score_type == "topk32" or score_type.startswith("topk"):
+            # Format: audio_head_scores_topk32_alpha0_beta0_gamma1.json
+            # Use integer format for topk32 files (round to nearest integer)
+            alpha_str = str(int(round(alpha)))
+            beta_str = str(int(round(beta)))
+            gamma_str = str(int(round(gamma)))
+            filename = f"audio_head_scores_{score_type}_alpha{alpha_str}_beta{beta_str}_gamma{gamma_str}.json"
+        else:
+            # Format: audio_head_scores_aggregated_alpha_1_00_beta_1_00_gamma_1_00.json
+            # Format alpha, beta, gamma as floats with 2 decimal places
+            alpha_str = f"{alpha:.2f}".replace(".", "_")
+            beta_str = f"{beta:.2f}".replace(".", "_")
+            gamma_str = f"{gamma:.2f}".replace(".", "_")
+            filename = f"audio_head_scores_{score_type}_alpha_{alpha_str}_beta_{beta_str}_gamma_{gamma_str}.json"
+    elif batch:
         filename = f"audio_head_scores_{score_type}_{batch}.json"
     else:
         filename = f"audio_head_scores_{score_type}.json"

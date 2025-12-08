@@ -590,35 +590,38 @@ def audiocaps_doc_to_audio(doc):
     
     return audio_array, sampling_rate
 
-def aqa_doc_to_text(doc, kwargs=None):
-    """Generate prompts for AQA (Audio Question Answering) tasks (following UltraEval-Audio format)"""
+def caption_doc_to_text(doc, kwargs=None):
+    """Generate prompts for audio captioning tasks"""
     if kwargs is None:
         kwargs = {}
     
-    # Get question text from document
-    question_text = doc.get("QuestionText", doc.get("question", ""))
+    pre_prompt = kwargs.get("pre_prompt", "")
+    post_prompt = kwargs.get("post_prompt", "")
     
-    # AQA prompt template from UltraEval-Audio: "answer the question without explain\n# Question: {{QuestionText}}"
-    prompt_text = f"answer the question without explain\n# Question: {question_text}"
+    # Captioning instruction
+    instruction = "Please describe the audio content in detail. Provide a clear and accurate caption of what you hear."
+    
+    # Combine prompts
+    prompt_text = f"{pre_prompt}{instruction}{post_prompt}"
     
     return prompt_text
 
 def clean_response(response):
-    """Clean AQA response (extract answer from model output)"""
+    """Clean caption response"""
     if not response or response.strip() == "":
         return ""
     
-    # For AQA, we just need to clean up the response
-    # Remove common prefixes that might be added by the model
-    response = response.strip()
-    
-    # Remove any "Answer:" or similar prefixes
-    for marker in ["answer:", "answer is:", "the answer is:", "response:"]:
+    # Remove common caption prefixes
+    for marker in ["caption:", "description:", "audio content:", "content:"]:
         if marker.lower() in response.lower():
             parts = re.split(re.escape(marker), response, flags=re.IGNORECASE)
             if len(parts) > 1:
                 response = parts[1].strip()
                 break
+    
+    # Remove any remaining caption markers
+    response = re.sub(r'<sep>.*?($|<|$)', '', response)
+    response = re.sub(r'(?i)^(caption|description|audio\s+content|content):\s*', '', response.strip())
     
     return response.strip()
 
@@ -672,7 +675,7 @@ def save_results_realtime(output_file, results, total_correct, processed_samples
         realtime_results = {
             "model_name": f"Qwen2.5-Omni-3B",
             "dataset": "audiocaps",
-            "task": "AQA (Audio Question Answering)",
+            "task": "Audio Captioning",
             "status": "in_progress",
             "progress": {
                 "processed": len(results),
@@ -1012,10 +1015,11 @@ def main():
             question_text = doc.get("QuestionText", "")
             
             
-            prompt_text = aqa_doc_to_text(doc)
+            prompt_text = caption_doc_to_text(doc)
             
-            # AQA prompt: "answer the question without explain\n# Question: {{QuestionText}}"
-            full_user_prompt = prompt_text
+            # Captioning prompt
+            task_instruction = "You are a helpful assistant that describes audio content. Please listen carefully and provide a detailed caption describing what you hear in the audio."
+            full_user_prompt = f"{task_instruction}\n\n{prompt_text}"
 
             
             messages = [
@@ -1342,7 +1346,7 @@ def main():
     final_results = {
         "model_name": f"Qwen2.5-Omni-3B",
         "dataset": "audiocaps",
-        "task": "AQA (Audio Question Answering)",
+        "task": "Audio Captioning",
         "status": "completed",
         "progress": {
             "processed": len(results),

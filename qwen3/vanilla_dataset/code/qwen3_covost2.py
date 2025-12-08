@@ -111,7 +111,7 @@ else:
 try:
     from processing_qwen3_omni_moe import Qwen3OmniMoeProcessor
 except ImportError:
-    from model.processing_qwen3_omni_moe import
+    from model.processing_qwen3_omni_moe import Qwen3OmniMoeProcessor
 from qwen_omni_utils import process_mm_info
 # Import SparseMM utilities from model directory
 from model.sparsemm_utils import (
@@ -410,7 +410,8 @@ class GlobalTimingStats:
                 "avg_total_gpu_time": 0.0,
                 "avg_decode_time": 0.0,
                 "total_decode_tokens": 0,
-                "avg_tps": 0.0
+                "avg_tps": 0.0,
+                "overall_tps": 0.0
             }
         
         total_wall = sum(r["wall_time"] for r in self.timing_records)
@@ -482,19 +483,41 @@ def load_covost2_dataset(dataset_path, direction="en_zh"):
 
 def covost2_doc_to_audio(doc):
     """Load audio data from CoVoST2 documents"""
+    # Check if doc is a dictionary
+    if not isinstance(doc, dict):
+        print(f"Error: doc is not a dictionary, got type: {type(doc)}")
+        if isinstance(doc, str):
+            print(f"  doc content (first 100 chars): {doc[:100]}")
+        return None
+    
     if "context" not in doc:
         return None
     
     audio_data = doc["context"]
     
     # Handle different audio formats
-    if isinstance(audio_data, dict):
-        # If it's a dict with 'array' and 'sampling_rate'
-        if "array" in audio_data:
-            audio_np = np.array(audio_data["array"], dtype=np.float32)
-            sr = audio_data.get("sampling_rate", 16000)
+    # First, try dict-like access (works for both dict and AudioDecoder objects)
+    try:
+        # Try to access 'array' key (works for dict and AudioDecoder)
+        if hasattr(audio_data, '__getitem__'):
+            audio_array = audio_data['array']
+            audio_np = np.array(audio_array, dtype=np.float32)
+            # Try to get sampling_rate
+            if hasattr(audio_data, 'get'):
+                sr = audio_data.get('sampling_rate', 16000)
+            else:
+                try:
+                    sr = audio_data['sampling_rate']
+                except (KeyError, TypeError):
+                    sr = 16000
             return audio_np, sr
-        elif "path" in audio_data:
+    except (KeyError, TypeError, AttributeError) as e:
+        # If dict-like access fails, continue to other methods
+        pass
+    
+    # Handle dict type explicitly
+    if isinstance(audio_data, dict):
+        if "path" in audio_data:
             # Load from file path
             try:
                 audio_np, sr = librosa.load(audio_data["path"], sr=16000, mono=True)
@@ -509,9 +532,10 @@ def covost2_doc_to_audio(doc):
         # List or tuple of audio data
         audio_np = np.array(audio_data, dtype=np.float32)
         return audio_np, 16000
-    else:
-        print(f"Unknown audio format: {type(audio_data)}")
-        return None
+    
+    # If all else fails, print error
+    print(f"Unknown audio format: {type(audio_data)}")
+    return None
 
 def clean_translation_response(response):
     """Clean translation response"""
@@ -936,9 +960,17 @@ def main():
         print("Error: Failed to load any data")
         return
     
-    if sample_limit > 0 and len(dataset) > sample_limit:
-        dataset = dataset[:sample_limit]
-        print(f"Applying sample limit, processing {len(dataset)} samples")
+    if sample_limit > 0:
+        # Use select() for HuggingFace datasets instead of slicing
+        # Slicing with small numbers returns a dict instead of Dataset
+        # Limit to min(sample_limit, len(dataset)) to handle cases where dataset is smaller
+        original_size = len(dataset)
+        actual_limit = min(sample_limit, original_size)
+        if hasattr(dataset, 'select'):
+            dataset = dataset.select(range(actual_limit))
+        else:
+            dataset = dataset[:actual_limit]
+        print(f"Applying sample limit, processing {len(dataset)} samples (limit: {sample_limit}, original dataset size: {original_size})")
 
     # Select instructions based on direction
     if direction == "en_zh":
@@ -998,6 +1030,8 @@ def main():
             reference = doc.get("answer", "")
             if not reference:
                 reference = doc.get("reference", "")
+            if not reference:
+                reference = doc.get("translation", "")
             
             # Select random instruction (using improved prompts)
             instruction = random.choice(instructions)
@@ -1122,8 +1156,38 @@ def main():
             decode_time = decode_start_event.elapsed_time(decode_end_event) / 1000.0
             total_time = prefill_time + decode_time
             
+            # Handle different return types from model.generate()
+            # The return structure should be: GenerateDecoderOnlyOutput with sequences attribute
+            if hasattr(out_ids, 'sequences'):
+                generated_sequences = out_ids.sequences
+            elif isinstance(out_ids, tuple) and len(out_ids) > 0:
+                # If it's a tuple, check if first element has sequences
+                first_element = out_ids[0]
+                if hasattr(first_element, 'sequences'):
+                    generated_sequences = first_element.sequences
+                elif isinstance(first_element, torch.Tensor):
+                    generated_sequences = first_element
+                else:
+                    # Fallback: try to extract tensor from nested structure
+                    generated_sequences = first_element
+                    while isinstance(generated_sequences, tuple) and len(generated_sequences) > 0:
+                        generated_sequences = generated_sequences[0]
+            elif isinstance(out_ids, torch.Tensor):
+                generated_sequences = out_ids
+            else:
+                # Last resort: try to access sequences directly
+                generated_sequences = out_ids.sequences if hasattr(out_ids, 'sequences') else out_ids
+            
+            # Get input length
+            input_ids_tensor = inputs["input_ids"] if isinstance(inputs, dict) else inputs.input_ids
+            input_length = input_ids_tensor.shape[1]
+            
+            # Extract generated tokens (excluding input tokens)
+            generated_tokens = generated_sequences[:, input_length:]
+            
+            # Decode only the generated tokens (not the full sequence including input)
             resp = processor.batch_decode(
-                out_ids, 
+                generated_tokens, 
                 skip_special_tokens=True, 
                 clean_up_tokenization_spaces=False
             )[0]
@@ -1134,10 +1198,9 @@ def main():
             
             prediction = clean_translation_response(resp)
             
-            # Calculate decode token count
-            input_token_count = inputs.input_ids.shape[1] if hasattr(inputs, 'input_ids') else 0
-            output_token_count = out_ids.shape[1] if hasattr(out_ids, 'shape') else len(out_ids[0]) if isinstance(out_ids, list) else 0
-            decode_token_count = max(0, output_token_count - input_token_count)
+            # Calculate decode token count (generated tokens only, excluding input)
+            generated_length = generated_sequences.shape[1]
+            decode_token_count = generated_length - input_length
             
             # Calculate TPS
             sample_tps = decode_token_count / decode_time if decode_time > 0 else 0.0

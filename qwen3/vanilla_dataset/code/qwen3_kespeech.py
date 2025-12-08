@@ -1532,8 +1532,38 @@ def main():
             decode_time = decode_start_event.elapsed_time(decode_end_event) / 1000.0
             total_time = prefill_time + decode_time
             
+            # Handle different return types from model.generate()
+            # The return structure should be: GenerateDecoderOnlyOutput with sequences attribute
+            if hasattr(out_ids, 'sequences'):
+                generated_sequences = out_ids.sequences
+            elif isinstance(out_ids, tuple) and len(out_ids) > 0:
+                # If it's a tuple, check if first element has sequences
+                first_element = out_ids[0]
+                if hasattr(first_element, 'sequences'):
+                    generated_sequences = first_element.sequences
+                elif isinstance(first_element, torch.Tensor):
+                    generated_sequences = first_element
+                else:
+                    # Fallback: try to extract tensor from nested structure
+                    generated_sequences = first_element
+                    while isinstance(generated_sequences, tuple) and len(generated_sequences) > 0:
+                        generated_sequences = generated_sequences[0]
+            elif isinstance(out_ids, torch.Tensor):
+                generated_sequences = out_ids
+            else:
+                # Last resort: try to access sequences directly
+                generated_sequences = out_ids.sequences if hasattr(out_ids, 'sequences') else out_ids
+            
+            # Get input length
+            input_ids_tensor = inputs["input_ids"] if isinstance(inputs, dict) else inputs.input_ids
+            input_length = input_ids_tensor.shape[1]
+            
+            # Extract generated tokens (excluding input tokens)
+            generated_tokens = generated_sequences[:, input_length:]
+            
+            # Decode only the generated tokens (not the full sequence including input)
             resp = processor.batch_decode(
-                out_ids, 
+                generated_tokens, 
                 skip_special_tokens=True, 
                 clean_up_tokenization_spaces=False
             )[0]
@@ -1549,9 +1579,8 @@ def main():
             hypothesis = clean_response(resp)
             
             # Calculate decode token count (generated tokens only, excluding input)
-            input_token_count = inputs.input_ids.shape[1] if hasattr(inputs, 'input_ids') else 0
-            output_token_count = out_ids.shape[1] if hasattr(out_ids, 'shape') else len(out_ids[0]) if isinstance(out_ids, list) else 0
-            decode_token_count = max(0, output_token_count - input_token_count)
+            generated_length = generated_sequences.shape[1]
+            decode_token_count = generated_length - input_length
             
             # Calculate TPS (Tokens Per Second) using decode time
             sample_tps = decode_token_count / decode_time if decode_time > 0 else 0.0

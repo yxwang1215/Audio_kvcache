@@ -6,12 +6,12 @@
 # 1. 增加 max_new_tokens 到 1500（德语单词更长，需要更多tokens）
 # 2. 语言特定的文本标准化（保留德语特殊字符）
 # 3. 可选的 FFT 滤波和 Audio-aware TopK 优化
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=3
 # 模型路径配置
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 export USE_SPARSEKV="false"
-export BUDGET=0.7
+# export BUDGET=0.7
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -40,12 +40,12 @@ export FFT_USE_SALIENCY="false"
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 
 conda activate Qwen3_2 && \
-cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/vanilla_dataset && \
 python code/qwen3_multilingual_librispeech.py \
     --model-path "${MODEL_PATH}" \
     --languages german \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/MultilingualLibriSpeech/German/vanilla/full_cache \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/MultilingualLibriSpeech/German/vanilla/full_cache/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/German/vanilla/full_cache \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/German/vanilla/full_cache/timing_stats.json
 
 # ============================================
 # 常用配置示例

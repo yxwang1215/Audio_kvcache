@@ -2,7 +2,7 @@
 # Multilingual LibriSpeech ASR Evaluation with Gemma-3n-E2B-it - German
 # 德语 ASR 评估脚本
 
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=4
 # 模型路径配置
 export MODEL_PATH="/mnt/public/models/gemma-3n-E4B-it"
 export SAMPLE_LIMIT=0
@@ -35,6 +35,6 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/gemma/sparsekv_fft_dataset
 python code/gemma_multilingual_librispeech.py \
     --model-path "${MODEL_PATH}" \
     --languages german \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/MultilingualLibriSpeech/German/vanilla/full_cache \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/MultilingualLibriSpeech/German/vanilla/full_cache/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/MultilingualLibriSpeech/German/vanilla/full_cache \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/MultilingualLibriSpeech/German/vanilla/full_cache/timing_stats.json
 

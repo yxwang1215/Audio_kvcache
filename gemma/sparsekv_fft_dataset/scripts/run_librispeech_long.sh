@@ -6,10 +6,10 @@
 # 基础配置
 # ============================================
 # GPU 设置
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=1
 
 # 模型路径配置
-export MODEL_PATH="/mnt/public/models/gemma-3n-E2B-it"
+export MODEL_PATH="/mnt/public/models/gemma-3n-E4B-it"
 
 # 数据集配置（已有默认值，可选）
 # 默认路径: /mnt/users/wangyuxuan-20250915/Datasets/AudioMarathon/librispeech-long
@@ -59,6 +59,6 @@ conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/gemma/sparsekv_fft_dataset && \
 python code/gemma_librispeech_long.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/LibriSpeech_Results \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/LibriSpeech_Results/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/LibriSpeech_long/vanilla/full_cache_rerun \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/LibriSpeech_long/vanilla/full_cache_rerun/timing_stats.json
 
