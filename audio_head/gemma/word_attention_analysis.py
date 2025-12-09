@@ -87,7 +87,7 @@ class WordAttentionAnalyzer:
     """分析生成单词 token 时的注意力分布 - 基于 top-k 注意力"""
     
     def __init__(self, model, processor, output_dir="./word_attention_analysis", num_layers=None, topk=128, 
-                 alpha=1.0, beta=1.0, gamma=1.0):
+                 alpha=1.0, beta=1.0, gamma=1.0, save_detailed_analysis=True):
         self.model = model
         self.processor = processor
         self.output_dir = Path(output_dir)
@@ -112,6 +112,9 @@ class WordAttentionAnalyzer:
         self.alpha = alpha  # weight for hit ratio
         self.beta = beta    # weight for attention ratio
         self.gamma = gamma  # weight for coverage ratio
+        
+        # 是否保存详细的 token 级别分析文件（最大的文件）
+        self.save_detailed_analysis = save_detailed_analysis
         
         # 当前样本信息
         self.current_audio_indices = None  # prefill 阶段的音频 token 位置
@@ -958,11 +961,21 @@ class WordAttentionAnalyzer:
     def save_results(self):
         """保存分析结果"""
         
-        # 1. 保存详细的 token 级别统计
-        output_file = self.output_dir / "word_attention_analysis.json"
-        with open(output_file, 'w') as f:
-            json.dump(self.sample_results, f, indent=2)
-        print(f"Saved detailed results to: {output_file}")
+        # 生成参数后缀用于文件名
+        alpha_str = f"{self.alpha:.1f}".rstrip('0').rstrip('.')
+        beta_str = f"{self.beta:.1f}".rstrip('0').rstrip('.')
+        gamma_str = f"{self.gamma:.1f}".rstrip('0').rstrip('.')
+        param_suffix = f"_topk{self.topk}_alpha{alpha_str}_beta{beta_str}_gamma{gamma_str}"
+        
+        # 1. 保存详细的 token 级别统计（可选，文件较大）
+        if self.save_detailed_analysis:
+            output_file = self.output_dir / f"word_attention_analysis{param_suffix}.json"
+            with open(output_file, 'w') as f:
+                json.dump(self.sample_results, f, indent=2)
+            print(f"Saved detailed results to: {output_file}")
+        else:
+            print(f"Skipped saving detailed analysis file (word_attention_analysis{param_suffix}.json)")
+            print(f"  Note: You can still process attention_score using layer_head_attention_stats{param_suffix}.json")
         
         # 2. 计算汇总统计 - 基于 top-k 命中和注意力权重
         all_tokens = [token for sample in self.sample_results for token in sample['tokens']]
@@ -1041,7 +1054,7 @@ class WordAttentionAnalyzer:
                 }
             }
             
-            summary_file = self.output_dir / "word_attention_summary.json"
+            summary_file = self.output_dir / f"word_attention_summary{param_suffix}.json"
             with open(summary_file, 'w') as f:
                 json.dump(summary, f, indent=2)
             print(f"Saved summary to: {summary_file}")
@@ -1057,13 +1070,13 @@ class WordAttentionAnalyzer:
             )
             
             # 保存排序后的结果
-            layer_head_file = self.output_dir / "layer_head_attention_stats.json"
+            layer_head_file = self.output_dir / f"layer_head_attention_stats{param_suffix}.json"
             with open(layer_head_file, 'w') as f:
                 json.dump(layer_head_summary, f, indent=2)
             print(f"Saved layer/head statistics to: {layer_head_file}")
             
             # 保存排序后的top heads
-            top_heads_file = self.output_dir / "top_heads_by_importance.json"
+            top_heads_file = self.output_dir / f"top_heads_by_importance{param_suffix}.json"
             top_heads_data = {
                 'weights': {
                     'alpha': self.alpha,
@@ -1185,6 +1198,8 @@ def main():
                        help='Weight for attention ratio in importance score (default: 1.0)')
     parser.add_argument('--gamma', type=float, default=1.0,
                        help='Weight for coverage ratio in importance score (default: 1.0)')
+    parser.add_argument('--skip_detailed_analysis', action='store_true',
+                       help='Skip saving detailed analysis file (word_attention_analysis_*.json) to save disk space. You can still process attention_score using layer_head_attention_stats_*.json')
     parser.add_argument('--device', type=str, default='cuda',
                        help='Device to use')
     
@@ -1273,7 +1288,8 @@ def main():
         topk=args.topk,
         alpha=args.alpha,
         beta=args.beta,
-        gamma=args.gamma
+        gamma=args.gamma,
+        save_detailed_analysis=not args.skip_detailed_analysis
     )
     
     # 注册 hooks

@@ -218,7 +218,7 @@ else:
 # 文本规范化 & 指标
 # ------------------------------
 _DEF_PUNC_RE = re.compile(r"[.!?,;:\"()\[\]{}]")
-_DEF_HYP_APOS_RE = re.compile(r"[\-\']")
+_DEF_HYP_APOS_RE = re.compile(r"[\-\'\_]")  # Added underscore (_) for completeness
 _DEF_SPACE_RE = re.compile(r"\s+")
 
 # 中文标点符号正则

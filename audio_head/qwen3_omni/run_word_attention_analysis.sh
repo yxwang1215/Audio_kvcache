@@ -8,12 +8,12 @@ conda activate Qwen3_2
 
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni
 
-CUDA_VISIBLE_DEVICES=5 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/word_attention_analysis.py \
+CUDA_VISIBLE_DEVICES=4 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/word_attention_analysis.py \
     --model_path /mnt/public/models/Qwen3-Omni-30B-A3B-Instruct \
     --audio_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/librispeech/output_audio \
     --whisperx_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/librispeech/whisperx_parquet_output \
-    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/topk32 \
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/topk16 \
     --skip_detailed_analysis \
-    --topk 32 \
+    --topk 16 \
     --num_samples 0 \
     --score_threshold 0.95 \

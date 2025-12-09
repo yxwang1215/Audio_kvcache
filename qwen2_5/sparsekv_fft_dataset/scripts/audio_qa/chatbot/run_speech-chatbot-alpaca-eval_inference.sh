@@ -7,7 +7,7 @@ set -e
 # =================== 用户配置区 ===================
 export GPU_ID="0"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-3B}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_chatbot_alpaca_eval_Results}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_chatbot_alpaca_eval_Results/vanilla/full_cache}"
 
 # 推理配置
 export SAMPLE_LIMIT=0
@@ -47,7 +47,7 @@ source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 # 推理
 echo -e "${GREEN}>>> 推理生成答案...${NC}"
 conda activate Qwen3_2 && \
-cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_fft_dataset && \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
 python code/qwen2.5_speech-chatbot-alpaca-eval.py \
     --mode inference \
     --model-path "${MODEL_PATH}" \

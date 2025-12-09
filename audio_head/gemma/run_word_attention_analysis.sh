@@ -12,7 +12,6 @@ CUDA_VISIBLE_DEVICES=5 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache
     --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/word_attention_results \
     --num_samples 10 \
     --score_threshold 0.95 \
-    --device cuda \
     --topk 32
 
 echo "Analysis complete! Check word_attention_results/ for results."

@@ -1,6 +1,6 @@
 #!/bin/bash
 # llama-questions Evaluation with Qwen2.5-Omni
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
 export SAMPLE_LIMIT=0
 export USE_SPARSEKV="false"

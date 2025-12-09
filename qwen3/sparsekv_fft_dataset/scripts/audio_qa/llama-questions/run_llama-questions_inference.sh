@@ -1,13 +1,13 @@
 #!/bin/bash
-# ClothoAQA 推理脚本
+# llama-questions 推理脚本
 # 用于生成模型答案
 
 set -e
 
 # =================== 用户配置区 ===================
 export GPU_ID="0"
-export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-3B}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/ClothoAQA_Results}"
+export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen3-Omni-3B}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3_Omni_3B/datasets/llama_questions_Results/vanilla/full_cache}"
 
 # 推理配置
 export SAMPLE_LIMIT=0
@@ -34,7 +34,7 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-echo -e "${GREEN}=== 启动 ClothoAQA 推理 ===${NC}"
+echo -e "${GREEN}=== 启动 llama-questions 推理 ===${NC}"
 echo "Config: GPU=${GPU_ID}, Model=${MODEL_PATH}"
 echo "Output Dir: ${OUTPUT_DIR}"
 
@@ -47,18 +47,18 @@ source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 # 推理
 echo -e "${GREEN}>>> 推理生成答案...${NC}"
 conda activate Qwen3_2 && \
-cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
-python code/qwen2.5_ClothoAQA.py \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
+python code/qwen3_llama-questions.py \
     --mode inference \
     --model-path "${MODEL_PATH}" \
     --output-dir "${OUTPUT_DIR}" \
     --timing-output-file "${OUTPUT_DIR}/timing_stats.json"
 
 # 确定推理结果文件路径
-INFERENCE_OUTPUT_FILE="${OUTPUT_DIR}/clothoaqa_results_qwen25.json"
+INFERENCE_OUTPUT_FILE="${OUTPUT_DIR}/llama_questions_results_qwen3.json"
 
 echo -e "${GREEN}=== 推理完成 ===${NC}"
 echo -e "${BLUE}推理结果保存在: ${INFERENCE_OUTPUT_FILE}${NC}"
 echo -e "${BLUE}可以使用以下命令进行打分:${NC}"
-echo -e "${BLUE}  bash run_clothoaqa_judge.sh${NC}"
+echo -e "${BLUE}  bash run_llama-questions_judge.sh${NC}"
 

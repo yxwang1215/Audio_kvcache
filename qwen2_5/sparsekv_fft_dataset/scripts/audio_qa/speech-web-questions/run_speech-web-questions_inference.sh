@@ -5,9 +5,9 @@
 set -e
 
 # =================== 用户配置区 ===================
-export GPU_ID="3"
+export GPU_ID="0"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-3B}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results/vanilla/full_cache}"
 
 # 推理配置
 export SAMPLE_LIMIT=0

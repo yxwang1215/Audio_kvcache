@@ -1,20 +1,17 @@
 #!/bin/bash
 # LibriSpeech ASR Evaluation with Qwen2.5-Omni=================================
 
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=7
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
 export SAMPLE_LIMIT=0
 export USE_SPARSEKV="true"
-export BUDGET=0.3
+export BUDGET=0.4
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
 
-export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk64_alpha1_beta1_gamma1.json"
-# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk32_alpha0_beta0_gamma1.json"
-# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk32_alpha0_beta1_gamma0.json"
-# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk32_alpha1_beta0_gamma0.json"
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
 
 # Head Score 聚合方式配置（当 JSON 中有多个分数时如何聚合）
 # 可选值: mean (平均值，默认), first (第一个值), second (第二个值), max (最大值), min (最小值), sum (求和)
@@ -35,8 +32,8 @@ conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
 python code/qwen2.5_librispeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/sparsekv_fft/ASR_Alignment/budget0.3_topk64_alpha1_beta1_gamma1_first \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/sparsekv_fft/ASR_Alignment/budget0.3_topk64_alpha1_beta1_gamma1_first/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/sparsekv_fft/ASR_Alignment/budget0.4_topk24_alpha1_beta1_gamma1_first \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/sparsekv_fft/ASR_Alignment/budget0.4_topk24_alpha1_beta1_gamma1_first/timing_stats.json
 
 # ============================================
 # 常用配置示例

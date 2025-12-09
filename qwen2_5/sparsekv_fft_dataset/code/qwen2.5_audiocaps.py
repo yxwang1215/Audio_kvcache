@@ -649,7 +649,7 @@ def prefix_match(pred, label, ignore_case=True):
     return m
 
 
-def save_results_realtime(output_file, results, total_correct, processed_samples, 
+def save_results_realtime(output_file, results, processed_samples, 
                           timing_stats, gpu_id, prune_ratio, method_is, 
                           sample_limit, dataset_size):
     """
@@ -657,20 +657,6 @@ def save_results_realtime(output_file, results, total_correct, processed_samples
     This allows monitoring progress and viewing results before completion
     """
     try:
-        # Calculate current statistics
-        current_accuracy = (total_correct / processed_samples * 100.0) if processed_samples > 0 else 0.0
-        
-        # Calculate detailed metrics from current results
-        match_scores = [r["match"] for r in results]
-        if len(match_scores) > 0:
-            accuracy = np.mean(match_scores) * 100.0
-            correct_count = int(sum(match_scores))
-            total_count = len(match_scores)
-        else:
-            accuracy = 0.0
-            correct_count = 0
-            total_count = 0
-        
         # Build real-time results structure
         realtime_results = {
             "model_name": f"Qwen2.5-Omni-3B",
@@ -681,12 +667,6 @@ def save_results_realtime(output_file, results, total_correct, processed_samples
                 "processed": len(results),
                 "total": dataset_size,
                 "percentage": len(results) / dataset_size * 100 if dataset_size > 0 else 0
-            },
-            "current_statistics": {
-                "accuracy": float(accuracy),
-                "correct_count": int(correct_count),
-                "total_count": int(total_count),
-                "current_avg_accuracy": float(current_accuracy)
             },
             "timing_stats": timing_stats.get_summary(),
             "config": {
@@ -725,22 +705,11 @@ def calculate_audiocaps_metrics(results):
     """
     if len(results) == 0:
         return {
-            'accuracy': 0.0,
-            'correct_count': 0,
-            'total_count': 0,
             'valid_samples': 0
         }
     
-    match_scores = [r.get("match", 0) for r in results]
-    correct_count = sum(match_scores)
-    total_count = len(match_scores)
-    accuracy = (correct_count / total_count * 100.0) if total_count > 0 else 0.0
-    
     return {
-        'accuracy': float(accuracy),
-        'correct_count': int(correct_count),
-        'total_count': int(total_count),
-        'valid_samples': int(total_count)
+        'valid_samples': len(results)
     }
 
 def main():
@@ -959,7 +928,6 @@ def main():
         print(f"Applying sample limit, processing {len(dataset)} samples")
 
     results = []
-    total_correct = 0
     processed_samples = 0
 
     
@@ -1208,22 +1176,13 @@ def main():
             # Calculate TPS (Tokens Per Second) using decode time
             sample_tps = decode_token_count / decode_time if decode_time > 0 else 0.0
             
-            # Calculate prefix match score
-            match = prefix_match(hypothesis, reference, ignore_case=True)
-            
-            total_correct += match
             processed_samples += 1
-
-            current_accuracy = (total_correct / processed_samples * 100.0) if processed_samples > 0 else 0.0
             
-            # ===== 实时输出准确率 =====
+            # ===== 实时输出样本信息 =====
             # 在每个样本处理后立即输出，格式清晰醒目
             print(f"\n{'='*80}")
             print(f"[Sample {idx+1}/{len(dataset)}] ID={doc.get('id', f'sample_{idx}')} | "
                   f"Duration={doc.get('duration', 0):.1f}s")
-            print(f"{'='*80}")
-            print(f"  📊 当前样本匹配: {'✅ 正确' if match == 1 else '❌ 错误'}")
-            print(f"  📈 平均准确率 (已处理 {processed_samples} 个样本): {current_accuracy:.2f}%")
             print(f"{'='*80}")
             
             # Print question, reference and hypothesis (truncated if too long)
@@ -1235,14 +1194,12 @@ def main():
             print(f"  💬 模型回答: {hyp_display}")
             print(f"{'='*80}\n")
             
-            # 更新进度条，始终显示最新的准确率信息
+            # 更新进度条
             update_interval = 10 if is_screen_env else 1
             sample_count = idx + 1
             
-            # 进度条始终显示最新的准确率
+            # 进度条显示样本进度
             progress_bar.set_postfix({
-                '匹配': '✅' if match == 1 else '❌',
-                '准确率': f'{current_accuracy:.2f}%',
                 '样本': f'{sample_count}/{len(dataset)}'
             })
             
@@ -1250,7 +1207,6 @@ def main():
                 if is_screen_env:
                     # 在非交互式环境中，额外输出进度信息
                     print(f"  📊 进度更新: {sample_count}/{len(dataset)} ({sample_count/len(dataset)*100:.1f}%)")
-                    print(f"  📈 当前平均准确率: {current_accuracy:.2f}%")
 
             
             results.append({
@@ -1259,7 +1215,6 @@ def main():
                 "question": question_text,
                 "reference": reference,
                 "hypothesis": hypothesis,
-                "match": match,
                 "response_text": resp,
                 "duration": doc.get("duration", 0),
                 "decode_token_count": decode_token_count,
@@ -1280,7 +1235,6 @@ def main():
                 save_results_realtime(
                     output_file, 
                     results, 
-                    total_correct, 
                     processed_samples,
                     timing_stats,
                     gpu_id,
@@ -1337,8 +1291,6 @@ def main():
             continue
 
     
-    final_accuracy = (total_correct / processed_samples * 100.0) if processed_samples > 0 else 0.0
-    
     # Calculate detailed metrics
     detailed_metrics = calculate_audiocaps_metrics(results)
 
@@ -1355,11 +1307,6 @@ def main():
         },
         "total_samples": len(results),
         "valid_samples": detailed_metrics['valid_samples'],
-        
-        # AQA metrics
-        "accuracy": detailed_metrics['accuracy'],
-        "correct_count": detailed_metrics['correct_count'],
-        "total_count": detailed_metrics['total_count'],
         
         # Timing statistics
         "timing_stats": timing_stats.get_summary(),
@@ -1395,8 +1342,6 @@ def main():
     print(f"\n=== audiocaps AQA Evaluation Results Summary (Qwen2.5-Omni) ===")
     print(f"Total samples: {len(results)}")
     print(f"Processed samples: {processed_samples}")
-    print(f"Accuracy: {detailed_metrics['accuracy']:.2f}%")
-    print(f"Correct: {detailed_metrics['correct_count']}/{detailed_metrics['total_count']}")
     
     timing_summary = timing_stats.get_summary()
     print(f"\n=== Inference Time Statistics ===")

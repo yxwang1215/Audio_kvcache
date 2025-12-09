@@ -841,9 +841,14 @@ def standardize_text_for_cer(text):
     if not text:
         return ""
     
-    # For Chinese CER, we typically don't lowercase or remove punctuation
-    # Just remove extra whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
+    # Remove punctuation marks (both Chinese and English)
+    # Common Chinese punctuation: ，。！？；：""''（）【】《》、· etc.
+    # Common English punctuation: , . ! ? ; : " ' ( ) [ ] { } - _ etc.
+    punctuation_pattern = r'[，。！？；：""''（）【】《》、·,\.!?;:"\'\(\)\[\]\{\}\-\_\s]+'
+    text = re.sub(punctuation_pattern, '', text)
+    
+    # Remove extra whitespace (in case any remains)
+    text = re.sub(r'\s+', '', text).strip()
     
     return text
 

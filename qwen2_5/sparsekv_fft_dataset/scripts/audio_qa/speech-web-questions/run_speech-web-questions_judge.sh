@@ -5,14 +5,24 @@
 set -e
 
 # =================== 用户配置区 ===================
+# GPU 配置
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-3}"  # 指定使用的 GPU，默认使用 GPU 0
+
 # Judge 模型配置（二选一）
 # export JUDGE_MODEL_PATH="${JUDGE_MODEL_PATH:-/mnt/users/hepeize-20251016/Model/Qwen3-8B}"  # 本地 judge 模型路径
-export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gpt4o-mini}"  # API judge 模型名称（如 gpt4o-mini, qwen-audio）
+export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}"  # API judge 模型名称（如 gemini-2.5-flash, gpt4o-mini, qwen-audio）
+
+# API 配置（使用 API judge 时必填）
+export JUDGE_API_KEY="${JUDGE_API_KEY:-sk-nSeZoIkSf8DGjeO5IvHnZpEc9O0QqeJrUyiJ5Oij55LW4QjF}"  # API Key
+export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}"  # API Base URL
 
 # 输入输出路径
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results/vanilla/full_cache}"
 export INFERENCE_OUTPUT_FILE="${INFERENCE_OUTPUT_FILE:-${OUTPUT_DIR}/speech_web_questions_results_qwen25.json}"
-export JUDGE_OUTPUT_FILE="${JUDGE_OUTPUT_FILE:-${OUTPUT_DIR}/judge_results.jsonl}"
+# Judge 输出文件：与 inference 相同目录，相同格式（JSON）
+export JUDGE_OUTPUT_FILE="${JUDGE_OUTPUT_FILE:-${OUTPUT_DIR}/speech_web_questions_results_qwen25_judge.json}"
+# 强制重新打分（如果设置为 true，将重新处理所有样本，即使已经处理过）
+export FORCE_REJUDGE="${FORCE_REJUDGE:-true}"
 # =============================================================
 
 GREEN='\033[0;32m'
@@ -21,6 +31,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${GREEN}=== 启动 speech-web-questions Judge 打分 ===${NC}"
+echo "Config: CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
 
 # 检查输入文件是否存在
 if [ ! -f "${INFERENCE_OUTPUT_FILE}" ]; then
@@ -46,17 +57,33 @@ if [ -n "${JUDGE_MODEL_PATH}" ]; then
 elif [ -n "${JUDGE_API_MODEL}" ]; then
     JUDGE_ARGS="--judge-api-model ${JUDGE_API_MODEL}"
     echo -e "${BLUE}Using API judge model: ${JUDGE_API_MODEL}${NC}"
+    
+    # 添加 API Key 和 Base URL 参数
+    if [ -n "${JUDGE_API_KEY}" ]; then
+        JUDGE_ARGS="${JUDGE_ARGS} --judge-api-key \"${JUDGE_API_KEY}\""
+        echo -e "${BLUE}API Key: ${JUDGE_API_KEY:0:10}...${NC}"
+    fi
+    if [ -n "${JUDGE_API_BASE_URL}" ]; then
+        JUDGE_ARGS="${JUDGE_ARGS} --judge-api-base-url \"${JUDGE_API_BASE_URL}\""
+        echo -e "${BLUE}API Base URL: ${JUDGE_API_BASE_URL}${NC}"
+    fi
 else
     echo -e "${RED}Error: 必须指定 JUDGE_MODEL_PATH 或 JUDGE_API_MODEL${NC}"
-    echo -e "${RED}例如: export JUDGE_API_MODEL=\"gpt4o-mini\"${NC}"
+    echo -e "${RED}例如: export JUDGE_API_MODEL=\"gemini-2.5-flash\"${NC}"
     exit 1
+fi
+
+# 添加强制重新打分参数
+if [ "${FORCE_REJUDGE}" = "true" ]; then
+    JUDGE_ARGS="${JUDGE_ARGS} --force-rejudge"
+    echo -e "${BLUE}Force rejudge enabled: will re-process all samples${NC}"
 fi
 
 # 打分（使用 LLM as Judge）
 echo -e "${GREEN}>>> 裁判打分...${NC}"
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
-python code/qwen2.5_speech-web-questions.py \
+eval python code/qwen2.5_speech-web-questions.py \
     --mode judge \
     --input-file "${INFERENCE_OUTPUT_FILE}" \
     --output-file "${JUDGE_OUTPUT_FILE}" \

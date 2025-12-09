@@ -2,18 +2,18 @@
 # CoVoST2 Chinese-to-English Speech Translation Evaluation with Qwen2.5-Omni
 # 中文到英语语音翻译评估脚本
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=3
 # 模型路径配置
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 
 export USE_SPARSEKV="true"
-export BUDGET=0.7
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-export HEAD_SCORE_FILE="aggregated"
+export HEAD_SCORE_FILE="uniform"
 
 export USE_FFT_FILTER="false"
 export FFT_FILTER_TYPE="lowpass"
@@ -30,8 +30,8 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset
 python code/qwen3_covost2.py \
     --direction zh_en \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/sparsekv/budget0.7_ratio0.5_window32_kernel5 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/sparsekv/budget0.7_ratio0.5_window32_kernel5/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/SnapKV/budget0.8 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/SnapKV/budget0.8/timing_stats.json
 
 # ============================================
 # 常用配置示例

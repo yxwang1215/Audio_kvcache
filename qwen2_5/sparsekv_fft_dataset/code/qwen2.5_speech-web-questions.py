@@ -703,7 +703,7 @@ def aqa_doc_to_text(doc, kwargs=None):
     question_text = doc.get("QuestionText", doc.get("question", ""))
     
     # AQA prompt template from UltraEval-Audio: "answer the question without explain\n# Question: {{QuestionText}}"
-    prompt_text = f"answer the question without explain\n# Question: {question_text}"
+    prompt_text = f"answer the question without explain\n# Question: {question_text}\n\nDo not output phrases like 'If you want to know more about...' or 'feel free to ask' or any similar invitations to ask more questions. Just provide the direct answer."
     
     return prompt_text
 
@@ -758,21 +758,34 @@ def save_results_realtime(output_file, results, total_correct, processed_samples
     This allows monitoring progress and viewing results before completion
     """
     try:
-        # Calculate current statistics
-        current_accuracy = (total_correct / processed_samples * 100.0) if processed_samples > 0 else 0.0
+        # For inference mode: skip accuracy calculation if total_correct is None
+        # Calculate current statistics only if total_correct is provided
+        if total_correct is not None and processed_samples > 0:
+            current_accuracy = (total_correct / processed_samples * 100.0)
+        else:
+            current_accuracy = None
         
-        # Calculate detailed metrics from current results
-        match_scores = [r["match"] for r in results]
+        # Calculate detailed metrics from current results (only if match field exists)
+        match_scores = [r.get("match") for r in results if "match" in r]
         if len(match_scores) > 0:
             accuracy = np.mean(match_scores) * 100.0
             correct_count = int(sum(match_scores))
             total_count = len(match_scores)
         else:
-            accuracy = 0.0
-            correct_count = 0
-            total_count = 0
+            # Inference mode: no accuracy metrics
+            accuracy = None
+            correct_count = None
+            total_count = None
         
         # Build real-time results structure
+        current_statistics = {}
+        if accuracy is not None:
+            current_statistics["accuracy"] = float(accuracy)
+            current_statistics["correct_count"] = int(correct_count)
+            current_statistics["total_count"] = int(total_count)
+        if current_accuracy is not None:
+            current_statistics["current_avg_accuracy"] = float(current_accuracy)
+        
         realtime_results = {
             "model_name": f"Qwen2.5-Omni-3B",
             "dataset": "speech-web-questions",
@@ -783,12 +796,7 @@ def save_results_realtime(output_file, results, total_correct, processed_samples
                 "total": dataset_size,
                 "percentage": len(results) / dataset_size * 100 if dataset_size > 0 else 0
             },
-            "current_statistics": {
-                "accuracy": float(accuracy),
-                "correct_count": int(correct_count),
-                "total_count": int(total_count),
-                "current_avg_accuracy": float(current_accuracy)
-            },
+            "current_statistics": current_statistics if current_statistics else None,
             "timing_stats": timing_stats.get_summary(),
             "config": {
                 "device": f"cuda:{gpu_id}",
@@ -845,92 +853,535 @@ def calculate_speech_web_questions_metrics(results):
     }
 
 # ==================== Judge Functions ====================
-# Alpaca eval prompt from UltraEval-Audio
-ALPACA_EVAL_PROMPT = """<|im_start|>system
-You are a helpful assistant, that ranks models by the quality of their answers.
+# LLM as Judge prompt for evaluating answer quality against ground truth (reference UltraEval)
+# Updated based on GPT-5.1 feedback: balanced strictness and reasonableness
+JUDGE_PROMPT = """<|im_start|>system
+You are a helpful assistant that evaluates the quality of model-generated answers by comparing them to the provided ground truth reference answer.
 <|im_end|>
 <|im_start|>user
-I want you to create a leaderboard of different of large-language models. To do so, I will give you the instructions (prompts) given to the models, and the responses of two models. Please rank the models based on which responses would be preferred by humans. All inputs and outputs should be python dictionaries.
+Please evaluate the following model response against the ground truth reference answer.
 
-Here is the prompt:
+Question/Instruction:
 {{
     "instruction": ""\"{instruction}\"\"",
 }}
 
-Here are the outputs of the models:
-[
-    {{
-        "model": "model_1",
-        "answer": ""\"{output_1}\"\""
-    }},
-    {{
-        "model": "model_2",
-        "answer": ""\"{output_2}\"\""
-    }}
-]
+Ground Truth Reference Answer:
+{{
+    "reference": ""\"{reference}\"\"",
+}}
 
-Now please rank the models by the quality of their answers, so that the model with rank 1 has the best output. Then return a list of the model names and ranks, i.e., produce the following output:
-[
-    {{'model': <model-name>, 'rank': <model-rank>}},
-    {{'model': <model-name>, 'rank': <model-rank>}}
-]
+Model Output:
+{{
+    "prediction": ""\"{prediction}\"\"",
+}}
 
-Your response must be a valid Python dictionary and should contain nothing else because we will directly execute it in Python. Please provide the ranking that the majority of humans would give.
+Your task is to determine whether the model output correctly answers the question based on the ground truth reference answer.
+
+**CORE EVALUATION PRINCIPLE:**
+
+Score = 1 (CORRECT) if:
+- The prediction **explicitly contains the correct answer** (can be synonyms, aliases, or equivalent expressions)
+- AND there are **no contradictory factual errors** in the core facts of the answer
+- Extra information, verbosity, or conversational style does NOT reduce the score
+
+Score = 0 (INCORRECT) if:
+- **Key information is wrong** (wrong person name, place name, country, year, date, etc.)
+- The prediction says "I don't know", "I'm not sure", or **asks the user to look it up** (e.g., "check the website", "you might want to check", "look it up")
+- The prediction mentions the correct keyword BUT also contains **contradictory core facts** (e.g., saying someone "became VP" when they were already VP and became President)
+- **Fails to provide requested specific information**: If the question asks for specific information (e.g., a schedule, a list, dates, times, a complete answer) and the prediction only provides vague, incomplete, or speculative information without the core requested details, score 0.
+  - Example: Question asks "what is the 2012 football schedule?", prediction mentions a few possible opponents but provides no actual schedule, dates, or complete list → Score 0
+  - Example: Question asks for a specific list or schedule, prediction says "they played some teams" or "check the website" → Score 0
+- **Vague or speculative answers**: If the prediction is vague, uncertain, or speculative about facts that should be concrete, score 0.
+  - Example: "They had some tough games" or "schedules can change sometimes" when asked for a specific past schedule → Score 0
+
+**DETAILED GUIDELINES:**
+
+**When to give Score = 1 (Be Reasonable, Not Overly Strict):**
+
+1. **Synonyms and Aliases**: If the prediction uses a synonym or alias of the reference answer, score 1.
+   - Example: "Ross Bagdasarian Sr." = "David Seville" (same person, different name) → Score 1
+   - Example: "French" when reference is "French language" or "French and English" → Score 1
+
+2. **Core Fact Correct**: If the prediction captures the core fact correctly, even if not word-for-word identical, score 1.
+   - Example: Question asks what lachrymatory collects, answer says "tears" → Score 1 (core fact correct)
+   - Example: Question asks about bufflehead, answer says "a small diving duck" or "a type of duck" → Score 1 (core fact correct)
+
+3. **Partial Matches**: If the reference contains multiple parts but the prediction contains the key correct answer, score 1.
+   - Example: Reference is "Challenger Deep, Mariana Trench", prediction says "Mariana Trench" → Score 1
+   - Example: Reference is "English and French", prediction says "French" (when question asks "besides English") → Score 1
+   - **IMPORTANT for Lists/Multiple Items**: If the reference contains multiple items (e.g., a list of exercises, actors, foods) and the prediction contains **multiple correct items** from the reference, score 1, even if some items are missing.
+     - Example: Reference is "walking, swimming, biking, squats, lunges, push-ups, planks, sit-ups" (best exercises for beginners), prediction says "push-ups, squats, lunges, planks, sit-ups" → Score 1 (contains multiple correct answers)
+     - Example: Reference lists 10 actors, prediction lists 5 of them correctly → Score 1 (contains multiple correct answers)
+     - The key principle: If the prediction contains **multiple correct answers** from a list-type reference, it demonstrates understanding and should score 1, even if not exhaustive.
+   - **CRITICAL EXCEPTION**: If the question explicitly asks for a **complete schedule, complete list, or specific structured information** (e.g., "what is the 2012 schedule?", "list all items"), and the prediction only provides vague mentions or partial information without the core requested structure, score 0, even if it mentions some correct items.
+     - Example: Question asks "what is the 2012 football schedule?", prediction says "they played some teams like X, Y, Z" without providing actual schedule → Score 0 (missing core requested information: the schedule itself)
+
+4. **Hierarchical Relationships**: If the reference is specific but prediction gives a valid parent/general category, score 1.
+   - Example: Reference is "bufflehead", prediction says "duck" or "diving duck" → Score 1
+
+5. **Additional Information**: If the prediction contains the correct answer plus extra correct information, score 1.
+   - Example: Reference is "Chicago", prediction says "Chicago, Illinois" → Score 1
+   - Verbosity and conversational style are acceptable and do not reduce the score
+
+6. **Case Variations**: Different capitalization, punctuation, or formatting should not affect the score if the core answer is correct.
+
+**When to give Score = 0 (Be Strict on Factual Errors):**
+
+1. **Wrong Key Information**: If critical facts are wrong, score 0.
+   - Wrong person: "Elizabeth I" → "Queen Victoria" → Score 0
+   - Wrong person: "David Bowie" → "David Essex" → Score 0
+   - Wrong person: "Steve Biko" → "Nelson Mandela" → Score 0
+   - Wrong place: "Australia" → "United States" → Score 0
+   - Wrong place: "Kenya" → "Malaya" → Score 0
+   - Wrong place: "Amsterdam" → "Paris" → Score 0
+   - Wrong year: "1970" → "1985" → Score 0
+   - Wrong entity: "Mallard" → "Bluebell" → Score 0
+   - Wrong title: "Live and Let Die" → "The Man with the Golden Gun" → Score 0
+
+2. **Contradictory Core Facts**: If the prediction mentions the correct keyword but states contradictory facts, score 0.
+   - Example: Question asks "who was vice president after Kennedy died?", prediction says "Lyndon B. Johnson became the vice president" → Score 0 (he was already VP, became President)
+
+3. **No Answer or Uncertainty**: If the prediction says "I don't know", "I'm not sure", or asks the user to look it up (e.g., "check the website", "you might want to check"), score 0.
+
+4. **Incomplete or Vague Answers for Specific Requests**: If the question asks for specific information (schedule, list, dates, complete answer) and the prediction:
+   - Only provides vague mentions without concrete details → Score 0
+   - Says "some teams" or "various opponents" without listing them → Score 0
+   - Provides speculative information ("they might have played", "probably") → Score 0
+   - Redirects the user to external sources instead of answering → Score 0
+   - Example: Question asks "what is the 2012 football schedule?", prediction says "they played some teams like X, Y, Z, but check the website for details" → Score 0 (incomplete + redirects)
+
+5. **Fundamentally Wrong**: If the prediction is completely off-topic or fundamentally incorrect, score 0.
+
+**EVALUATION CHECKLIST:**
+
+Before scoring, ask yourself:
+1. Does the question ask for **specific information** (schedule, list, dates, complete answer)? 
+   - If YES: Does the prediction provide that specific information, or just vague mentions? → If vague/incomplete, Score 0
+2. Does the prediction **redirect the user** to external sources instead of answering? → If YES, Score 0
+3. Does the prediction contain the correct answer (or its synonym/alias)? → If YES, likely Score 1 (unless it fails checks 1-2)
+4. Are there any contradictory factual errors in key information (person, place, year, etc.)? → If YES, Score 0
+5. Is the core fact correct even if wording differs? → If YES, Score 1 (unless it fails checks 1-2)
+6. Is the prediction just verbose or conversational but factually correct? → If YES, Score 1 (unless it fails checks 1-2)
+
+**Remember:**
+- Focus on **core factual correctness**, not exact wording
+- Allow synonyms, aliases, and equivalent expressions
+- Be strict on **factual errors** (wrong names, places, years)
+- Verbosity and extra correct information are acceptable
+
+Please evaluate and return your judgment in the following JSON format:
+{{
+    "score": <0 or 1>
+}}
+
+IMPORTANT: Your response must be valid JSON format (use double quotes, not single quotes) and should contain nothing else. Do not wrap it in code blocks. Return only the JSON object with the score field.
 <|im_end|>"""
 
 
-def call_api_judge(api_model, instruction, output_1, output_2):
-    """Call API model as judge (following UltraEval-Audio AlpacaEvaluator pattern)"""
+def repair_and_parse_json(text):
+    """Robust JSON parsing function (following alimeeting pattern)"""
+    if not text or not text.strip():
+        raise ValueError("Empty text")
+    
+    # Convert to string if not already
+    if not isinstance(text, str):
+        text = str(text)
+    
+    text = text.strip()
+    
+    # Remove redacted reasoning blocks and other noise
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    
+    # Handle cases where response contains multiple code blocks or malformed content
+    # Try to extract the first valid JSON-like structure
+    code_block_patterns = [
+        r"```(?:json|python)?\s*(\[.*?\])\s*```",  # List in code block
+        r"```(?:json|python)?\s*(\{.*?\})\s*```",  # Dict in code block
+        r"```(?:json|python)?\s*(.*?)\s*```",      # Any content in code block
+    ]
+    
+    for pattern in code_block_patterns:
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            extracted = match.group(1).strip()
+            if extracted:
+                text = extracted
+                break
+    
+    # If still contains code block markers, try to clean them
+    if "```" in text:
+        # Remove any remaining code block markers
+        text = re.sub(r"```(?:json|python)?", "", text).strip()
+        text = re.sub(r"```", "", text).strip()
+    
+    # Try json.loads first
     try:
-        # Format prompt
-        prompt = deepcopy(ALPACA_EVAL_PROMPT)
-        prompt = prompt.replace("{instruction}", instruction)
-        prompt = prompt.replace("{output_1}", output_1)
-        prompt = prompt.replace("{output_2}", output_2)
+        return json.loads(text)
+    except:
+        pass
+    
+    # Try ast.literal_eval
+    try:
+        return ast.literal_eval(text)
+    except:
+        pass
+    
+    # Try to extract dict from text (for judge response format: {"score": 0 or 1, "explanation": "..."})
+    if text.startswith("{") or "score" in text.lower():
+        # First try non-greedy match for dict
+        match = re.search(r"(\{.*?\})", text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except:
+                try:
+                    return ast.literal_eval(match.group(1))
+                except:
+                    pass
+        # If that fails, try greedy match (might capture more, including truncated)
+        match = re.search(r"(\{.*)", text, re.DOTALL)
+        if match:
+            extracted = match.group(1)
+            # Try to fix incomplete JSON (handle truncation)
+            if not extracted.strip().endswith("}"):
+                # Try to complete truncated JSON - simpler approach: just extract score
+                if '"score"' in extracted or "'score'" in extracted:
+                    # Extract score if available
+                    score_match = re.search(r'"score"\s*:\s*(\d+)', extracted)
+                    if not score_match:
+                        score_match = re.search(r"'score'\s*:\s*(\d+)", extracted)
+                    if score_match:
+                        try:
+                            score_val = int(score_match.group(1))
+                            # Return minimal valid JSON with just score (more robust)
+                            return {"score": score_val}
+                        except:
+                            pass
+            else:
+                # Complete JSON, try to parse
+                try:
+                    return json.loads(extracted)
+                except:
+                    try:
+                        return ast.literal_eval(extracted)
+                    except:
+                        pass
+    
+    # Try to extract list from text (use non-greedy first, then greedy)
+    if text.startswith("[") or "model" in text.lower() or "rank" in text.lower():
+        # First try non-greedy match
+        match = re.search(r"(\[.*?\])", text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except:
+                try:
+                    return ast.literal_eval(match.group(1))
+                except:
+                    pass
+        # If that fails, try greedy match (might capture more)
+        match = re.search(r"(\[.*\])", text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except:
+                try:
+                    return ast.literal_eval(match.group(1))
+                except:
+                    pass
+    
+    # Try to fix incomplete JSON (handle truncation)
+    if text.strip().startswith("[") and not text.strip().endswith("]"):
+        # Try various completion strategies
+        completion_strategies = [
+            text + "]",  # Simple closing bracket
+            text + "}]",  # Close dict then list
+            text + "}]}]",  # Close two dicts then list
+        ]
         
-        # Call API model
-        res = api_model.inference(prompt, temperature=0, maxTokens=100)
+        # If we can see partial model/rank info, try to complete it
+        if "'model'" in text or '"model"' in text:
+            # Try to extract what we have and complete it
+            if "'model'" in text:
+                # Python dict format - try to convert to JSON and complete
+                try:
+                    # Find the last complete or partial entry
+                    last_comma = text.rfind(",")
+                    if last_comma > 0:
+                        # Try to complete the last entry
+                        partial = text[:last_comma + 1]
+                        # Try to find rank value even if incomplete
+                        rank_match = re.search(r"'rank'\s*:\s*(\d+)", text)
+                        if rank_match:
+                            rank_val = rank_match.group(1)
+                            model_match = re.search(r"'model'\s*:\s*['\"]?model_(\d+)['\"]?", text)
+                            if model_match:
+                                model_num = model_match.group(1)
+                                # Try to construct complete JSON
+                                completion_strategies.append(
+                                    f'[{{"model": "model_{model_num}", "rank": {rank_val}}}]'
+                                )
+                except:
+                    pass
         
-        # Parse response (following AlpacaEvaluator logic)
-        if res.startswith("```python"):
-            res = res[9:-3].strip()
-        elif res.startswith("```"):
-            res = res[3:-3].strip()
-        
+        for strategy in completion_strategies:
+            try:
+                return json.loads(strategy)
+            except:
+                try:
+                    return ast.literal_eval(strategy)
+                except:
+                    pass
+    
+    # Last resort: try to extract ranking info via regex (handle both dict and list formats)
+    # Try to find model_1 and model_2 ranks (handle both complete and truncated responses)
+    
+    # More flexible patterns that work even with truncated responses
+    model_1_rank_match = re.search(r'"model"\s*:\s*["\']?model_1["\']?\s*[,:}][^}]*"rank"\s*:\s*(\d+)', text)
+    if not model_1_rank_match:
+        model_1_rank_match = re.search(r"'model'\s*:\s*['\"]?model_1['\"]?\s*[,:}][^}]*'rank'\s*:\s*(\d+)", text)
+    if not model_1_rank_match:
+        # Try even more flexible pattern for truncated responses
+        model_1_rank_match = re.search(r"model_1[^}]*?rank['\"]?\s*:\s*(\d+)", text, re.IGNORECASE)
+    if not model_1_rank_match:
+        model_1_rank_match = re.search(r"model_1.*?rank.*?(\d+)", text, re.IGNORECASE)
+    
+    model_2_rank_match = re.search(r'"model"\s*:\s*["\']?model_2["\']?\s*[,:}][^}]*"rank"\s*:\s*(\d+)', text)
+    if not model_2_rank_match:
+        model_2_rank_match = re.search(r"'model'\s*:\s*['\"]?model_2['\"]?\s*[,:}][^}]*'rank'\s*:\s*(\d+)", text)
+    if not model_2_rank_match:
+        # Try even more flexible pattern for truncated responses
+        model_2_rank_match = re.search(r"model_2[^}]*?rank['\"]?\s*:\s*(\d+)", text, re.IGNORECASE)
+    if not model_2_rank_match:
+        model_2_rank_match = re.search(r"model_2.*?rank.*?(\d+)", text, re.IGNORECASE)
+    
+    if model_1_rank_match and model_2_rank_match:
         try:
-            res = ast.literal_eval(res)
-            if isinstance(res, dict):
-                for k in res:
-                    res = res[k]
-                    break
-            # Return 1 if model_1 (prediction) is ranked higher, 0 otherwise
-            if isinstance(res, list) and len(res) >= 2:
-                model_1_rank = next((item.get("rank") for item in res if item.get("model") == "model_1"), None)
-                model_2_rank = next((item.get("rank") for item in res if item.get("model") == "model_2"), None)
-                if model_1_rank is not None and model_2_rank is not None:
-                    # Lower rank number means better (rank 1 is best)
-                    return 1 if model_1_rank < model_2_rank else 0
-            return 0
+            return [
+                {"model": "model_1", "rank": int(model_1_rank_match.group(1))},
+                {"model": "model_2", "rank": int(model_2_rank_match.group(1))}
+            ]
+        except:
+            pass
+    
+    # Try to extract just the ranks if we can find them (even from truncated responses)
+    all_ranks = re.findall(r'"rank"\s*:\s*(\d+)', text)
+    if not all_ranks:
+        all_ranks = re.findall(r"'rank'\s*:\s*(\d+)", text)
+    if not all_ranks:
+        # Try even more flexible pattern
+        all_ranks = re.findall(r"rank['\"]?\s*:\s*(\d+)", text, re.IGNORECASE)
+    
+    # If we found ranks, try to match them with models
+    if len(all_ranks) >= 2:
+        try:
+            # Try to determine which rank belongs to which model
+            model_1_pos = text.find("model_1")
+            model_2_pos = text.find("model_2")
+            
+            if model_1_pos >= 0 and model_2_pos >= 0:
+                # Find ranks near each model
+                rank_1_match = re.search(r"model_1[^}]*?rank['\"]?\s*:\s*(\d+)", text, re.IGNORECASE)
+                rank_2_match = re.search(r"model_2[^}]*?rank['\"]?\s*:\s*(\d+)", text, re.IGNORECASE)
+                
+                if rank_1_match and rank_2_match:
+                    return [
+                        {"model": "model_1", "rank": int(rank_1_match.group(1))},
+                        {"model": "model_2", "rank": int(rank_2_match.group(1))}
+                    ]
+            
+            # Fallback: assume first rank is model_1, second is model_2
+            return [
+                {"model": "model_1", "rank": int(all_ranks[0])},
+                {"model": "model_2", "rank": int(all_ranks[1])}
+            ]
+        except:
+            pass
+    elif len(all_ranks) == 1:
+        # Only found one rank - might be truncated, try to infer the other
+        try:
+            found_rank = int(all_ranks[0])
+            # If we found model_1's rank, assume model_2 has rank 2 (or vice versa)
+            if "model_1" in text.lower() and found_rank == 1:
+                return [
+                    {"model": "model_1", "rank": 1},
+                    {"model": "model_2", "rank": 2}
+                ]
+            elif "model_2" in text.lower() and found_rank == 1:
+                return [
+                    {"model": "model_1", "rank": 2},
+                    {"model": "model_2", "rank": 1}
+                ]
+        except:
+            pass
+    
+    # Try to extract score from text (for judge response format: {"score": 0 or 1})
+    # This is a last resort for truncated responses
+    # Use simpler approach like speech-triviaqa: just return score, don't try to extract explanation
+    # This is more robust for truncated responses
+    score_match = re.search(r'"score"\s*:\s*(\d+)', text)
+    if not score_match:
+        score_match = re.search(r"'score'\s*:\s*(\d+)", text)
+    if score_match:
+        try:
+            score_val = int(score_match.group(1))
+            # Just return score, don't try to extract explanation (more robust for truncated responses)
+            return {"score": score_val}
+        except:
+            pass
+    
+    preview = text[:300] + "..." + text[-100:] if len(text) > 400 else text
+    raise ValueError(f"JSON Parse Failed. Preview:\n{preview}")
+
+
+def call_api_judge(api_client, model_name, instruction, prediction, reference, max_retries=3):
+    """Call API model as judge to evaluate prediction against ground truth reference"""
+    for retry in range(max_retries):
+        try:
+            # Format prompt
+            prompt = deepcopy(JUDGE_PROMPT)
+            prompt = prompt.replace("{instruction}", instruction)
+            prompt = prompt.replace("{prediction}", prediction)
+            prompt = prompt.replace("{reference}", reference)
+            
+            # Convert ChatML format to messages format for OpenAI API
+            # Parse <|im_start|>system and <|im_start|>user tags
+            messages = []
+            if "<|im_start|>system" in prompt:
+                parts = prompt.split("<|im_start|>")
+                for part in parts:
+                    if part.strip().startswith("system"):
+                        content = part.split("<|im_end|>")[0].replace("system", "", 1).strip()
+                        if content:
+                            messages.append({"role": "system", "content": content})
+                    elif part.strip().startswith("user"):
+                        content = part.split("<|im_end|>")[0].replace("user", "", 1).strip()
+                        if content:
+                            messages.append({"role": "user", "content": content})
+            else:
+                # If no ChatML format, treat entire prompt as user message
+                messages = [{"role": "user", "content": prompt}]
+            
+            # Call API directly using OpenAI client (like alimeeting's simple approach)
+            try:
+                response = api_client.chat.completions.create(
+                    model=model_name,
+                    messages=messages,
+                    temperature=0,
+                    max_tokens=2000  # Increased to prevent truncation of JSON responses
+                )
+                res = response.choices[0].message.content
+                
+                # Check if response is None or empty
+                if res is None or not res.strip():
+                    if retry < max_retries - 1:
+                        print(f"Warning: Empty response from API judge (retry {retry + 1}/{max_retries})")
+                        print(f"  Model: {model_name}, Response object: {response}")
+                        # Increase retry delay for empty responses (might be rate limiting)
+                        time.sleep(2 * (retry + 1))  # Exponential backoff: 2s, 4s, 6s
+                        continue
+                    print(f"Warning: Empty response from API judge after {max_retries} retries")
+                    print(f"  Model: {model_name}, Last response object: {response}")
+                    return 0
+            except Exception as api_error:
+                if retry < max_retries - 1:
+                    print(f"API call failed (retry {retry + 1}/{max_retries}): {api_error}")
+                    # Exponential backoff for API errors
+                    time.sleep(2 * (retry + 1))  # 2s, 4s, 6s
+                    continue
+                print(f"Error calling API judge after {max_retries} retries: {api_error}")
+                traceback.print_exc()
+                return 0
+            
+            
+            # Use robust parsing function
+            try:
+                parsed_res = repair_and_parse_json(res)
+                
+                # Handle new response format: {"score": 0 or 1, "explanation": "..."}
+                if isinstance(parsed_res, dict):
+                    # Extract score from the response
+                    score = parsed_res.get("score")
+                    if score is not None:
+                        # Ensure score is 0 or 1
+                        score = int(score)
+                        if score not in [0, 1]:
+                            # Normalize: any non-zero becomes 1
+                            score = 1 if score > 0 else 0
+                        return score
+                    # Try alternative keys
+                    for key in ["judge_score", "correct", "is_correct", "result"]:
+                        if key in parsed_res:
+                            val = parsed_res[key]
+                            if isinstance(val, (int, float, bool)):
+                                return 1 if val else 0
+                            elif isinstance(val, str):
+                                val_lower = val.lower()
+                                if val_lower in ["yes", "true", "correct", "1"]:
+                                    return 1
+                                elif val_lower in ["no", "false", "incorrect", "0"]:
+                                    return 0
+                
+                # If we got here, parsing succeeded but format is unexpected
+                if retry < max_retries - 1:
+                    time.sleep(1)
+                    continue
+                print(f"Warning: Unexpected response format: {parsed_res}")
+                return 0
+                
+            except ValueError as e:
+                # Parsing failed, retry if possible
+                if retry < max_retries - 1:
+                    print(f"Parsing failed (retry {retry + 1}/{max_retries}): {str(e)[:100]}")
+                    time.sleep(1)
+                    continue
+                # Show more context about the failed response
+                response_preview = res[:500] if res and len(res) > 500 else (res if res else '(empty)')
+                print(f"Error parsing judge response after {max_retries} retries: {e}")
+                print(f"Response preview: {response_preview}")
+                return 0
+                
+        except KeyboardInterrupt:
+            raise
         except Exception as e:
-            print(f"Error parsing judge response: {e}, response: {res[:200]}")
+            if retry < max_retries - 1:
+                time.sleep(1)
+                continue
+            print(f"Error calling API judge after {max_retries} retries: {e}")
+            traceback.print_exc()
             return 0
-    except Exception as e:
-        print(f"Error calling API judge: {e}")
-        traceback.print_exc()
-        return 0
+    
+    return 0
 
 
-def call_local_judge(model, tokenizer, instruction, output_1, output_2):
-    """Call local model as judge (following alimeeting pattern)"""
+def call_local_judge(model, tokenizer, instruction, prediction, reference):
+    """Call local model as judge to evaluate prediction against ground truth reference"""
     try:
         # Format prompt
-        prompt = deepcopy(ALPACA_EVAL_PROMPT)
+        prompt = deepcopy(JUDGE_PROMPT)
         prompt = prompt.replace("{instruction}", instruction)
-        prompt = prompt.replace("{output_1}", output_1)
-        prompt = prompt.replace("{output_2}", output_2)
+        prompt = prompt.replace("{prediction}", prediction)
+        prompt = prompt.replace("{reference}", reference)
         
-        # Convert to messages format
-        messages = [{"role": "user", "content": prompt}]
+        # Convert ChatML format to messages format
+        messages = []
+        if "<|im_start|>system" in prompt:
+            parts = prompt.split("<|im_start|>")
+            for part in parts:
+                if part.strip().startswith("system"):
+                    content = part.split("<|im_end|>")[0].replace("system", "", 1).strip()
+                    if content:
+                        messages.append({"role": "system", "content": content})
+                elif part.strip().startswith("user"):
+                    content = part.split("<|im_end|>")[0].replace("user", "", 1).strip()
+                    if content:
+                        messages.append({"role": "user", "content": content})
+        else:
+            # If no ChatML format, treat entire prompt as user message
+            messages = [{"role": "user", "content": prompt}]
+        
         text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
         
@@ -945,25 +1396,39 @@ def call_local_judge(model, tokenizer, instruction, output_1, output_2):
                          zip(model_inputs.input_ids, generated_ids)]
         res = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
         
-        # Parse response (following AlpacaEvaluator logic)
+        # Parse response
         if res.startswith("```python"):
             res = res[9:-3].strip()
         elif res.startswith("```"):
             res = res[3:-3].strip()
         
         try:
-            res = ast.literal_eval(res)
-            if isinstance(res, dict):
-                for k in res:
-                    res = res[k]
-                    break
-            # Return 1 if model_1 (prediction) is ranked higher, 0 otherwise
-            if isinstance(res, list) and len(res) >= 2:
-                model_1_rank = next((item.get("rank") for item in res if item.get("model") == "model_1"), None)
-                model_2_rank = next((item.get("rank") for item in res if item.get("model") == "model_2"), None)
-                if model_1_rank is not None and model_2_rank is not None:
-                    # Lower rank number means better (rank 1 is best)
-                    return 1 if model_1_rank < model_2_rank else 0
+            parsed_res = repair_and_parse_json(res)
+            
+            # Handle new response format: {"score": 0 or 1, "explanation": "..."}
+            if isinstance(parsed_res, dict):
+                # Extract score from the response
+                score = parsed_res.get("score")
+                if score is not None:
+                    # Ensure score is 0 or 1
+                    score = int(score)
+                    if score not in [0, 1]:
+                        # Normalize: any non-zero becomes 1
+                        score = 1 if score > 0 else 0
+                    return score
+                # Try alternative keys
+                for key in ["judge_score", "correct", "is_correct", "result"]:
+                    if key in parsed_res:
+                        val = parsed_res[key]
+                        if isinstance(val, (int, float, bool)):
+                            return 1 if val else 0
+                        elif isinstance(val, str):
+                            val_lower = val.lower()
+                            if val_lower in ["yes", "true", "correct", "1"]:
+                                return 1
+                            elif val_lower in ["no", "false", "incorrect", "0"]:
+                                return 0
+            
             return 0
         except Exception as e:
             print(f"Error parsing judge response: {e}, response: {res[:200]}")
@@ -974,7 +1439,7 @@ def call_local_judge(model, tokenizer, instruction, output_1, output_2):
         return 0
 
 
-def run_llm_judge(judge_model_path=None, judge_api_model=None, input_file=None, output_file=None):
+def run_llm_judge(judge_model_path=None, judge_api_model=None, judge_api_key=None, judge_api_base_url=None, input_file=None, output_file=None, force_rejudge=False):
     """Run LLM judge evaluation (supports both API and local models)"""
     print(f"=== Starting LLM Judge Evaluation ===")
     
@@ -1003,104 +1468,144 @@ def run_llm_judge(judge_model_path=None, judge_api_model=None, input_file=None, 
             print(f"Local model load failed: {e}")
             return
     
-    # Load API model if needed
-    api_model = None
+    # Load API client if needed (following alimeeting's simple approach)
+    api_client = None
     if use_api:
         print(f"Using API Judge Model: {judge_api_model}")
+        if judge_api_key:
+            print(f"Using custom API Key: {judge_api_key[:10]}...")
+        if judge_api_base_url:
+            print(f"Using custom Base URL: {judge_api_base_url}")
+        
         try:
-            # Try to load from UltraEval-Audio registry
-            ultraeval_root = "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio"
-            if os.path.exists(ultraeval_root):
-                if ultraeval_root not in sys.path:
-                    sys.path.insert(0, ultraeval_root)
-                from audio_evals.registry import registry
-                api_model = registry.get_model(judge_api_model)
-                if api_model is None:
-                    print(f"Warning: Could not load API model '{judge_api_model}' from registry")
-                else:
-                    print(f"API judge model '{judge_api_model}' loaded successfully")
+            # Directly create OpenAI client (like alimeeting's simple approach)
+            from openai import OpenAI
+            
+            api_key = judge_api_key or os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                print("Error: No API key provided. Please set --judge-api-key or OPENAI_API_KEY environment variable.")
+                if not use_local:
+                    return
             else:
-                print(f"Warning: UltraEval-Audio root not found at {ultraeval_root}")
+                api_client = OpenAI(
+                    api_key=api_key,
+                    base_url=judge_api_base_url if judge_api_base_url else None
+                )
+                print(f"API judge client created successfully for model: {judge_api_model}")
         except Exception as e:
-            print(f"API model load failed: {e}")
+            print(f"API client creation failed: {e}")
             traceback.print_exc()
             if not use_local:
                 return
     
-    if not api_model and not judge_model:
+    if not api_client and not judge_model:
         print("Error: Failed to load any judge model")
         return
     
-    os.makedirs(os.path.dirname(output_file), exist_ok=True) if output_file else None
     if not os.path.exists(input_file):
         print(f"Error: Input file not found: {input_file}")
         return
     
-    # Process input file
-    processed_count = 0
-    if output_file and os.path.exists(output_file):
-        with open(output_file, 'r', encoding='utf-8') as f:
-            processed_count = sum(1 for _ in f)
-    print(f"Resuming from line {processed_count}...")
-    
-    results = []
-    total_correct = 0
-    total_processed = 0
-    
-    # Read input file (could be single JSON or JSONL)
+    # Read input file (inference results JSON)
     with open(input_file, 'r', encoding='utf-8') as f_in:
         content = f_in.read().strip()
     
     try:
-        # Try to parse as JSON first
-        try:
-            data = json.loads(content)
-            if isinstance(data, dict) and "detailed_results" in data:
-                data_list = data["detailed_results"]
-            elif isinstance(data, list):
-                data_list = data
-            else:
-                # Single result object
-                data_list = [data]
-        except json.JSONDecodeError:
-            # Try JSONL format
-            data_list = []
-            with open(input_file, 'r', encoding='utf-8') as f_in:
-                for line in f_in:
-                    if line.strip():
-                        try:
-                            data_list.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            continue
+        # Parse inference results JSON
+        inference_data = json.loads(content)
+        
+        # Extract metadata and detailed_results
+        if isinstance(inference_data, dict) and "detailed_results" in inference_data:
+            # Full JSON structure with metadata
+            metadata = {k: v for k, v in inference_data.items() if k != "detailed_results"}
+            data_list = inference_data["detailed_results"]
+        elif isinstance(inference_data, list):
+            # Just a list of results (legacy format)
+            metadata = {}
+            data_list = inference_data
+        else:
+            # Single result object
+            metadata = {}
+            data_list = [inference_data]
     except Exception as e:
         print(f"Error reading input file: {e}")
         traceback.print_exc()
         return
     
-    # Open output file
-    if output_file:
-        f_out = open(output_file, 'a', encoding='utf-8')
-    else:
-        f_out = None
+    # Check if output file exists (for resume)
+    processed_indices = {}
+    if output_file and os.path.exists(output_file) and not force_rejudge:
+        try:
+            with open(output_file, 'r', encoding='utf-8') as f:
+                existing_data = json.load(f)
+                if isinstance(existing_data, dict) and "detailed_results" in existing_data:
+                    existing_results = existing_data["detailed_results"]
+                    # Find already processed samples by checking for judge_score
+                    for item in existing_results:
+                        if "judge_score" in item and "idx" in item:
+                            processed_indices[item["idx"]] = item
+            print(f"Resuming from {len(processed_indices)} already processed samples...")
+        except Exception:
+            print("Could not read existing output file, starting fresh...")
+    elif force_rejudge:
+        print("Force rejudge enabled: will re-process all samples...")
+    
+    results = []
+    total_correct = 0
+    total_processed = 0
     
     try:
-        for idx, data in enumerate(tqdm(data_list, desc="Judge Evaluating")):
-            if idx < processed_count:
+        # Create progress bar with postfix for statistics
+        pbar = tqdm(data_list, desc="Judge Evaluating")
+        for idx, data in enumerate(pbar):
+            sample_idx = data.get("idx", idx)
+            
+            # Check if already processed
+            if sample_idx in processed_indices:
+                existing_item = processed_indices[sample_idx]
+                results.append(existing_item)
+                if existing_item.get("judge_score") == 1:
+                    total_correct += 1
+                if existing_item.get("judge_score") is not None:
+                    total_processed += 1
+                # Update progress bar even for skipped samples (real-time accuracy)
+                current_acc = (total_correct / total_processed * 100.0) if total_processed > 0 else 0.0
+                pbar.set_postfix({
+                    'acc': f'{current_acc:.2f}%',
+                    'correct': f'{total_correct}/{total_processed}'
+                })
+                pbar.refresh()  # Force immediate update
                 continue
             
             try:
                 # Extract data
                 instruction = data.get("question", data.get("QuestionText", ""))
                 pred = data.get("hypothesis", data.get("response_text", ""))
-                ref = data.get("reference", data.get("answer", ""))
+                ref_raw = data.get("reference", data.get("answer", ""))
+                
+                # Handle reference: convert list to string if needed
+                if isinstance(ref_raw, list):
+                    # If reference is a list, join them with " or " or use the first one
+                    if len(ref_raw) > 0:
+                        ref = " or ".join(str(r) for r in ref_raw) if len(ref_raw) > 1 else str(ref_raw[0])
+                    else:
+                        ref = ""
+                else:
+                    ref = str(ref_raw) if ref_raw else ""
                 
                 if not instruction or not pred or not ref:
                     print(f"Warning: Missing data at index {idx}")
+                    # Still add the result without judge_score
+                    output_item = data.copy()
+                    output_item["judge_score"] = None
+                    output_item["judge_method"] = "api" if use_api else "local"
+                    output_item["judge_error"] = "Missing data"
+                    results.append(output_item)
                     continue
                 
                 # Call judge
-                if use_api and api_model:
-                    judge_score = call_api_judge(api_model, instruction, pred, ref)
+                if use_api and api_client:
+                    judge_score = call_api_judge(api_client, judge_api_model, instruction, pred, ref)
                 elif use_local and judge_model:
                     judge_score = call_local_judge(judge_model, judge_tokenizer, instruction, pred, ref)
                 else:
@@ -1109,28 +1614,103 @@ def run_llm_judge(judge_model_path=None, judge_api_model=None, input_file=None, 
                 total_correct += judge_score
                 total_processed += 1
                 
-                # Update result
+                # Update progress bar with statistics (real-time accuracy)
+                current_acc = (total_correct / total_processed * 100.0) if total_processed > 0 else 0.0
+                pbar.set_postfix({
+                    'acc': f'{current_acc:.2f}%',
+                    'correct': f'{total_correct}/{total_processed}'
+                })
+                pbar.refresh()  # Force immediate update
+                
+                # Update result with judge information
                 output_item = data.copy()
                 output_item["judge_score"] = judge_score
                 output_item["judge_method"] = "api" if use_api else "local"
                 
                 results.append(output_item)
                 
-                if f_out:
-                    f_out.write(json.dumps(output_item, ensure_ascii=False) + '\n')
-                    f_out.flush()
+                # Save results in real-time (same format as inference)
+                if output_file and (idx + 1) % 10 == 0:  # Save every 10 samples
+                    final_results = {
+                        "model_name": metadata.get("model_name", "Qwen2.5-Omni-3B"),
+                        "dataset": metadata.get("dataset", "speech-web-questions"),
+                        "task": metadata.get("task", "AQA (Audio Question Answering)"),
+                        "status": "in_progress",
+                        "progress": {
+                            "processed": len(results),
+                            "total": len(data_list),
+                            "percentage": len(results) / len(data_list) * 100 if len(data_list) > 0 else 0
+                        },
+                        "judge_statistics": {
+                            "accuracy": (total_correct / total_processed * 100.0) if total_processed > 0 else 0.0,
+                            "correct_count": total_correct,
+                            "total_processed": total_processed,
+                            "judge_method": "api" if use_api else "local",
+                            "judge_model": judge_api_model if use_api else judge_model_path
+                        },
+                        "config": metadata.get("config", {}),
+                        "detailed_results": results
+                    }
+                    final_results = convert_numpy_types(final_results)
+                    with open(output_file, "w", encoding="utf-8") as f:
+                        json.dump(final_results, f, ensure_ascii=False, indent=2)
                 
             except Exception as e:
-                print(f"\n[Error processing index {idx}]: {e}")
+                # Error details are logged via traceback, no need to print to console
                 traceback.print_exc()
+                # Still add the result with error info
+                output_item = data.copy()
+                output_item["judge_score"] = None
+                output_item["judge_method"] = "api" if use_api else "local"
+                output_item["judge_error"] = str(e)
+                results.append(output_item)
+                # Update progress bar even on error (don't count as correct, but count as processed)
+                total_processed += 1
+                current_acc = (total_correct / total_processed * 100.0) if total_processed > 0 else 0.0
+                pbar.set_postfix({
+                    'acc': f'{current_acc:.2f}%',
+                    'correct': f'{total_correct}/{total_processed}'
+                })
+                pbar.refresh()  # Force immediate update
                 continue
             
             if (idx + 1) % 5 == 0 and use_local:
                 torch.cuda.empty_cache()
     
     finally:
-        if f_out:
-            f_out.close()
+        pass
+    
+    # Build final results in same format as inference
+    final_results = {
+        "model_name": metadata.get("model_name", "Qwen2.5-Omni-3B"),
+        "dataset": metadata.get("dataset", "speech-web-questions"),
+        "task": metadata.get("task", "AQA (Audio Question Answering)"),
+        "status": "completed",
+        "progress": {
+            "processed": len(results),
+            "total": len(data_list),
+            "percentage": 100.0
+        },
+        "judge_statistics": {
+            "accuracy": (total_correct / total_processed * 100.0) if total_processed > 0 else 0.0,
+            "correct_count": total_correct,
+            "total_processed": total_processed,
+            "judge_method": "api" if use_api else "local",
+            "judge_model": judge_api_model if use_api else judge_model_path
+        },
+        "config": metadata.get("config", {}),
+        "timing_stats": metadata.get("timing_stats", {}),
+        "detailed_results": results
+    }
+    
+    # Convert numpy types
+    final_results = convert_numpy_types(final_results)
+    
+    # Save final results
+    if output_file:
+        os.makedirs(os.path.dirname(output_file), exist_ok=True) if os.path.dirname(output_file) else None
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(final_results, f, ensure_ascii=False, indent=2)
     
     # Print statistics
     if total_processed > 0:
@@ -1139,6 +1719,7 @@ def run_llm_judge(judge_model_path=None, judge_api_model=None, input_file=None, 
         print(f"Total processed: {total_processed}")
         print(f"Correct (prediction preferred): {total_correct}")
         print(f"Accuracy: {accuracy:.2f}%")
+        print(f"Results saved to: {output_file}")
         print("=" * 40)
     else:
         print("No samples processed")
@@ -1166,8 +1747,14 @@ def main():
                         help='Judge model path (for local model, used in judge mode)')
     parser.add_argument('--judge-api-model', type=str, default=None,
                         help='Judge API model name (e.g., gpt4o-mini, qwen-audio, used in judge mode)')
+    parser.add_argument('--judge-api-key', type=str, default=None,
+                        help='API Key for judge API model (optional, can also use OPENAI_API_KEY env var)')
+    parser.add_argument('--judge-api-base-url', type=str, default=None,
+                        help='Base URL for judge API (optional, e.g., http://123.129.219.111:3000/v1)')
     parser.add_argument('--input-file', type=str, default=None,
                         help='Input file path (for judge mode, should be inference results JSON)')
+    parser.add_argument('--force-rejudge', action='store_true',
+                        help='Force rejudge all samples even if they have been processed before')
     args = parser.parse_args()
     
     # Handle judge mode
@@ -1186,8 +1773,11 @@ def main():
         run_llm_judge(
             judge_model_path=args.judge_model_path,
             judge_api_model=args.judge_api_model,
+            judge_api_key=args.judge_api_key,
+            judge_api_base_url=args.judge_api_base_url,
             input_file=args.input_file,
-            output_file=output_file
+            output_file=output_file,
+            force_rejudge=args.force_rejudge
         )
         return
     
@@ -1453,6 +2043,7 @@ def main():
             full_user_prompt = prompt_text
 
             
+            # NOTE: Only audio is provided to the model - question text is removed to force model to extract question from audio
             messages = [
                 {
                     "role": "system",
@@ -1463,8 +2054,7 @@ def main():
                 {
                     "role": "user",
                     "content": [
-                        {"type": "audio", "audio": audio_np},
-                        {"type": "text", "text": full_user_prompt}
+                        {"type": "audio", "audio": audio_np}
                     ]
                 }
             ]
@@ -1648,13 +2238,10 @@ def main():
                   f"Duration={doc.get('duration', 0):.1f}s")
             print(f"{'='*80}")
             
-            # Print question, reference and hypothesis (truncated if too long)
-            question_display = question_text[:100] + "..." if len(question_text) > 100 else question_text
-            ref_display = reference[:100] + "..." if len(reference) > 100 else reference
-            hyp_display = hypothesis[:100] + "..." if len(hypothesis) > 100 else hypothesis
-            print(f"  ❓ 问题: {question_display}")
-            print(f"  📝 参考答案: {ref_display}")
-            print(f"  💬 模型回答: {hyp_display}")
+            # Print question, reference and hypothesis (full text)
+            print(f"  ❓ 问题: {question_text}")
+            print(f"  📝 参考答案 (Ground Truth): {reference}")
+            print(f"  💬 模型回答: {hypothesis}")
             print(f"{'='*80}\n")
             
             # Update progress bar
@@ -1690,7 +2277,7 @@ def main():
                 save_results_realtime(
                     output_file, 
                     results, 
-                    total_correct, 
+                    None,  # total_correct: None for inference mode (no accuracy calculation)
                     processed_samples,
                     timing_stats,
                     gpu_id,

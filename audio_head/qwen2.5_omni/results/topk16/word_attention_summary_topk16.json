@@ -1,0 +1,59 @@
+{
+  "topk_value": 16,
+  "importance_score_weights": {
+    "alpha": 1.0,
+    "beta": 1.0,
+    "gamma": 1.0
+  },
+  "total_samples": 2605,
+  "total_words_in_json": 50884,
+  "total_high_quality_words": 11285,
+  "high_quality_ratio": 0.22177894819589655,
+  "word_coverage": {
+    "total_words_in_whisperx": 11285,
+    "total_words_analyzed": 9160,
+    "global_coverage_ratio": 0.8116969428444838,
+    "samples_with_full_coverage": 1275,
+    "samples_with_partial_coverage": 1185,
+    "samples_with_no_coverage": 145
+  },
+  "total_tokens_analyzed": 9961,
+  "avg_topk_hits_on_word": 0.5875220652210287,
+  "avg_topk_hits_on_audio": 6.049525963758659,
+  "avg_hit_ratio": 0.03672012907631429,
+  "median_hit_ratio": 0.026801215277777776,
+  "hit_ratio_distribution": {
+    "p25": 0.009765625,
+    "p50": 0.026801215277777776,
+    "p75": 0.053059895833333336,
+    "p95": 0.10894097222222222
+  },
+  "avg_word_audio_ratio": 0.10157510673678043,
+  "median_word_audio_ratio": 0.07045530076437355,
+  "word_audio_ratio_distribution": {
+    "p25": 0.026924694993689526,
+    "p50": 0.07045530076437355,
+    "p75": 0.14084507042253522,
+    "p95": 0.3069403714565005
+  },
+  "avg_num_word_audio_tokens": 5.302379279188837,
+  "median_num_word_audio_tokens": 4.0,
+  "avg_word_audio_coverage_ratio": 0.10298212797368278,
+  "median_word_audio_coverage_ratio": 0.1055871212121212,
+  "word_audio_coverage_ratio_distribution": {
+    "p25": 0.0546875,
+    "p50": 0.1055871212121212,
+    "p75": 0.1449652777777778,
+    "p95": 0.208984375
+  },
+  "avg_attn_weight_on_word": 0.029947812287979318,
+  "avg_attn_weight_on_audio": 0.22297294645573051,
+  "avg_attn_ratio": 0.13880681907509834,
+  "median_attn_ratio": 0.1194658261694081,
+  "attn_ratio_distribution": {
+    "p25": 0.028751857898081764,
+    "p50": 0.1194658261694081,
+    "p75": 0.20852099315557984,
+    "p95": 0.36520056272940915
+  }
+}
