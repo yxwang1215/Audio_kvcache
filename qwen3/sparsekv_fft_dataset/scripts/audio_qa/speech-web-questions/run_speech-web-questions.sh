@@ -6,10 +6,10 @@ set -e
 
 # =================== 用户配置区 ===================
 export GPU_ID="3"
-export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen3-Omni-3B}"
+export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct}"
 # export JUDGE_MODEL_PATH="${JUDGE_MODEL_PATH:-/mnt/users/hepeize-20251016/Model/Qwen3-8B}"  # 本地 judge 模型路径（可选）
-export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gpt4o-mini}" 
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3_Omni_3B/datasets/speech_web_questions_Results}"
+export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}"  # API judge 模型名称（如 gemini-2.5-flash, qwen2.5） 
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_web_questions_Results}"
 
 # 推理配置
 export SAMPLE_LIMIT=0

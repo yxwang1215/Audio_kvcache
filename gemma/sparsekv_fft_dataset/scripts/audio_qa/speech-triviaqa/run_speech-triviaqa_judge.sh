@@ -17,7 +17,7 @@ export JUDGE_API_KEY="${JUDGE_API_KEY:-sk-nSeZoIkSf8DGjeO5IvHnZpEc9O0QqeJrUyiJ5O
 export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}"  # API Base URL
 
 # 输入输出路径
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/speech_triviaqa_Results/vanilla/full_cache}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/speech_triviaqa_Results/SnapKV/budget0.8}"
 export INFERENCE_OUTPUT_FILE="${INFERENCE_OUTPUT_FILE:-${OUTPUT_DIR}/speech_triviaqa_results_gemma.json}"
 # Judge 输出文件：与 inference 相同目录，相同格式（JSON）
 export JUDGE_OUTPUT_FILE="${JUDGE_OUTPUT_FILE:-${OUTPUT_DIR}/speech_triviaqa_results_gemma_judge.json}"

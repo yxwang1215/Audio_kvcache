@@ -71,8 +71,17 @@ ENV_RATIO = float(os.environ.get("RATIO", 0.2))
 ENV_WINDOW_SIZE = int(os.environ.get("WINDOW_SIZE", 64))  # Default 64
 ENV_KERNEL_SIZE = int(os.environ.get("KERNEL_SIZE", 7))
 ENV_POOLING = os.environ.get("POOLING", "maxpool")
+# Head score file path - direct path takes priority
+ENV_HEAD_SCORE_PATH = os.environ.get("HEAD_SCORE_PATH", None)
+# Fallback: use file type and parameters to construct path
 ENV_HEAD_SCORE_FILE = os.environ.get("HEAD_SCORE_FILE", "aggregated")
 ENV_HEAD_SCORE_BATCH = os.environ.get("HEAD_SCORE_BATCH", None)
+# Alpha, Beta, Gamma parameters for head score file selection (only used if HEAD_SCORE_PATH is not set)
+ENV_HEAD_SCORE_ALPHA = os.environ.get("HEAD_SCORE_ALPHA", None)
+ENV_HEAD_SCORE_BETA = os.environ.get("HEAD_SCORE_BETA", None)
+ENV_HEAD_SCORE_GAMMA = os.environ.get("HEAD_SCORE_GAMMA", None)
+# Aggregation method for multiple scores in JSON (mean, first, second, max, min, sum)
+ENV_HEAD_SCORE_AGGREGATION = os.environ.get("HEAD_SCORE_AGGREGATION", "first")
 
 # Audio-aware TopK selection parameters (from WHY_IMPROVEMENTS.md)
 USE_AUDIO_AWARE_TOPK = os.environ.get("USE_AUDIO_AWARE_TOPK", "false").lower() == "true"
@@ -278,11 +287,20 @@ def load_audio_head_scores_for_sparsemm(
     score_file: str,
     num_hidden_layers: int,
     num_attention_heads: int,
-    num_key_value_groups: int = 1
+    num_key_value_groups: int = 1,
+    aggregation: str = "mean"
 ) -> Dict[str, Any]:
     """
     Load and process audio head scores for SparseMM
     Returns a dictionary compatible with SparseMM's head_score format
+    
+    Args:
+        score_file: Path to the JSON file containing head scores
+        num_hidden_layers: Number of hidden layers
+        num_attention_heads: Number of attention heads per layer
+        num_key_value_groups: Number of key-value groups (for GQA)
+        aggregation: Method to aggregate multiple scores in JSON
+                    Options: "mean" (default), "first", "second", "max", "min", "sum"
     """
     head_scores = load_audio_head_scores(score_file, use_mean=True)
 
@@ -303,7 +321,23 @@ def load_audio_head_scores_for_sparsemm(
                 if key in head_scores:
                     score_value = head_scores[key]
                     if isinstance(score_value, list):
-                        score = np.mean(score_value)
+                        # Apply aggregation method
+                        if aggregation == "mean":
+                            score = np.mean(score_value)
+                        elif aggregation == "first":
+                            score = float(score_value[0]) if len(score_value) > 0 else 0.0
+                        elif aggregation == "second":
+                            score = float(score_value[1]) if len(score_value) > 1 else float(score_value[0]) if len(score_value) > 0 else 0.0
+                        elif aggregation == "max":
+                            score = np.max(score_value)
+                        elif aggregation == "min":
+                            score = np.min(score_value)
+                        elif aggregation == "sum":
+                            score = np.sum(score_value)
+                        else:
+                            # Default to mean if unknown method
+                            print(f"[SparseMM] Warning: Unknown aggregation method '{aggregation}', using mean")
+                            score = np.mean(score_value)
                     else:
                         score = float(score_value)
                 else:
@@ -1809,18 +1843,58 @@ def main():
             num_attention_heads = base_model.config.num_attention_heads
             
             # Load head score file
-            head_score_type = ENV_HEAD_SCORE_FILE
-            head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
-            head_score_path = get_audio_head_score_path(
-                score_type=head_score_type,
-                batch=head_score_batch
-            )
+            # Priority 1: Use direct path if provided
+            if ENV_HEAD_SCORE_PATH:
+                head_score_path = ENV_HEAD_SCORE_PATH
+                print(f"[SparseMM] Using direct head score path: {head_score_path}")
+            # Priority 2: Check if using uniform distribution
+            elif ENV_HEAD_SCORE_FILE == "uniform":
+                head_score_path = "uniform"
+                print(f"[SparseMM] Using uniform head score distribution")
+            else:
+                # Priority 3: Construct path from file type and parameters
+                head_score_type = ENV_HEAD_SCORE_FILE
+                head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
+                
+                # Parse alpha, beta, gamma if provided
+                head_score_alpha = None
+                head_score_beta = None
+                head_score_gamma = None
+                if ENV_HEAD_SCORE_ALPHA is not None:
+                    try:
+                        head_score_alpha = float(ENV_HEAD_SCORE_ALPHA)
+                    except ValueError:
+                        print(f"[SparseMM] Warning: Invalid HEAD_SCORE_ALPHA value '{ENV_HEAD_SCORE_ALPHA}', ignoring")
+                if ENV_HEAD_SCORE_BETA is not None:
+                    try:
+                        head_score_beta = float(ENV_HEAD_SCORE_BETA)
+                    except ValueError:
+                        print(f"[SparseMM] Warning: Invalid HEAD_SCORE_BETA value '{ENV_HEAD_SCORE_BETA}', ignoring")
+                if ENV_HEAD_SCORE_GAMMA is not None:
+                    try:
+                        head_score_gamma = float(ENV_HEAD_SCORE_GAMMA)
+                    except ValueError:
+                        print(f"[SparseMM] Warning: Invalid HEAD_SCORE_GAMMA value '{ENV_HEAD_SCORE_GAMMA}', ignoring")
+                
+                # Use the correct base directory for qwen2.5_omni head scores
+                head_score_base_dir = "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score"
+                head_score_path = get_audio_head_score_path(
+                    base_dir=head_score_base_dir,
+                    score_type=head_score_type,
+                    batch=head_score_batch,
+                    alpha=head_score_alpha,
+                    beta=head_score_beta,
+                    gamma=head_score_gamma
+                )
+                print(f"[SparseMM] Constructed head score path: {head_score_path}")
             
             print(f"[SparseMM] Loading audio head scores from: {head_score_path}")
+            print(f"[SparseMM] Using aggregation method: {ENV_HEAD_SCORE_AGGREGATION}")
             head_score_data = load_audio_head_scores_for_sparsemm(
                 head_score_path,
                 num_hidden_layers,
-                num_attention_heads
+                num_attention_heads,
+                aggregation=ENV_HEAD_SCORE_AGGREGATION
             )
             
             # Configure SparseMM

@@ -71,6 +71,9 @@ ENV_RATIO = float(os.environ.get("RATIO", 0.2))
 ENV_WINDOW_SIZE = int(os.environ.get("WINDOW_SIZE", 64))  # Default 64
 ENV_KERNEL_SIZE = int(os.environ.get("KERNEL_SIZE", 7))
 ENV_POOLING = os.environ.get("POOLING", "maxpool")
+# Head score file path - direct path takes priority
+ENV_HEAD_SCORE_PATH = os.environ.get("HEAD_SCORE_PATH", None)
+# Fallback: use file type and parameters to construct path
 ENV_HEAD_SCORE_FILE = os.environ.get("HEAD_SCORE_FILE", "aggregated")
 ENV_HEAD_SCORE_BATCH = os.environ.get("HEAD_SCORE_BATCH", None)
 
@@ -284,7 +287,16 @@ def load_audio_head_scores_for_sparsemm(
     Load and process audio head scores for SparseMM
     Returns a dictionary compatible with SparseMM's head_score format
     """
-    head_scores = load_audio_head_scores(score_file, use_mean=True)
+    # Handle uniform distribution without loading a file
+    if score_file == "uniform":
+        num_total_heads = num_hidden_layers * num_attention_heads
+        head_score_array = np.ones(num_total_heads) / num_total_heads
+        return {
+            'scores': head_score_array.tolist(),
+            'tensor': torch.tensor(head_score_array, dtype=torch.float32)
+        }
+    
+    head_scores = load_audio_head_scores(score_file, use_mean=False)
 
     # Handle compact uniform specification: {"__uniform__": value}
     if isinstance(head_scores, dict) and "__uniform__" in head_scores:
@@ -303,7 +315,7 @@ def load_audio_head_scores_for_sparsemm(
                 if key in head_scores:
                     score_value = head_scores[key]
                     if isinstance(score_value, list):
-                        score = np.mean(score_value)
+                        score = float(score_value[0]) if len(score_value) > 0 else 0.0
                     else:
                         score = float(score_value)
                 else:
@@ -1766,7 +1778,7 @@ def main():
     model = Gemma3nForConditionalGeneration.from_pretrained(
         model_path,
         device_map=device_map,
-        attn_implementation="flash_attention_2",
+        attn_implementation="eager",
         torch_dtype=torch.bfloat16,
         trust_remote_code=True
     )
@@ -1805,16 +1817,28 @@ def main():
         # Get model config for head score loading
         if hasattr(model, 'model'):
             base_model = model
-            num_hidden_layers = base_model.config.num_hidden_layers
-            num_attention_heads = base_model.config.num_attention_heads
+            num_hidden_layers = base_model.config.text_config.num_hidden_layers
+            num_attention_heads = base_model.config.text_config.num_attention_heads
             
             # Load head score file
-            head_score_type = ENV_HEAD_SCORE_FILE
-            head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
-            head_score_path = get_audio_head_score_path(
-                score_type=head_score_type,
-                batch=head_score_batch
-            )
+            # Load head score file
+            # Priority 1: Use direct path if provided
+            if ENV_HEAD_SCORE_PATH:
+                head_score_path = ENV_HEAD_SCORE_PATH
+                print(f"[SparseMM] Using direct head score path: {head_score_path}")
+            # Priority 2: Check if using uniform distribution
+            elif ENV_HEAD_SCORE_FILE == "uniform":
+                head_score_path = "uniform"
+                print(f"[SparseMM] Using uniform head score distribution")
+            else:
+                # Priority 3: Construct path from file type and parameters
+                head_score_type = ENV_HEAD_SCORE_FILE
+                head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
+                head_score_path = get_audio_head_score_path(
+                    score_type=head_score_type,
+                    batch=head_score_batch
+                )
+                print(f"[SparseMM] Constructed head score path: {head_score_path}")
             
             print(f"[SparseMM] Loading audio head scores from: {head_score_path}")
             head_score_data = load_audio_head_scores_for_sparsemm(
@@ -1982,17 +2006,14 @@ def main():
             input_token_length = inputs.input_ids.shape[1] if hasattr(inputs, 'input_ids') else 0
             audio_detected = True  # Gemma always processes audio
             
-            
-                        # Gemma doesn't need audio token configuration like Qwen2_5
+            # Gemma doesn't need audio token configuration like Qwen2_5
             # Audio is processed directly by the processor
-                    
-                    
-                    model.config.image_layer_idx = False  
-                    model.config.audio_token_num = audio_token_length
-                    model.config.audio_token_start = audio_token_start
-                    model.config.audio_prune_ratio = prune_ratio
-                    model.config.random = use_random
-                    model.config.frame = use_frame 
+            model.config.image_layer_idx = False  
+            model.config.audio_token_num = audio_token_length
+            model.config.audio_token_start = audio_token_start
+            model.config.audio_prune_ratio = prune_ratio
+            model.config.random = use_random
+            model.config.frame = use_frame 
                     
             if not audio_detected:
                 model.config.audio_prune_ratio = 0
@@ -2051,10 +2072,7 @@ def main():
                 # First generate call: only 1 token to measure prefill time
                 _ = model.generate(
                     **inputs,
-                    use_audio_in_video=True,
-                    return_audio=False,
-                    thinker_max_new_tokens=1,  
-                    thinker_do_sample=False,
+                    max_new_tokens=1,
                     pad_token_id=processor.tokenizer.eos_token_id,
                     past_key_values=past_key_values
                 )
@@ -2069,10 +2087,7 @@ def main():
                 # Second generate call: full generation to measure decode time
                 out_ids = model.generate(
                     **inputs,
-                    use_audio_in_video=True,
-                    return_audio=False,
-                    thinker_max_new_tokens=1100,  
-                    thinker_do_sample=False,
+                    max_new_tokens=1100,
                     pad_token_id=processor.tokenizer.eos_token_id,
                     past_key_values=past_key_values
                 )
@@ -2084,26 +2099,34 @@ def main():
             decode_time = decode_start_event.elapsed_time(decode_end_event) / 1000.0
             total_time = prefill_time + decode_time
             
+            # Extract only the generated tokens (exclude input tokens)
+            input_token_count = inputs.input_ids.shape[1] if hasattr(inputs, 'input_ids') else 0
+            if out_ids.shape[0] > 0 and out_ids.shape[1] > input_token_count:
+                # Only decode the generated part (skip input tokens)
+                generated_ids = out_ids[:, input_token_count:]
+            else:
+                generated_ids = out_ids
+            
             resp = processor.batch_decode(
-                out_ids, 
+                generated_ids, 
                 skip_special_tokens=True, 
                 clean_up_tokenization_spaces=False
             )[0]
             
-            
+            # Additional cleanup: remove any remaining prompt artifacts
             if "assistant\n" in resp:
-                
                 assistant_start = resp.rfind("assistant\n") + len("assistant\n")
                 resp = resp[assistant_start:].strip()
+            elif "model\n" in resp:
+                model_start = resp.rfind("model\n") + len("model\n")
+                resp = resp[model_start:].strip()
             
             # Store original response for debugging
             original_resp = resp[:300] if len(resp) > 300 else resp
             hypothesis = clean_response(resp)
             
             # Calculate decode token count (generated tokens only, excluding input)
-            input_token_count = inputs.input_ids.shape[1] if hasattr(inputs, 'input_ids') else 0
-            output_token_count = out_ids.shape[1] if hasattr(out_ids, 'shape') else len(out_ids[0]) if isinstance(out_ids, list) else 0
-            decode_token_count = max(0, output_token_count - input_token_count)
+            decode_token_count = generated_ids.shape[1] if hasattr(generated_ids, 'shape') and len(generated_ids.shape) > 1 else len(generated_ids[0]) if isinstance(generated_ids, list) and len(generated_ids) > 0 else 0
             
             # Calculate TPS (Tokens Per Second) using decode time
             sample_tps = decode_token_count / decode_time if decode_time > 0 else 0.0

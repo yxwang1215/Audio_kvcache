@@ -1465,7 +1465,14 @@ class Gemma3nTextAttentionSparseMM(Gemma3nTextAttention):
                 "sliding_window": self.sliding_window,
             }
 
-            if isinstance(past_key_values, DynamicCacheSplitHeadFlatten):
+            # CRITICAL FIX: Use class name check instead of isinstance to handle different import paths
+            # This is necessary because DynamicCacheSplitHeadFlatten might be imported from different modules
+            # (e.g., "model.sparsemm_utils" vs "sparsemm_utils"), causing isinstance to fail
+            is_dynamic_cache_split_head = (
+                isinstance(past_key_values, DynamicCacheSplitHeadFlatten) or
+                type(past_key_values).__name__ == "DynamicCacheSplitHeadFlatten"
+            )
+            if is_dynamic_cache_split_head:
                 # IMPORTANT: Handle KV shared layers properly with SparseMM
                 # KV shared layers reuse KV from previous layers (store_full_length_kv layers)
                 if self.is_kv_shared_layer:
@@ -1482,9 +1489,7 @@ class Gemma3nTextAttentionSparseMM(Gemma3nTextAttention):
                             key_states = key_states.to(query_states.device)
                             value_states = value_states.to(query_states.device)
                     
-                    # Repeat KV for GQA
-                    key_states = repeat_kv(key_states, self.num_key_value_groups)
-                    value_states = repeat_kv(value_states, self.num_key_value_groups)
+                    # NOTE: Do NOT call repeat_kv here - eager_attention_forward will handle it
                     # Skip SparseMM processing and go directly to attention computation
                     # (handled by the attention_interface below)
                 else:
@@ -1594,8 +1599,8 @@ class Gemma3nTextAttentionSparseMM(Gemma3nTextAttention):
                             past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
                         
                         # Always use uncompressed KV for attention computation in prefill
-                        key_states = repeat_kv(key_states, self.num_key_value_groups)
-                        value_states = repeat_kv(value_states, self.num_key_value_groups)
+                        # NOTE: Do NOT call repeat_kv here - eager_attention_forward will handle it
+                        # key_states and value_states are already in correct shape [bsz, num_key_value_heads, seq_len, head_dim]
                     else:
                         # DECODE PHASE
                         device = key_states.device
@@ -1662,6 +1667,9 @@ class Gemma3nTextAttentionSparseMM(Gemma3nTextAttention):
                         
                         # Update cache with 4D KV states (like Qwen does)
                         # DynamicCacheSplitHeadFlatten.update handles the format internally
+                        # Save original 4D key_states and value_states before update (for fallback cases)
+                        key_states_original = key_states.clone()
+                        value_states_original = value_states.clone()
                         key_states_updated, value_states_updated = past_key_values.update(
                             key_states, value_states, self.layer_idx, cache_kwargs
                         )
@@ -1770,12 +1778,55 @@ class Gemma3nTextAttentionSparseMM(Gemma3nTextAttention):
                                 key_states = key_states_recon
                                 value_states = value_states_recon
                             else:
-                                key_states = key_states
-                                value_states = value_states
+                                # Fallback: key_states_updated and value_states_updated are 2D flattened tensors
+                                # Need to reshape them back to 4D for repeat_kv
+                                # key_states_updated shape: [total_kv, head_dim]
+                                # We need to reconstruct 4D: [bsz, num_kv_heads, seq_len, head_dim]
+                                # Use the current head_lens to determine the shape
+                                if kv_cluster.head_lens is not None and len(kv_cluster.head_lens) > 0:
+                                    max_len = kv_cluster.head_lens.max().item()
+                                    if max_len > 0:
+                                        # Reconstruct 4D tensor from 2D flattened cache
+                                        key_states_recon = torch.zeros(
+                                            bsz, num_kv_heads, max_len, self.head_dim,
+                                            dtype=key_states_updated.dtype, device=device
+                                        )
+                                        value_states_recon = torch.zeros(
+                                            bsz, num_kv_heads, max_len, self.head_dim,
+                                            dtype=value_states_updated.dtype, device=device
+                                        )
+                                        
+                                        cu_klen = kv_cluster.cu_klen if kv_cluster.cu_klen is not None else None
+                                        if cu_klen is not None and len(cu_klen) > num_kv_heads:
+                                            for head_idx in range(num_kv_heads):
+                                                head_len = kv_cluster.head_lens[head_idx].item()
+                                                if head_len > 0 and head_idx < len(cu_klen) - 1:
+                                                    start_idx = cu_klen[head_idx].item()
+                                                    end_idx = cu_klen[head_idx + 1].item()
+                                                    
+                                                    if end_idx > start_idx and end_idx <= key_states_updated.shape[0]:
+                                                        head_key = key_states_updated[start_idx:end_idx]
+                                                        head_value = value_states_updated[start_idx:end_idx]
+                                                        
+                                                        actual_len = head_key.shape[0]
+                                                        if actual_len <= max_len:
+                                                            key_states_recon[0, head_idx, :actual_len] = head_key
+                                                            value_states_recon[0, head_idx, :actual_len] = head_value
+                                        
+                                        key_states = key_states_recon
+                                        value_states = value_states_recon
+                                    else:
+                                        # No cached tokens, use original 4D key_states and value_states (current token only)
+                                        # key_states_updated and value_states_updated are 2D, so use original 4D tensors
+                                        key_states = key_states_original
+                                        value_states = value_states_original
+                                else:
+                                    # No metadata available, use original 4D key_states and value_states (current token only)
+                                    # key_states_updated and value_states_updated are 2D, so use original 4D tensors
+                                    key_states = key_states_original
+                                    value_states = value_states_original
                             
-                            # Repeat KV for GQA
-                            key_states = repeat_kv(key_states, self.num_key_value_groups)
-                            value_states = repeat_kv(value_states, self.num_key_value_groups)
+                            # NOTE: Do NOT call repeat_kv here - eager_attention_forward will handle it
             else:
                 # For standard DynamicCache, use original logic
                 if not self.is_kv_shared_layer:
@@ -1787,8 +1838,7 @@ class Gemma3nTextAttentionSparseMM(Gemma3nTextAttention):
                         past_key_values.shared_layers = {}
                     past_key_values.shared_layers[self.layer_idx] = key_states, value_states
                 
-                key_states = repeat_kv(key_states, self.num_key_value_groups)
-                value_states = repeat_kv(value_states, self.num_key_value_groups)
+                # NOTE: Do NOT call repeat_kv here - eager_attention_forward will handle it
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -2337,7 +2387,14 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config=config.vision_config)
+        # Disable flash attention for vision_tower (TimmWrapperModel doesn't support it)
+        vision_config = config.vision_config
+        if hasattr(vision_config, '_attn_implementation_internal'):
+            vision_config._attn_implementation_internal = "eager"
+        self.vision_tower = AutoModel.from_config(
+            config=vision_config,
+            attn_implementation="eager"
+        )
         self.vocab_size = config.text_config.vocab_size
 
         language_model = AutoModel.from_config(config=config.text_config)
@@ -2345,7 +2402,14 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
 
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.vocab_size_per_layer_input = config.text_config.vocab_size_per_layer_input
-        self.audio_tower = AutoModel.from_config(config.audio_config)
+        # Disable flash attention for audio_tower if it uses TimmWrapperModel
+        audio_config = config.audio_config
+        if hasattr(audio_config, '_attn_implementation_internal'):
+            audio_config._attn_implementation_internal = "eager"
+        self.audio_tower = AutoModel.from_config(
+            config=audio_config,
+            attn_implementation="eager"
+        )
         self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
         self.embed_audio = Gemma3nMultimodalEmbedder(config.audio_config, config.text_config)
         self.post_init()

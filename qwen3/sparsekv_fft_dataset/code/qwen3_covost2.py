@@ -70,8 +70,13 @@ ENV_RATIO = float(os.environ.get("RATIO", 0.2))
 ENV_WINDOW_SIZE = int(os.environ.get("WINDOW_SIZE", 64))  # Default 64
 ENV_KERNEL_SIZE = int(os.environ.get("KERNEL_SIZE", 7))
 ENV_POOLING = os.environ.get("POOLING", "maxpool")
+# Head score file path - direct path takes priority
+ENV_HEAD_SCORE_PATH = os.environ.get("HEAD_SCORE_PATH", None)
+# Fallback: use file type and parameters to construct path
 ENV_HEAD_SCORE_FILE = os.environ.get("HEAD_SCORE_FILE", "aggregated")
 ENV_HEAD_SCORE_BATCH = os.environ.get("HEAD_SCORE_BATCH", None)
+# Aggregation method for multiple scores in JSON (mean, first, second, max, min, sum)
+ENV_HEAD_SCORE_AGGREGATION = os.environ.get("HEAD_SCORE_AGGREGATION", "first")
 
 # Audio-aware TopK selection parameters (from WHY_IMPROVEMENTS.md)
 USE_AUDIO_AWARE_TOPK = os.environ.get("USE_AUDIO_AWARE_TOPK", "false").lower() == "true"
@@ -89,6 +94,26 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)  # Get parent directory (sparsekv_fft_dataset)
 os.chdir(current_dir)
 sys.path.insert(0, parent_dir)  # Add parent directory to path for model imports
+
+# Safe makedirs function that prevents creating 'raw' folder in code directory
+def safe_makedirs(path, exist_ok=False):
+    """Create directory, but prevent creating 'raw' folder in code directory"""
+    if path:
+        abs_path = os.path.abspath(path)
+        code_dir = os.path.abspath(current_dir)
+        # Check if the path is trying to create 'raw' in code directory
+        if abs_path.startswith(code_dir):
+            # Get relative path from code directory
+            try:
+                rel_path = os.path.relpath(abs_path, code_dir)
+                # Check if path ends with 'raw' or contains 'raw' as a direct subdirectory
+                path_parts = rel_path.split(os.sep)
+                if 'raw' in path_parts and path_parts.index('raw') == 0:
+                    # Trying to create 'raw' directly in code directory
+                    raise ValueError(f"Cannot create 'raw' folder in code directory: {abs_path}")
+            except ValueError:
+                raise
+        os.makedirs(path, exist_ok=exist_ok)
 
 # Import model modules after setting up path
 # The modeling_qwen3_omni_moe.py file contains both standard and SparseMM versions
@@ -318,11 +343,20 @@ def load_audio_head_scores_for_sparsemm(
     score_file: str,
     num_hidden_layers: int,
     num_attention_heads: int,
-    num_key_value_groups: int = 1
+    num_key_value_groups: int = 1,
+    aggregation: str = "first"
 ) -> Dict[str, Any]:
     """
     Load and process audio head scores for SparseMM
     Returns a dictionary compatible with SparseMM's head_score format
+    
+    Args:
+        score_file: Path to the JSON file containing head scores
+        num_hidden_layers: Number of hidden layers
+        num_attention_heads: Number of attention heads per layer
+        num_key_value_groups: Number of key-value groups (for GQA)
+        aggregation: Method to aggregate multiple scores in JSON
+                    Options: "first" (default), "mean", "second", "max", "min", "sum"
     """
     head_scores = load_audio_head_scores(score_file, use_mean=True)
 
@@ -343,7 +377,22 @@ def load_audio_head_scores_for_sparsemm(
                 if key in head_scores:
                     score_value = head_scores[key]
                     if isinstance(score_value, list):
-                        score = np.mean(score_value)
+                        # Apply aggregation method
+                        if aggregation == "mean":
+                            score = np.mean(score_value)
+                        elif aggregation == "first":
+                            score = float(score_value[0]) if len(score_value) > 0 else 0.0
+                        elif aggregation == "second":
+                            score = float(score_value[1]) if len(score_value) > 1 else float(score_value[0]) if len(score_value) > 0 else 0.0
+                        elif aggregation == "max":
+                            score = np.max(score_value)
+                        elif aggregation == "min":
+                            score = np.min(score_value)
+                        elif aggregation == "sum":
+                            score = np.sum(score_value)
+                        else:
+                            print(f"Warning: Unknown aggregation method '{aggregation}', using 'first'")
+                            score = float(score_value[0]) if len(score_value) > 0 else 0.0
                     else:
                         score = float(score_value)
                 else:
@@ -810,7 +859,7 @@ def main():
     if args.output_file:
         output_file = os.path.abspath(args.output_file)
         output_dir = os.path.dirname(output_file)
-        os.makedirs(output_dir, exist_ok=True)
+        safe_makedirs(output_dir, exist_ok=True)
     else:
         if args.output_dir:
             result_dir = args.output_dir
@@ -818,14 +867,14 @@ def main():
             result_dir = os.environ.get("RESULTS_DIR", f'./CoVoST2_{direction.upper()}_Results')
         
         result_dir = os.path.abspath(result_dir)
-        os.makedirs(result_dir, exist_ok=True)
+        safe_makedirs(result_dir, exist_ok=True)
         output_file = f'{result_dir}/covost2_{direction}_results_qwen3.json'
     
     # Determine timing output file path
     if args.timing_output_file:
         timing_output_file = os.path.abspath(args.timing_output_file)
         timing_output_dir = os.path.dirname(timing_output_file)
-        os.makedirs(timing_output_dir, exist_ok=True)
+        safe_makedirs(timing_output_dir, exist_ok=True)
     else:
         timing_output_dir = os.path.dirname(output_file)
         timing_output_file = f'{timing_output_dir}/timing_stats_qwen3_{method_is}_{prune_ratio}.json'
@@ -914,18 +963,32 @@ def main():
             num_hidden_layers = base_model.config.num_hidden_layers
             num_attention_heads = base_model.config.num_attention_heads
             
-            head_score_type = ENV_HEAD_SCORE_FILE
-            head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
-            head_score_path = get_audio_head_score_path(
-                score_type=head_score_type,
-                batch=head_score_batch
-            )
+            # Load head score file
+            # Priority 1: Use direct path if provided
+            if ENV_HEAD_SCORE_PATH:
+                head_score_path = ENV_HEAD_SCORE_PATH
+                print(f"[SparseMM] Using direct head score path: {head_score_path}")
+            # Priority 2: Check if using uniform distribution
+            elif ENV_HEAD_SCORE_FILE == "uniform":
+                head_score_path = "uniform"
+                print(f"[SparseMM] Using uniform head score distribution")
+            else:
+                # Priority 3: Construct path from file type and parameters
+                head_score_type = ENV_HEAD_SCORE_FILE
+                head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
+                head_score_path = get_audio_head_score_path(
+                    score_type=head_score_type,
+                    batch=head_score_batch
+                )
+                print(f"[SparseMM] Constructed head score path: {head_score_path}")
             
             print(f"[SparseMM] Loading audio head scores from: {head_score_path}")
+            print(f"[SparseMM] Using aggregation method: {ENV_HEAD_SCORE_AGGREGATION}")
             head_score_data = load_audio_head_scores_for_sparsemm(
                 head_score_path,
                 num_hidden_layers,
-                num_attention_heads
+                num_attention_heads,
+                aggregation=ENV_HEAD_SCORE_AGGREGATION
             )
             
             if ENV_BUDGET_IS_RATIO:

@@ -5,19 +5,21 @@
 set -e
 
 # =================== 用户配置区 ===================
-export GPU_ID="0"
-export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen3-Omni-3B}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3_Omni_3B/datasets/speech_chatbot_alpaca_eval_Results/vanilla/full_cache}"
+export GPU_ID="1"
+export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_chatbot_alpaca_eval_Results/SparseKV/budget0.8}"
 
 # 推理配置
 export SAMPLE_LIMIT=0
-export USE_SPARSEKV="false"
-export BUDGET=0.7
+export USE_SPARSEKV="true"
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-export HEAD_SCORE_FILE="aggregated"
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/head_score/audio_head_scores_topk16_alpha1_beta1_gamma1.json"
+# export HEAD_SCORE_AGGREGATION="first" 
+# export HEAD_SCORE_FILE="uniform"
 # export HEAD_SCORE_BATCH=None  # 可选
 
 # FFT 滤波配置（可选）

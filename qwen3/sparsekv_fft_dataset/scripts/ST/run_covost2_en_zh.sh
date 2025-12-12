@@ -2,7 +2,7 @@
 # CoVoST2 English-to-Chinese Speech Translation Evaluation with Qwen2.5-Omni
 # 英语到中文语音翻译评估脚本
 
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=2
 # 模型路径配置
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=4898
@@ -13,7 +13,9 @@ export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-export HEAD_SCORE_FILE="uniform"
+# export HEAD_SCORE_FILE="uniform"
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/head_score/audio_head_scores_topk16_alpha1_beta1_gamma1.json"
+export HEAD_SCORE_AGGREGATION="first" 
 
 export USE_FFT_FILTER="false"
 export FFT_FILTER_TYPE="lowpass"
@@ -30,8 +32,8 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset
 python code/qwen3_covost2.py \
     --direction en_zh \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/EN_ZH/SnapKV/budget0.8 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/EN_ZH/SnapKV/budget0.8/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/EN_ZH/SparseKV/budget0.8 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/EN_ZH/SparseKV/budget0.8/timing_stats.json
 
 # ============================================
 # 常用配置示例

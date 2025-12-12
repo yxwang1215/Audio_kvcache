@@ -996,7 +996,7 @@ class SparseMM():
                     if key in head_score:
                         score_value = head_score[key]
                         if isinstance(score_value, list):
-                            head_score_list.append(np.mean(score_value))
+                            head_score_list.append(float(score_value[0]) if len(score_value) > 0 else 0.0)
                         else:
                             head_score_list.append(float(score_value))
                     else:
@@ -1012,7 +1012,7 @@ class SparseMM():
                     if key in head_score:
                         score_value = head_score[key]
                         if isinstance(score_value, list):
-                            head_score_list.append(np.mean(score_value))
+                            head_score_list.append(float(score_value[0]) if len(score_value) > 0 else 0.0)
                         else:
                             head_score_list.append(float(score_value))
                     else:

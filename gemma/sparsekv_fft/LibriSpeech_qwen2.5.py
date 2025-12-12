@@ -271,7 +271,7 @@ def load_audio_head_scores_for_sparsemm(
     Load and process audio head scores for SparseMM
     Returns a dictionary compatible with SparseMM's head_score format
     """
-    head_scores = load_audio_head_scores(score_file, use_mean=True)
+    head_scores = load_audio_head_scores(score_file, use_mean=False)
 
     # Handle compact uniform specification: {"__uniform__": value}
     if isinstance(head_scores, dict) and "__uniform__" in head_scores:
@@ -290,7 +290,7 @@ def load_audio_head_scores_for_sparsemm(
                 if key in head_scores:
                     score_value = head_scores[key]
                     if isinstance(score_value, list):
-                        score = np.mean(score_value)
+                        score = float(score_value[0]) if len(score_value) > 0 else 0.0
                     else:
                         score = float(score_value)
                 else:

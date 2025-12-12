@@ -5,20 +5,20 @@
 set -e
 
 # =================== 用户配置区 ===================
-export GPU_ID="0"
+export GPU_ID="5"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-3B}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/llama_questions_Results/vanilla/full_cache}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/llama_questions_Results/SnapKV/budget0.8}"
 
 # 推理配置
 export SAMPLE_LIMIT=0
-export USE_SPARSEKV="false"
-export BUDGET=0.7
+export USE_SPARSEKV="true"
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-export HEAD_SCORE_FILE="aggregated"
-# export HEAD_SCORE_BATCH=None  # 可选
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
+export HEAD_SCORE_AGGREGATION="first"
 
 # FFT 滤波配置（可选）
 # export USE_FFT_FILTER="true"

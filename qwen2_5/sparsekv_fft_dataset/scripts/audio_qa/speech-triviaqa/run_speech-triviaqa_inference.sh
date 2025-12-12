@@ -5,19 +5,19 @@
 set -e
 
 # =================== 用户配置区 ===================
-export GPU_ID="6"
+export GPU_ID="4"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-3B}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_triviaqa_Results/vanilla/full_cache}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_triviaqa_Results/SnapKV/budget0.2}"
 
 # 推理配置
 export SAMPLE_LIMIT=0
-export USE_SPARSEKV="false"
-export BUDGET=0.7
+export USE_SPARSEKV="true"
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-export HEAD_SCORE_FILE="aggregated"
+export HEAD_SCORE_FILE="uniform"
 # export HEAD_SCORE_BATCH=None  # 可选
 
 # FFT 滤波配置（可选）

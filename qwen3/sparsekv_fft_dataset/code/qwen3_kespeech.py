@@ -68,8 +68,13 @@ ENV_RATIO = float(os.environ.get("RATIO", 0.2))
 ENV_WINDOW_SIZE = int(os.environ.get("WINDOW_SIZE", 64))  # Default 64
 ENV_KERNEL_SIZE = int(os.environ.get("KERNEL_SIZE", 7))
 ENV_POOLING = os.environ.get("POOLING", "maxpool")
+# Head score file path - direct path takes priority
+ENV_HEAD_SCORE_PATH = os.environ.get("HEAD_SCORE_PATH", None)
+# Fallback: use file type and parameters to construct path
 ENV_HEAD_SCORE_FILE = os.environ.get("HEAD_SCORE_FILE", "aggregated")
 ENV_HEAD_SCORE_BATCH = os.environ.get("HEAD_SCORE_BATCH", None)
+# Aggregation method for multiple scores in JSON (mean, first, second, max, min, sum)
+ENV_HEAD_SCORE_AGGREGATION = os.environ.get("HEAD_SCORE_AGGREGATION", "first")
 
 # Audio-aware TopK selection parameters (from WHY_IMPROVEMENTS.md)
 USE_AUDIO_AWARE_TOPK = os.environ.get("USE_AUDIO_AWARE_TOPK", "false").lower() == "true"
@@ -87,6 +92,26 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)  # Get parent directory (sparsekv_fft_dataset)
 os.chdir(current_dir)
 sys.path.insert(0, parent_dir)  # Add parent directory to path for model imports
+
+# Safe makedirs function that prevents creating 'raw' folder in code directory
+def safe_makedirs(path, exist_ok=False):
+    """Create directory, but prevent creating 'raw' folder in code directory"""
+    if path:
+        abs_path = os.path.abspath(path)
+        code_dir = os.path.abspath(current_dir)
+        # Check if the path is trying to create 'raw' in code directory
+        if abs_path.startswith(code_dir):
+            # Get relative path from code directory
+            try:
+                rel_path = os.path.relpath(abs_path, code_dir)
+                # Check if path ends with 'raw' or contains 'raw' as a direct subdirectory
+                path_parts = rel_path.split(os.sep)
+                if 'raw' in path_parts and path_parts.index('raw') == 0:
+                    # Trying to create 'raw' directly in code directory
+                    raise ValueError(f"Cannot create 'raw' folder in code directory: {abs_path}")
+            except ValueError:
+                raise
+        os.makedirs(path, exist_ok=exist_ok)
 
 # Import model modules after setting up path
 # The modeling_qwen3_omni_moe.py file contains both standard and SparseMM versions
@@ -281,11 +306,20 @@ def load_audio_head_scores_for_sparsemm(
     score_file: str,
     num_hidden_layers: int,
     num_attention_heads: int,
-    num_key_value_groups: int = 1
+    num_key_value_groups: int = 1,
+    aggregation: str = "first"
 ) -> Dict[str, Any]:
     """
     Load and process audio head scores for SparseMM
     Returns a dictionary compatible with SparseMM's head_score format
+    
+    Args:
+        score_file: Path to the JSON file containing head scores
+        num_hidden_layers: Number of hidden layers
+        num_attention_heads: Number of attention heads per layer
+        num_key_value_groups: Number of key-value groups (for GQA)
+        aggregation: Method to aggregate multiple scores in JSON
+                    Options: "first" (default), "mean", "second", "max", "min", "sum"
     """
     head_scores = load_audio_head_scores(score_file, use_mean=True)
 
@@ -306,7 +340,22 @@ def load_audio_head_scores_for_sparsemm(
                 if key in head_scores:
                     score_value = head_scores[key]
                     if isinstance(score_value, list):
-                        score = np.mean(score_value)
+                        # Apply aggregation method
+                        if aggregation == "mean":
+                            score = np.mean(score_value)
+                        elif aggregation == "first":
+                            score = float(score_value[0]) if len(score_value) > 0 else 0.0
+                        elif aggregation == "second":
+                            score = float(score_value[1]) if len(score_value) > 1 else float(score_value[0]) if len(score_value) > 0 else 0.0
+                        elif aggregation == "max":
+                            score = np.max(score_value)
+                        elif aggregation == "min":
+                            score = np.min(score_value)
+                        elif aggregation == "sum":
+                            score = np.sum(score_value)
+                        else:
+                            print(f"Warning: Unknown aggregation method '{aggregation}', using 'first'")
+                            score = float(score_value[0]) if len(score_value) > 0 else 0.0
                     else:
                         score = float(score_value)
                 else:
@@ -479,7 +528,7 @@ def load_kespeech_dataset(base_dir, split="test"):
             # Audio files are already available locally
             try:
                 from datasets import load_dataset, DatasetDict
-                os.makedirs(download_base_dir, exist_ok=True)
+                safe_makedirs(download_base_dir, exist_ok=True)
                 
                 # Set cache directory temporarily for this download
                 original_cache_dir = os.environ.get("HF_DATASETS_CACHE", None)
@@ -555,7 +604,7 @@ def load_kespeech_dataset(base_dir, split="test"):
                 # Save dataset to disk for future use
                 try:
                     saved_dataset_path = os.path.join(download_base_dir, "TwinkStart", "kespeech", "saved_dataset")
-                    os.makedirs(os.path.dirname(saved_dataset_path), exist_ok=True)
+                    safe_makedirs(os.path.dirname(saved_dataset_path), exist_ok=True)
                     if not os.path.exists(saved_dataset_path):
                         print(f"Saving dataset to {saved_dataset_path} for future use...")
                         dataset_dict = DatasetDict({split: hf_dataset})
@@ -793,8 +842,8 @@ def asr_doc_to_text(doc, kwargs=None):
     post_prompt = kwargs.get("post_prompt", "")
     
     
-    # Use Chinese prompt following UltraEval-Audio format for qwen-omni-asr-zh
-    instruction = "请将这段中文语音转换为纯文本，去掉标点符号。"
+    # Use Chinese prompt - explicitly require only transcription text, no explanations
+    instruction = "请将这段中文语音转录为文本，去掉标点符号。只输出转录的文本内容，不要输出任何其他文字、解释或说明。"
     
     
     prompt_text = f"{pre_prompt}{instruction}{post_prompt}"
@@ -819,9 +868,15 @@ def clean_response(response):
     except:
         pass
     
+    # Remove common prefixes and explanatory text (both English and Chinese)
+    # Remove patterns like "好的，这是您提供的中文语音转录结果：" or "这是您提供的中文语音转录结果："
+    response = re.sub(r'^(好的，)?(这是)?(您提供)?(的)?(中文)?(语音)?(转录)?(结果)?[:：]\s*', '', response, flags=re.IGNORECASE)
+    response = re.sub(r'^(好的，)?(这是)?(音频)?(中包含)?(的)?(内容)?(为)?[:：]\s*', '', response, flags=re.IGNORECASE)
+    response = re.sub(r'^(好的，)?(我将)?(根据)?(您的要求)?(，)?(对)?(音频)?(内容)?(进行)?(分析)?(和)?(处理)?[。.]\s*', '', response, flags=re.IGNORECASE)
+    
     # Remove common markers (both English and Chinese)
     for marker in ["spoken content:", "content:", "transcription:", "transcript:", 
-                   "内容:", "转录:", "文本:", "识别结果:"]:
+                   "内容:", "转录:", "文本:", "识别结果:", "转录结果:", "语音转录结果:"]:
         if marker.lower() in response.lower():
             parts = re.split(re.escape(marker), response, flags=re.IGNORECASE)
             if len(parts) > 1:
@@ -832,7 +887,36 @@ def clean_response(response):
     response = re.sub(r'<transcribed text here>', '', response)
     response = re.sub(r'<sep>.*?($|<|$)', '', response)
     # Remove leading markers
-    response = re.sub(r'(?i)^(spoken\s+(?:text|content)|content|transcript|transcription|内容|转录|文本|识别结果):\s*', '', response.strip())
+    response = re.sub(r'(?i)^(spoken\s+(?:text|content)|content|transcript|transcription|内容|转录|文本|识别结果|转录结果|语音转录结果):\s*', '', response.strip())
+    
+    # Remove common explanatory patterns that appear before the actual transcription
+    # Pattern: "音频中包含一段中文男声，内容为：" or similar
+    response = re.sub(r'^音频中包含.*?内容为[:：]\s*', '', response, flags=re.IGNORECASE)
+    response = re.sub(r'^这句话的含义是.*$', '', response, flags=re.MULTILINE)
+    
+    # Remove markdown formatting if present (like **text**)
+    response = re.sub(r'\*\*(.*?)\*\*', r'\1', response)
+    
+    # If response contains multiple lines, try to extract the actual transcription
+    # Often the transcription is on a line by itself or after a colon
+    lines = response.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        line = line.strip()
+        # Skip empty lines
+        if not line:
+            continue
+        # Skip lines that are clearly explanatory (contain common explanatory words)
+        if re.search(r'(好的|这是|您提供|根据|要求|分析|处理|含义|意思)', line):
+            continue
+        # Skip lines that are just markers
+        if re.match(r'^[：:]\s*$', line):
+            continue
+        cleaned_lines.append(line)
+    
+    # If we have cleaned lines, use them; otherwise use original response
+    if cleaned_lines:
+        response = '\n'.join(cleaned_lines)
     
     return response.strip()
 
@@ -878,7 +962,7 @@ def calculate_cer(reference, hypothesis):
     
     # CER can exceed 100% when there are many insertions
     # CER = (S + D + I) / N, where N is the number of characters in reference
-    # If insertions are very high, CER can be > 100%
+    # If insertions are very high, CER can be > 100%, but we cap it at 100%
     if cer_percent > 100.0:
         # Calculate detailed metrics for debugging
         try:
@@ -891,22 +975,24 @@ def calculate_cer(reference, hypothesis):
                 deletions = measures.get('deletions', 0)
                 insertions = measures.get('insertions', 0)
                 hits = measures.get('hits', 0)
-                print(f"[CER Analysis] CER={cer_percent:.2f}%, Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
+                print(f"[CER Analysis] Raw CER={cer_percent:.2f}% (capped at 100%), Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
                 print(f"  Substitutions={substitutions}, Deletions={deletions}, Insertions={insertions}, Hits={hits}")
                 if insertions > len(ref_chars):
-                    print(f"  [Issue] Insertions ({insertions}) > Reference chars ({len(ref_chars)}) - this causes CER > 100%")
+                    print(f"  [Issue] Insertions ({insertions}) > Reference chars ({len(ref_chars)}) - CER capped at 100%")
             else:
                 # Fallback: just print basic info
-                print(f"[CER Analysis] CER={cer_percent:.2f}%, Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
+                print(f"[CER Analysis] Raw CER={cer_percent:.2f}% (capped at 100%), Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
                 print(f"  [Note] Detailed metrics unavailable (jiwer.compute_measures not available in this version)")
                 if len(hyp_chars) > len(ref_chars):
-                    print(f"  [Issue] Hypothesis has more chars ({len(hyp_chars)}) than reference ({len(ref_chars)}) - this may cause CER > 100%")
+                    print(f"  [Issue] Hypothesis has more chars ({len(hyp_chars)}) than reference ({len(ref_chars)}) - CER capped at 100%")
         except AttributeError:
             # Fallback if compute_measures doesn't exist
-            print(f"[CER Analysis] CER={cer_percent:.2f}%, Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
+            print(f"[CER Analysis] Raw CER={cer_percent:.2f}% (capped at 100%), Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
             print(f"  [Note] Detailed metrics unavailable (jiwer.compute_measures not available in this version)")
             if len(hyp_chars) > len(ref_chars):
-                print(f"  [Issue] Hypothesis has more chars ({len(hyp_chars)}) than reference ({len(ref_chars)}) - this may cause CER > 100%")
+                print(f"  [Issue] Hypothesis has more chars ({len(hyp_chars)}) than reference ({len(ref_chars)}) - CER capped at 100%")
+        # Cap CER at 100%
+        cer_percent = 100.0
 
     return cer_percent
 
@@ -921,7 +1007,10 @@ def save_results_realtime(output_file, results, total_cer, processed_samples, sp
     try:
         # Calculate current statistics
         current_avg_cer = total_cer / processed_samples if processed_samples > 0 else 100.0
-        current_avg_accuracy = 100.0 - current_avg_cer
+        # Limit CER to maximum 100%
+        current_avg_cer = min(current_avg_cer, 100.0)
+        # Calculate accuracy and ensure it's not negative (minimum 0%)
+        current_avg_accuracy = max(100.0 - current_avg_cer, 0.0)
         
         # Calculate speaker-level statistics
         speaker_cer = defaultdict(list)
@@ -939,12 +1028,17 @@ def save_results_realtime(output_file, results, total_cer, processed_samples, sp
         # Calculate CER statistics
         cer_scores = [r["cer"] for r in results]
         if len(cer_scores) > 0:
+            # Ensure all CER scores are capped at 100%
+            cer_scores = [min(cer, 100.0) for cer in cer_scores]
             cer_mean = np.mean(cer_scores)
             cer_std = np.std(cer_scores)
             cer_min = np.min(cer_scores)
             cer_max = np.max(cer_scores)
+            # Limit cer_max to 100%
+            cer_max = min(cer_max, 100.0)
             perfect_predictions = len([cer for cer in cer_scores if cer == 0.0])
-            char_accuracy = 100.0 - cer_mean
+            # Calculate accuracy and ensure it's not negative (minimum 0%)
+            char_accuracy = max(100.0 - cer_mean, 0.0)
         else:
             cer_mean = 100.0
             cer_std = 0.0
@@ -1042,16 +1136,21 @@ def calculate_kespeech_metrics(references, hypotheses):
         }
     
     
+    # Ensure all CER scores are capped at 100%
+    cer_scores = [min(cer, 100.0) for cer in cer_scores]
     cer_mean = np.mean(cer_scores)
     cer_std = np.std(cer_scores)
     cer_min = np.min(cer_scores)
     cer_max = np.max(cer_scores)
+    # Limit cer_max to 100%
+    cer_max = min(cer_max, 100.0)
     
     
     perfect_predictions = len([cer for cer in cer_scores if cer == 0.0])
     
     
-    char_accuracy = 100.0 - cer_mean
+    # Calculate accuracy and ensure it's not negative (minimum 0%)
+    char_accuracy = max(100.0 - cer_mean, 0.0)
     
     return {
         'cer_mean': float(cer_mean),
@@ -1127,7 +1226,7 @@ def main():
         # Direct file path specified
         output_file = os.path.abspath(args.output_file)
         output_dir = os.path.dirname(output_file)
-        os.makedirs(output_dir, exist_ok=True)
+        safe_makedirs(output_dir, exist_ok=True)
     else:
         # Use directory-based approach
         if args.output_dir:
@@ -1137,14 +1236,14 @@ def main():
         
         kespeech_path = os.path.abspath(kespeech_path)
         result_dir = os.path.abspath(result_dir)
-        os.makedirs(result_dir, exist_ok=True)
+        safe_makedirs(result_dir, exist_ok=True)
         output_file = f'{result_dir}/kespeech_results_qwen3.json'
     
     # Determine timing output file path
     if args.timing_output_file:
         timing_output_file = os.path.abspath(args.timing_output_file)
         timing_output_dir = os.path.dirname(timing_output_file)
-        os.makedirs(timing_output_dir, exist_ok=True)
+        safe_makedirs(timing_output_dir, exist_ok=True)
     else:
         # Use same directory as output_file
         timing_output_dir = os.path.dirname(output_file)
@@ -1239,18 +1338,31 @@ def main():
             num_attention_heads = base_model.config.num_attention_heads
             
             # Load head score file
-            head_score_type = ENV_HEAD_SCORE_FILE
-            head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
-            head_score_path = get_audio_head_score_path(
-                score_type=head_score_type,
-                batch=head_score_batch
-            )
+            # Priority 1: Use direct path if provided
+            if ENV_HEAD_SCORE_PATH:
+                head_score_path = ENV_HEAD_SCORE_PATH
+                print(f"[SparseMM] Using direct head score path: {head_score_path}")
+            # Priority 2: Check if using uniform distribution
+            elif ENV_HEAD_SCORE_FILE == "uniform":
+                head_score_path = "uniform"
+                print(f"[SparseMM] Using uniform head score distribution")
+            else:
+                # Priority 3: Construct path from file type and parameters
+                head_score_type = ENV_HEAD_SCORE_FILE
+                head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
+                head_score_path = get_audio_head_score_path(
+                    score_type=head_score_type,
+                    batch=head_score_batch
+                )
+                print(f"[SparseMM] Constructed head score path: {head_score_path}")
             
             print(f"[SparseMM] Loading audio head scores from: {head_score_path}")
+            print(f"[SparseMM] Using aggregation method: {ENV_HEAD_SCORE_AGGREGATION}")
             head_score_data = load_audio_head_scores_for_sparsemm(
                 head_score_path,
                 num_hidden_layers,
-                num_attention_heads
+                num_attention_heads,
+                aggregation=ENV_HEAD_SCORE_AGGREGATION
             )
             
             # Configure SparseMM
@@ -1373,7 +1485,7 @@ def main():
                 {
                     "role": "system",
                     "content": [
-                        {"type": "text", "text": "You are a speech recognition model."}
+                        {"type": "text", "text": "You are a speech recognition model. Only output the transcribed text, do not output any explanations, prefixes, or additional text."}
                     ]
                 },
                 {
@@ -1598,12 +1710,17 @@ def main():
                   f"Ground truth: {reference_char_len} chars / {reference_word_len} words")
             
             cer = calculate_cer(reference, hypothesis)
+            # Ensure CER is capped at 100% (calculate_cer should already do this, but double-check)
+            cer = min(cer, 100.0)
 
             total_cer += cer
             processed_samples += 1
 
             current_avg_cer = total_cer / processed_samples
-            current_avg_accuracy = 100.0 - current_avg_cer  # Character Accuracy = 100 - CER
+            # Limit CER to maximum 100%
+            current_avg_cer = min(current_avg_cer, 100.0)
+            # Calculate accuracy and ensure it's not negative (minimum 0%)
+            current_avg_accuracy = max(100.0 - current_avg_cer, 0.0)  # Character Accuracy = 100 - CER
             
             # ===== 实时输出 CER 和平均 CER =====
             # 在每个样本处理后立即输出，格式清晰醒目
@@ -1731,15 +1848,19 @@ def main():
 
     
     final_cer = total_cer / processed_samples if processed_samples > 0 else 100.0
+    # Limit final CER to maximum 100%
+    final_cer = min(final_cer, 100.0)
 
     
     speaker_cer = defaultdict(list)
     for result in results:
-        speaker_cer[result["speaker_id"]].append(result["cer"])
+        # Ensure each CER is capped at 100%
+        cer_value = min(result["cer"], 100.0)
+        speaker_cer[result["speaker_id"]].append(cer_value)
     
     speaker_avg_cer = {}
     for speaker_id, cers in speaker_cer.items():
-        speaker_avg_cer[speaker_id] = sum(cers) / len(cers)
+        speaker_avg_cer[speaker_id] = min(sum(cers) / len(cers), 100.0)
 
     
     references = [r["reference"] for r in results]

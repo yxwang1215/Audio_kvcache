@@ -71,8 +71,17 @@ ENV_RATIO = float(os.environ.get("RATIO", 0.2))
 ENV_WINDOW_SIZE = int(os.environ.get("WINDOW_SIZE", 64))  # Default 64
 ENV_KERNEL_SIZE = int(os.environ.get("KERNEL_SIZE", 7))
 ENV_POOLING = os.environ.get("POOLING", "maxpool")
+# Head score file path - direct path takes priority
+ENV_HEAD_SCORE_PATH = os.environ.get("HEAD_SCORE_PATH", None)
+# Fallback: use file type and parameters to construct path
 ENV_HEAD_SCORE_FILE = os.environ.get("HEAD_SCORE_FILE", "aggregated")
 ENV_HEAD_SCORE_BATCH = os.environ.get("HEAD_SCORE_BATCH", None)
+# Alpha, Beta, Gamma parameters for head score file selection (only used if HEAD_SCORE_PATH is not set)
+ENV_HEAD_SCORE_ALPHA = os.environ.get("HEAD_SCORE_ALPHA", None)
+ENV_HEAD_SCORE_BETA = os.environ.get("HEAD_SCORE_BETA", None)
+ENV_HEAD_SCORE_GAMMA = os.environ.get("HEAD_SCORE_GAMMA", None)
+# Aggregation method for multiple scores in JSON (mean, first, second, max, min, sum)
+ENV_HEAD_SCORE_AGGREGATION = os.environ.get("HEAD_SCORE_AGGREGATION", "first")
 
 # Audio-aware TopK selection parameters (from WHY_IMPROVEMENTS.md)
 USE_AUDIO_AWARE_TOPK = os.environ.get("USE_AUDIO_AWARE_TOPK", "false").lower() == "true"
@@ -278,11 +287,20 @@ def load_audio_head_scores_for_sparsemm(
     score_file: str,
     num_hidden_layers: int,
     num_attention_heads: int,
-    num_key_value_groups: int = 1
+    num_key_value_groups: int = 1,
+    aggregation: str = "mean"
 ) -> Dict[str, Any]:
     """
     Load and process audio head scores for SparseMM
     Returns a dictionary compatible with SparseMM's head_score format
+    
+    Args:
+        score_file: Path to the JSON file containing head scores
+        num_hidden_layers: Number of hidden layers
+        num_attention_heads: Number of attention heads per layer
+        num_key_value_groups: Number of key-value groups (for GQA)
+        aggregation: Method to aggregate multiple scores in JSON
+                    Options: "mean" (default), "first", "second", "max", "min", "sum"
     """
     head_scores = load_audio_head_scores(score_file, use_mean=True)
 
@@ -303,7 +321,23 @@ def load_audio_head_scores_for_sparsemm(
                 if key in head_scores:
                     score_value = head_scores[key]
                     if isinstance(score_value, list):
-                        score = np.mean(score_value)
+                        # Apply aggregation method
+                        if aggregation == "mean":
+                            score = np.mean(score_value)
+                        elif aggregation == "first":
+                            score = float(score_value[0]) if len(score_value) > 0 else 0.0
+                        elif aggregation == "second":
+                            score = float(score_value[1]) if len(score_value) > 1 else float(score_value[0]) if len(score_value) > 0 else 0.0
+                        elif aggregation == "max":
+                            score = np.max(score_value)
+                        elif aggregation == "min":
+                            score = np.min(score_value)
+                        elif aggregation == "sum":
+                            score = np.sum(score_value)
+                        else:
+                            # Default to mean if unknown method
+                            print(f"[SparseMM] Warning: Unknown aggregation method '{aggregation}', using mean")
+                            score = np.mean(score_value)
                     else:
                         score = float(score_value)
                 else:
@@ -428,6 +462,10 @@ def load_speech_web_questions_dataset(split="test", twinkstart_path=None):
     """
     print(f"Loading speech-web-questions dataset (split={split})...")
     
+    # Disable network connections for HuggingFace
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    
     # Default TwinkStart path
     default_twinkstart_path = "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart"
     if twinkstart_path is None:
@@ -437,53 +475,217 @@ def load_speech_web_questions_dataset(split="test", twinkstart_path=None):
     dataset = None
     local_dataset_path = os.path.join(twinkstart_path, "speech-web-questions", split)
     if os.path.exists(local_dataset_path):
-        try:
-            from datasets import load_from_disk
-            print(f"Attempting to load speech-web-questions from local path: {local_dataset_path}")
-            dataset = load_from_disk(local_dataset_path)
-            print(f"Successfully loaded {len(dataset)} samples from local path")
+        # Check if directory contains only wav files (not a HuggingFace Dataset format)
+        wav_files = glob.glob(os.path.join(local_dataset_path, "*.wav"))
+        has_arrow_files = len(glob.glob(os.path.join(local_dataset_path, "*.arrow"))) > 0
+        has_dataset_info = os.path.exists(os.path.join(local_dataset_path, "dataset_info.json"))
+        
+        # If it's a standard HuggingFace Dataset format, try load_from_disk
+        if has_arrow_files or has_dataset_info:
+            try:
+                from datasets import load_from_disk
+                print(f"Attempting to load speech-web-questions from local path (HuggingFace format): {local_dataset_path}")
+                dataset = load_from_disk(local_dataset_path)
+                print(f"Successfully loaded {len(dataset)} samples from local path")
+                
+                # Convert to list format
+                dataset_list = []
+                for idx, item in enumerate(dataset):
+                    # Extract required fields
+                    audio_data = item.get("audio", {})
+                    question_text = item.get("QuestionText", item.get("question", ""))
+                    answer = item.get("answer", item.get("answers", ""))
+                    
+                    # Get audio array and sampling rate
+                    audio_array = audio_data.get("array", None) if isinstance(audio_data, dict) else None
+                    sampling_rate = audio_data.get("sampling_rate", 16000) if isinstance(audio_data, dict) else 16000
+                    
+                    # Calculate duration if audio array is available
+                    duration = 0.0
+                    if audio_array is not None:
+                        try:
+                            duration = len(audio_array) / sampling_rate
+                        except:
+                            duration = 0.0
+                    
+                    dataset_list.append({
+                        "id": item.get("id", f"sample_{idx}"),
+                        "QuestionText": question_text,
+                        "answer": answer,
+                        "duration": duration,
+                        "audio": {
+                            "array": audio_array,
+                            "sampling_rate": sampling_rate,
+                            "path": None
+                        }
+                    })
+                
+                print(f"Converted {len(dataset_list)} samples to list format")
+                return dataset_list
+            except Exception as e:
+                print(f"Warning: Failed to load from local path (HuggingFace format): {e}")
+                dataset = None
+        
+        # If directory only contains wav files, try loading metadata from local metadata.json first
+        if dataset is None and len(wav_files) > 0:
+            print(f"Detected {len(wav_files)} wav files in local directory, attempting to load metadata...")
             
-            # Convert to list format
-            dataset_list = []
-            for idx, item in enumerate(dataset):
-                # Extract required fields
-                audio_data = item.get("audio", {})
-                question_text = item.get("QuestionText", item.get("question", ""))
-                answer = item.get("answer", item.get("answers", ""))
-                
-                # Get audio array and sampling rate
-                audio_array = audio_data.get("array", None) if isinstance(audio_data, dict) else None
-                sampling_rate = audio_data.get("sampling_rate", 16000) if isinstance(audio_data, dict) else 16000
-                
-                # Calculate duration if audio array is available
-                duration = 0.0
-                if audio_array is not None:
-                    try:
-                        duration = len(audio_array) / sampling_rate
-                    except:
-                        duration = 0.0
-                
-                dataset_list.append({
-                    "id": item.get("id", f"sample_{idx}"),
-                    "QuestionText": question_text,
-                    "answer": answer,
-                    "duration": duration,
-                    "audio": {
-                        "array": audio_array,
-                        "sampling_rate": sampling_rate,
-                        "path": None
-                    }
-                })
+            # First, check for local metadata.json file (no network required)
+            metadata_file = os.path.join(twinkstart_path, "speech-web-questions", "metadata.json")
+            if os.path.exists(metadata_file):
+                try:
+                    print(f"Loading metadata from local file: {metadata_file}")
+                    with open(metadata_file, 'r') as f:
+                        metadata_list = json.load(f)
+                    print(f"Loaded {len(metadata_list)} samples metadata from local file")
+                    
+                    # Create a mapping from sample ID to wav file
+                    wav_file_map = {}
+                    for wav_file in wav_files:
+                        # Extract ID from filename (e.g., "0.wav" -> "0")
+                        base_name = os.path.splitext(os.path.basename(wav_file))[0]
+                        wav_file_map[base_name] = wav_file
+                    
+                    # Convert to list format, using local wav files
+                    dataset_list = []
+                    for idx, item in enumerate(metadata_list):
+                        # Extract required fields
+                        question_text = item.get("QuestionText", item.get("question", ""))
+                        answer = item.get("answers", item.get("answer", ""))
+                        sample_id = str(item.get("id", idx))
+                        
+                        # Find corresponding wav file
+                        wav_file = wav_file_map.get(sample_id, None)
+                        if wav_file is None:
+                            # Try to find by index
+                            if idx < len(wav_files):
+                                wav_file = sorted(wav_files)[idx]
+                            else:
+                                print(f"Warning: Could not find wav file for sample {sample_id}, skipping...")
+                                continue
+                        
+                        # Load audio from local file
+                        try:
+                            audio_array, sampling_rate = librosa.load(wav_file, sr=16000, mono=True)
+                            duration = len(audio_array) / sampling_rate
+                        except Exception as e:
+                            print(f"Warning: Failed to load audio from {wav_file}: {e}")
+                            continue
+                        
+                        dataset_list.append({
+                            "id": sample_id,
+                            "QuestionText": question_text,
+                            "answer": answer,
+                            "duration": duration,
+                            "audio": {
+                                "array": audio_array,
+                                "sampling_rate": sampling_rate,
+                                "path": wav_file
+                            }
+                        })
+                    
+                    print(f"Converted {len(dataset_list)} samples to list format (using local metadata and wav files)")
+                    return dataset_list
+                except Exception as e:
+                    print(f"Warning: Failed to load from local metadata.json: {e}")
+                    traceback.print_exc()
             
-            print(f"Converted {len(dataset_list)} samples to list format")
-            return dataset_list
-        except Exception as e:
-            print(f"Warning: Failed to load from local path: {e}")
-            print("Falling back to UltraEval-Audio registry...")
-            dataset = None
+            # Fallback: Try to find UltraEval-Audio root for registry (may require network)
+            ultraeval_root = "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio"
+            possible_paths = [
+                ultraeval_root,
+                os.environ.get("ULTRAEVAL_ROOT", ""),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../UltraEval-Audio"),
+                "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio"
+            ]
+            
+            ultraeval_root = None
+            for path in possible_paths:
+                if path and os.path.exists(path) and os.path.exists(os.path.join(path, "audio_evals")):
+                    ultraeval_root = path
+                    break
+            
+            if ultraeval_root:
+                try:
+                    # Add UltraEval-Audio to Python path
+                    if ultraeval_root not in sys.path:
+                        sys.path.insert(0, ultraeval_root)
+                    
+                    from audio_evals.registry import registry
+                    
+                    print(f"Loading speech-web-questions dataset from UltraEval-Audio registry (using local audio files)...")
+                    # #region agent log
+                    with open('/mnt/users/wangyuxuan-20250915/Audio/.cursor/debug.log', 'a') as f:
+                        f.write(json.dumps({"id":"log_registry_get","timestamp":int(__import__('time').time()*1000),"location":"qwen2.5_speech-web-questions.py:556","message":"Getting dataset from registry","data":{"ultraeval_root":ultraeval_root},"sessionId":"debug-session","runId":"run1","hypothesisId":"C"})+"\n")
+                    # #endregion
+                    dataset_obj = registry.get_dataset("speech-web-questions")
+                    if dataset_obj is not None:
+                        # #region agent log
+                        with open('/mnt/users/wangyuxuan-20250915/Audio/.cursor/debug.log', 'a') as f:
+                            f.write(json.dumps({"id":"log_registry_obj_created","timestamp":int(__import__('time').time()*1000),"location":"qwen2.5_speech-web-questions.py:558","message":"Dataset object created, about to call load()","data":{"dataset_obj_type":type(dataset_obj).__name__,"has_local_path":hasattr(dataset_obj,'local_path'),"local_path":getattr(dataset_obj,'local_path','N/A')},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"})+"\n")
+                        # #endregion
+                        # Load dataset data (this should get metadata, but we'll use local audio files)
+                        dataset_data = dataset_obj.load(limit=0)
+                        print(f"Loaded {len(dataset_data)} samples metadata from UltraEval-Audio registry")
+                        
+                        # Create a mapping from sample ID to wav file
+                        wav_file_map = {}
+                        for wav_file in wav_files:
+                            # Extract ID from filename (e.g., "0.wav" -> "0")
+                            base_name = os.path.splitext(os.path.basename(wav_file))[0]
+                            wav_file_map[base_name] = wav_file
+                        
+                        # Convert to list format, using local wav files
+                        dataset_list = []
+                        for idx, item in enumerate(dataset_data):
+                            # Extract required fields
+                            question_text = item.get("QuestionText", item.get("question", ""))
+                            answer = item.get("answer", item.get("answers", ""))
+                            sample_id = str(item.get("id", idx))
+                            
+                            # Find corresponding wav file
+                            wav_file = wav_file_map.get(sample_id, None)
+                            if wav_file is None:
+                                # Try to find by index
+                                if idx < len(wav_files):
+                                    wav_file = sorted(wav_files)[idx]
+                                else:
+                                    print(f"Warning: Could not find wav file for sample {sample_id}, skipping...")
+                                    continue
+                            
+                            # Load audio from local file
+                            try:
+                                audio_array, sampling_rate = librosa.load(wav_file, sr=16000, mono=True)
+                                duration = len(audio_array) / sampling_rate
+                            except Exception as e:
+                                print(f"Warning: Failed to load audio from {wav_file}: {e}")
+                                continue
+                            
+                            dataset_list.append({
+                                "id": sample_id,
+                                "QuestionText": question_text,
+                                "answer": answer,
+                                "duration": duration,
+                                "audio": {
+                                    "array": audio_array,
+                                    "sampling_rate": sampling_rate,
+                                    "path": wav_file
+                                }
+                            })
+                        
+                        print(f"Converted {len(dataset_list)} samples to list format (using local wav files)")
+                        return dataset_list
+                except Exception as e:
+                    print(f"Warning: Failed to load from UltraEval-Audio registry: {e}")
+                    traceback.print_exc()
+                    print("Cannot load dataset without network connection. Please ensure UltraEval-Audio registry can work offline or provide dataset in HuggingFace format.")
+                    raise RuntimeError(f"Failed to load dataset from local path and UltraEval-Audio registry: {e}")
+            else:
+                raise RuntimeError(f"Could not find UltraEval-Audio root directory. Local path contains only wav files but no metadata.")
+        elif dataset is None:
+            print(f"Warning: Local path exists but contains neither HuggingFace Dataset format nor wav files")
     else:
-        print(f"Local path not found: {local_dataset_path}, trying UltraEval-Audio registry...")
-        dataset = None
+        print(f"Local path not found: {local_dataset_path}")
     
     # Try UltraEval-Audio registry if local path failed or doesn't exist
     if dataset is None:
@@ -556,53 +758,12 @@ def load_speech_web_questions_dataset(split="test", twinkstart_path=None):
                 return dataset_list
         except Exception as e:
             print(f"Warning: Failed to load from UltraEval-Audio registry: {e}")
-            print("Falling back to HuggingFace direct loading...")
+            traceback.print_exc()
+            print("Network connection is disabled. Cannot load dataset from HuggingFace.")
+            raise RuntimeError(f"Failed to load dataset from local path and UltraEval-Audio registry. Network is disabled. Error: {e}")
     
-    # Fallback: Load directly from HuggingFace
-    try:
-        print(f"Loading speech-web-questions dataset directly from HuggingFace: TwinkStart/speech-web-questions")
-        dataset = load_dataset("TwinkStart/speech-web-questions", split=split, trust_remote_code=True)
-        print(f"Successfully loaded {len(dataset)} samples from HuggingFace")
-        
-        # Convert to list format
-        dataset_list = []
-        for idx, item in enumerate(dataset):
-            # Extract required fields
-            audio_data = item.get("audio", {})
-            question_text = item.get("QuestionText", item.get("question", ""))
-            answer = item.get("answer", item.get("answers", ""))
-            
-            # Get audio array and sampling rate
-            audio_array = audio_data.get("array", None) if isinstance(audio_data, dict) else None
-            sampling_rate = audio_data.get("sampling_rate", 16000) if isinstance(audio_data, dict) else 16000
-            
-            # Calculate duration if audio array is available
-            duration = 0.0
-            if audio_array is not None:
-                try:
-                    duration = len(audio_array) / sampling_rate
-                except:
-                    duration = 0.0
-            
-            dataset_list.append({
-                "id": item.get("id", f"sample_{idx}"),
-                "QuestionText": question_text,
-                "answer": answer,
-                "duration": duration,
-                "audio": {
-                    "array": audio_array,
-                    "sampling_rate": sampling_rate,
-                    "path": None
-                }
-            })
-        
-        print(f"Converted {len(dataset_list)} samples to list format")
-        return dataset_list
-        
-    except Exception as e:
-        print(f"Error loading speech-web-questions dataset from HuggingFace: {e}")
-        traceback.print_exc()
-        return []
+    # Fallback: Load directly from HuggingFace (DISABLED - network is off)
+    raise RuntimeError("Cannot load dataset: local path not found, UltraEval-Audio registry failed, and network connection is disabled. Please ensure dataset is available locally.")
 
 def prepare_audio_for_qwen_omni(audio_path, target_sr=16000):
     """Process audio files according to Qwen2.5-Omni requirements"""
@@ -1925,18 +2086,58 @@ def main():
             num_attention_heads = base_model.config.num_attention_heads
             
             # Load head score file
-            head_score_type = ENV_HEAD_SCORE_FILE
-            head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
-            head_score_path = get_audio_head_score_path(
-                score_type=head_score_type,
-                batch=head_score_batch
-            )
+            # Priority 1: Use direct path if provided
+            if ENV_HEAD_SCORE_PATH:
+                head_score_path = ENV_HEAD_SCORE_PATH
+                print(f"[SparseMM] Using direct head score path: {head_score_path}")
+            # Priority 2: Check if using uniform distribution
+            elif ENV_HEAD_SCORE_FILE == "uniform":
+                head_score_path = "uniform"
+                print(f"[SparseMM] Using uniform head score distribution")
+            else:
+                # Priority 3: Construct path from file type and parameters
+                head_score_type = ENV_HEAD_SCORE_FILE
+                head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
+                
+                # Parse alpha, beta, gamma if provided
+                head_score_alpha = None
+                head_score_beta = None
+                head_score_gamma = None
+                if ENV_HEAD_SCORE_ALPHA is not None:
+                    try:
+                        head_score_alpha = float(ENV_HEAD_SCORE_ALPHA)
+                    except ValueError:
+                        print(f"[SparseMM] Warning: Invalid HEAD_SCORE_ALPHA value '{ENV_HEAD_SCORE_ALPHA}', ignoring")
+                if ENV_HEAD_SCORE_BETA is not None:
+                    try:
+                        head_score_beta = float(ENV_HEAD_SCORE_BETA)
+                    except ValueError:
+                        print(f"[SparseMM] Warning: Invalid HEAD_SCORE_BETA value '{ENV_HEAD_SCORE_BETA}', ignoring")
+                if ENV_HEAD_SCORE_GAMMA is not None:
+                    try:
+                        head_score_gamma = float(ENV_HEAD_SCORE_GAMMA)
+                    except ValueError:
+                        print(f"[SparseMM] Warning: Invalid HEAD_SCORE_GAMMA value '{ENV_HEAD_SCORE_GAMMA}', ignoring")
+                
+                # Use the correct base directory for qwen2.5_omni head scores
+                head_score_base_dir = "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score"
+                head_score_path = get_audio_head_score_path(
+                    base_dir=head_score_base_dir,
+                    score_type=head_score_type,
+                    batch=head_score_batch,
+                    alpha=head_score_alpha,
+                    beta=head_score_beta,
+                    gamma=head_score_gamma
+                )
+                print(f"[SparseMM] Constructed head score path: {head_score_path}")
             
             print(f"[SparseMM] Loading audio head scores from: {head_score_path}")
+            print(f"[SparseMM] Using aggregation method: {ENV_HEAD_SCORE_AGGREGATION}")
             head_score_data = load_audio_head_scores_for_sparsemm(
                 head_score_path,
                 num_hidden_layers,
-                num_attention_heads
+                num_attention_heads,
+                aggregation=ENV_HEAD_SCORE_AGGREGATION
             )
             
             # Configure SparseMM

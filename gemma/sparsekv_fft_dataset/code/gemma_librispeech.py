@@ -136,6 +136,9 @@ ENV_RATIO = float(os.environ.get("RATIO", 0.2))
 ENV_WINDOW_SIZE = int(os.environ.get("WINDOW_SIZE", 64))  # Default 64
 ENV_KERNEL_SIZE = int(os.environ.get("KERNEL_SIZE", 7))
 ENV_POOLING = os.environ.get("POOLING", "maxpool")
+# Head score file path - direct path takes priority
+ENV_HEAD_SCORE_PATH = os.environ.get("HEAD_SCORE_PATH", None)
+# Fallback: use file type and parameters to construct path
 ENV_HEAD_SCORE_FILE = os.environ.get("HEAD_SCORE_FILE", "aggregated")
 ENV_HEAD_SCORE_BATCH = os.environ.get("HEAD_SCORE_BATCH", None)
 
@@ -919,11 +922,21 @@ def init_model():
         try:
             # Load head scores
             if AUDIO_HEAD_UTILS_AVAILABLE:
-                # Use correct parameter order: base_dir (default), score_type, batch
-                head_score_path = get_audio_head_score_path(
-                    score_type=ENV_HEAD_SCORE_FILE,
-                    batch=ENV_HEAD_SCORE_BATCH
-                )
+                # Priority 1: Use direct path if provided
+                if ENV_HEAD_SCORE_PATH:
+                    head_score_path = ENV_HEAD_SCORE_PATH
+                    print(f"[SparseMM] Using direct head score path: {head_score_path}")
+                # Priority 2: Check if using uniform distribution
+                elif ENV_HEAD_SCORE_FILE == "uniform":
+                    head_score_path = "uniform"
+                    print(f"[SparseMM] Using uniform head score distribution")
+                else:
+                    # Priority 3: Construct path from file type and parameters
+                    head_score_path = get_audio_head_score_path(
+                        score_type=ENV_HEAD_SCORE_FILE,
+                        batch=ENV_HEAD_SCORE_BATCH
+                    )
+                    print(f"[SparseMM] Constructed head score path: {head_score_path}")
                 raw_head_scores = load_audio_head_scores(head_score_path)
                 # Process head scores with model config
                 num_layers = model.config.text_config.num_hidden_layers

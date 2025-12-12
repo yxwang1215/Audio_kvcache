@@ -9,18 +9,18 @@ export GPU_ID="3"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-3B}"
 # export JUDGE_MODEL_PATH="${JUDGE_MODEL_PATH:-/mnt/users/hepeize-20251016/Model/Qwen3-8B}"  # 本地 judge 模型路径（可选）
 export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gpt4o-mini}" 
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results/SnapKV/budget0.8}"
 
 # 推理配置
 export SAMPLE_LIMIT=0
-export USE_SPARSEKV="false"
-export BUDGET=0.7
+export USE_SPARSEKV="true"
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-export HEAD_SCORE_FILE="aggregated"
-# export HEAD_SCORE_BATCH=None  # 可选
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
+export HEAD_SCORE_AGGREGATION="first"
 
 # FFT 滤波配置（可选）
 # export USE_FFT_FILTER="true"

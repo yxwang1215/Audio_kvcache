@@ -528,25 +528,25 @@ if __name__ == "__main__":
 
 '''
 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/batch_generate_head_scores.py \
-    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/topk16 \
+    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/topk32 \
     --alpha 1.0 \
     --beta 1.0 \
     --gamma 1.0 &
     
 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/batch_generate_head_scores.py \
-    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/topk16 \
+    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/topk32 \
     --alpha 1.0 \
     --beta 0 \
     --gamma 0 &
     
 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/batch_generate_head_scores.py \
-    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/topk16 \
+    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/topk32 \
     --alpha 0 \
     --beta 1.0 \
     --gamma 0 &
     
 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/batch_generate_head_scores.py \
-    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/topk16 \
+    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/results/topk32 \
     --alpha 0 \
     --beta 0 \
     --gamma 1.0

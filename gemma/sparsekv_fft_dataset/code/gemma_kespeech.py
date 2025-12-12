@@ -87,10 +87,11 @@ _is_e4b = ("e4b" in _model_hint)
 _default_token_buffer = 192 if _is_e4b else 128
 
 TOKEN_BUFFER = int(os.environ.get("TOKEN_BUFFER", str(_default_token_buffer)))
-MAX_TOKEN_FLOOR = int(os.environ.get("MAX_TOKEN_FLOOR", "64"))
-# Increased MAX_TOKEN_CEIL for Chinese ASR - Chinese characters may require more tokens
-# For Chinese ASR, we need more tokens as Chinese may require more tokens per second
-MAX_TOKEN_CEIL = int(os.environ.get("MAX_TOKEN_CEIL", "3072"))  # Increased from 2048 to 3072 for Chinese
+MAX_TOKEN_FLOOR = int(os.environ.get("MAX_TOKEN_FLOOR", "16"))
+# Limit MAX_TOKEN_CEIL to prevent unlimited output for single-sentence ASR
+# For KeSpeech (single sentence), typical length is 10-50 chars, requiring ~20-150 tokens
+# Even for long sentences, 512 tokens should be sufficient
+MAX_TOKEN_CEIL = int(os.environ.get("MAX_TOKEN_CEIL", "512"))  # Reduced from 3072 to 512 for single-sentence ASR
 
 # 解码与清洗策略
 # 默认开启"跳过特殊 token"，E4B 输出里特殊标记更多；锚点对 E4B 默认关闭（可通过环境变量启用）
@@ -159,6 +160,9 @@ ENV_RATIO = float(os.environ.get("RATIO", 0.2))
 ENV_WINDOW_SIZE = int(os.environ.get("WINDOW_SIZE", 64))  # Default 64
 ENV_KERNEL_SIZE = int(os.environ.get("KERNEL_SIZE", 7))
 ENV_POOLING = os.environ.get("POOLING", "maxpool")
+# Head score file path - direct path takes priority
+ENV_HEAD_SCORE_PATH = os.environ.get("HEAD_SCORE_PATH", None)
+# Fallback: use file type and parameters to construct path
 ENV_HEAD_SCORE_FILE = os.environ.get("HEAD_SCORE_FILE", "aggregated")
 ENV_HEAD_SCORE_BATCH = os.environ.get("HEAD_SCORE_BATCH", None)
 
@@ -319,7 +323,7 @@ def calculate_cer(reference: str, hypothesis: str, language: str = "chinese") ->
     CER is always calculated at character level, but text normalization
     is language-specific.
     
-    Returns CER as percentage (0-100).
+    Returns CER as percentage (0-100), capped at 100%.
     """
     try:
         # Standardize text with language-specific handling
@@ -345,7 +349,42 @@ def calculate_cer(reference: str, hypothesis: str, language: str = "chinese") ->
             return 0.0 if len(hyp_chars) == 0 else 100.0
         
         dist = _edit_distance(ref_chars, hyp_chars)
-        return (dist / len(ref_chars)) * 100
+        cer_percent = (dist / len(ref_chars)) * 100
+        
+        # CER can exceed 100% when there are many insertions
+        # CER = (S + D + I) / N, where N is the number of characters in reference
+        # If insertions are very high, CER can be > 100%, but we cap it at 100%
+        if cer_percent > 100.0:
+            # Calculate detailed metrics for debugging
+            try:
+                import jiwer
+                # For character-level, we need to use space-separated characters
+                ref_chars_str = ' '.join(ref_chars)
+                hyp_chars_str = ' '.join(hyp_chars)
+                if hasattr(jiwer, 'compute_measures'):
+                    measures = jiwer.compute_measures(ref_chars_str, hyp_chars_str)
+                    substitutions = measures.get('substitutions', 0)
+                    deletions = measures.get('deletions', 0)
+                    insertions = measures.get('insertions', 0)
+                    hits = measures.get('hits', 0)
+                    print(f"[CER Analysis] Raw CER={cer_percent:.2f}% (capped at 100%), Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
+                    print(f"  Substitutions={substitutions}, Deletions={deletions}, Insertions={insertions}, Hits={hits}")
+                    if insertions > len(ref_chars):
+                        print(f"  [Issue] Insertions ({insertions}) > Reference chars ({len(ref_chars)}) - CER capped at 100%")
+                else:
+                    # Fallback: just print basic info
+                    print(f"[CER Analysis] Raw CER={cer_percent:.2f}% (capped at 100%), Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
+                    if len(hyp_chars) > len(ref_chars):
+                        print(f"  [Issue] Hypothesis has more chars ({len(hyp_chars)}) than reference ({len(ref_chars)}) - CER capped at 100%")
+            except (ImportError, AttributeError):
+                # Fallback if jiwer not available or compute_measures doesn't exist
+                print(f"[CER Analysis] Raw CER={cer_percent:.2f}% (capped at 100%), Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
+                if len(hyp_chars) > len(ref_chars):
+                    print(f"  [Issue] Hypothesis has more chars ({len(hyp_chars)}) than reference ({len(ref_chars)}) - CER capped at 100%")
+            # Cap CER at 100%
+            cer_percent = 100.0
+        
+        return cer_percent
     except Exception as e:
         print(f"Error calculating CER: {e}")
         traceback.print_exc()
@@ -691,14 +730,16 @@ def save_results_realtime(output_file, results_dict, timing_stats, dataset_size)
         
         # Calculate CER (primary metric for Chinese ASR)
         if len(cer_scores) > 0:
+            # Ensure all CER scores are capped at 100%
+            cer_scores = [min(cer, 100.0) for cer in cer_scores]
             # CER is stored as percentage (0-100), calculate mean directly from samples
             cer_mean = np.mean(cer_scores)
             cer_std = np.std(cer_scores)
             cer_min = np.min(cer_scores)
-            cer_max = np.max(cer_scores)
+            cer_max = min(np.max(cer_scores), 100.0)  # Limit cer_max to 100%
             perfect_predictions_cer = len([cer for cer in cer_scores if cer == 0.0])
             # Character accuracy = 100 - CER (both in percentage)
-            char_accuracy = 100.0 - cer_mean
+            char_accuracy = max(100.0 - cer_mean, 0.0)  # Ensure accuracy is not negative
         else:
             cer_mean = 100.0  # CER is percentage (0-100)
             cer_std = 0.0
@@ -1093,11 +1134,21 @@ def init_model():
         try:
             # Load head scores
             if AUDIO_HEAD_UTILS_AVAILABLE:
-                # Use correct parameter order: base_dir (default), score_type, batch
-                head_score_path = get_audio_head_score_path(
-                    score_type=ENV_HEAD_SCORE_FILE,
-                    batch=ENV_HEAD_SCORE_BATCH
-                )
+                # Priority 1: Use direct path if provided
+                if ENV_HEAD_SCORE_PATH:
+                    head_score_path = ENV_HEAD_SCORE_PATH
+                    print(f"[SparseMM] Using direct head score path: {head_score_path}")
+                # Priority 2: Check if using uniform distribution
+                elif ENV_HEAD_SCORE_FILE == "uniform":
+                    head_score_path = "uniform"
+                    print(f"[SparseMM] Using uniform head score distribution")
+                else:
+                    # Priority 3: Construct path from file type and parameters
+                    head_score_path = get_audio_head_score_path(
+                        score_type=ENV_HEAD_SCORE_FILE,
+                        batch=ENV_HEAD_SCORE_BATCH
+                    )
+                    print(f"[SparseMM] Constructed head score path: {head_score_path}")
                 raw_head_scores = load_audio_head_scores(head_score_path)
                 # Process head scores with model config
                 num_layers = model.config.text_config.num_hidden_layers
@@ -1224,6 +1275,8 @@ def estimate_tokens(duration_sec: float,
     
     For Chinese and other non-English languages, we use a more conservative estimate 
     as they may require more tokens per second (e.g., different tokenization).
+    
+    For single-sentence ASR (like KeSpeech), the output is limited to prevent unlimited generation.
     """
     lang_lower = language.lower() if language else ASR_LANGUAGE.lower()
     
@@ -1237,6 +1290,7 @@ def estimate_tokens(duration_sec: float,
         buffer_tokens = int(buffer_tokens * 1.2)  # 20% more buffer
     
     est = int(duration_sec * tokens_per_sec) + int(buffer_tokens)
+    # Ensure the estimate is capped at MAX_TOKEN_CEIL to prevent unlimited output
     return max(floor, min(ceil, est))
 
 def _seq_jaccard(a: List[str], b: List[str]) -> float:
@@ -1487,6 +1541,10 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
     按照官方文档实现：https://ai.google.dev/gemma/docs/capabilities/audio
     官方示例使用 apply_chat_template 的 tokenize=True, return_dict=True 方式
     """
+    # Ensure max_new_tokens is capped to prevent unlimited output
+    # For single-sentence ASR, limit to MAX_TOKEN_CEIL
+    max_new_tokens = min(max_new_tokens, MAX_TOKEN_CEIL)
+    
     # Reset SparseMM state before each sample ONLY if SparseMM is actually enabled
     # This avoids unnecessary overhead when SparseMM is not in use
     if sparsem_enabled:
@@ -1640,6 +1698,8 @@ def asr_transcribe_with_overlap(processor, model, audio_np: np.ndarray, sr: int,
             dyn_max = MAX_NEW_TOKENS_ENV
         else:
             dyn_max = estimate_tokens(dur, language=ASR_LANGUAGE)
+        # Ensure max_new_tokens is capped to prevent unlimited output
+        dyn_max = min(dyn_max, MAX_TOKEN_CEIL)
         txt, info = asr_transcribe(processor, model, chunk, sr, dyn_max, sparsem_enabled)
         info.update({"chunk_index": ci, "start_sec": a / sr, "end_sec": b / sr, "duration_sec": dur})
         diag["chunks"].append(info)
@@ -1840,6 +1900,8 @@ def main():
                 else:
                     dur = len(y) / float(sr)
                     dyn_max = MAX_NEW_TOKENS_ENV if MAX_NEW_TOKENS_ENV > 0 else estimate_tokens(dur, language=ASR_LANGUAGE)
+                    # Ensure max_new_tokens is capped to prevent unlimited output
+                    dyn_max = min(dyn_max, MAX_TOKEN_CEIL)
                     pred_text, diag_single = asr_transcribe(processor, model, y, sr, dyn_max, sparsem_enabled)
                     results["summary"]["total_chunks"] += 1
                     results["summary"]["truncated_chunks"] += 1 if diag_single.get("truncated") else 0
@@ -1848,6 +1910,8 @@ def main():
                 # Calculate WER/CER with Chinese language setting
                 wer = calculate_wer(reference, pred_text, language="chinese")
                 cer = calculate_cer(reference, pred_text, language="chinese")
+                # Ensure CER is capped at 100% (calculate_cer should already do this, but double-check)
+                cer = min(cer, 100.0)
                 set_f1 = set_f1_per_sample(reference, pred_text, language="chinese")
                 set_f1_list.append(set_f1)
                 
@@ -1900,9 +1964,11 @@ def main():
             if cnt > 0:
                 cer_scores = [r["cer"] for r in results["samples"] if "cer" in r]
                 if len(cer_scores) > 0:
-                    cur_avg_cer = np.mean(cer_scores)
+                    # Ensure all CER scores are capped at 100%
+                    cer_scores = [min(cer, 100.0) for cer in cer_scores]
+                    cur_avg_cer = min(np.mean(cer_scores), 100.0)  # Limit average CER to 100%
                     # Character accuracy = 100 - CER (both in percentage)
-                    cur_char_acc = 100.0 - cur_avg_cer
+                    cur_char_acc = max(100.0 - cur_avg_cer, 0.0)  # Ensure accuracy is not negative
                 else:
                     cur_avg_cer = 100.0
                     cur_char_acc = 0.0
@@ -1930,10 +1996,12 @@ def main():
         
         # Calculate CER (primary metric for Chinese ASR)
         if len(cer_scores) > 0:
+            # Ensure all CER scores are capped at 100%
+            cer_scores = [min(cer, 100.0) for cer in cer_scores]
             # CER is stored as percentage (0-100), calculate mean directly from samples
             results["summary"]["avg_cer"] = float(np.mean(cer_scores))
             # Character accuracy = 100 - CER (both in percentage)
-            results["summary"]["char_accuracy"] = 100.0 - results["summary"]["avg_cer"]
+            results["summary"]["char_accuracy"] = max(100.0 - results["summary"]["avg_cer"], 0.0)  # Ensure accuracy is not negative
         else:
             results["summary"]["avg_cer"] = 100.0
             results["summary"]["char_accuracy"] = 0.0

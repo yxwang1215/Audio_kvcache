@@ -1,21 +1,17 @@
 #!/bin/bash
 # Multilingual LibriSpeech ASR Evaluation with Gemma-3n-E2B-it - German
-# 德语 ASR 评估脚本
 
-export CUDA_VISIBLE_DEVICES=4
-# 模型路径配置
+export CUDA_VISIBLE_DEVICES=7
 export MODEL_PATH="/mnt/public/models/gemma-3n-E4B-it"
 export SAMPLE_LIMIT=0
-export USE_SPARSEKV="false"
-# export BUDGET=0.7
+
+export USE_SPARSEKV="true"
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-export HEAD_SCORE_FILE="aggregated"
-
-# German-specific optimization: increase max_new_tokens (German words are longer)
-export MAX_NEW_TOKENS_GERMAN=1500
+export HEAD_SCORE_FILE="uniform"
 
 export USE_FFT_FILTER="false"
 export FFT_FILTER_TYPE="lowpass"
@@ -24,7 +20,6 @@ export FFT_ALPHA="0.5"
 export FFT_ADAPTIVE_CUTOFF="true"
 export FFT_USE_SALIENCY="false"
 
-# 重复检测配置（防止模型陷入重复循环）
 export NO_REPEAT_NGRAM_SIZE=3
 export REPETITION_PENALTY=1.1
 
@@ -35,6 +30,6 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/gemma/sparsekv_fft_dataset
 python code/gemma_multilingual_librispeech.py \
     --model-path "${MODEL_PATH}" \
     --languages german \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/MultilingualLibriSpeech/German/vanilla/full_cache \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/MultilingualLibriSpeech/German/vanilla/full_cache/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/MultilingualLibriSpeech/German/SnapKV/budget0.8 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/MultilingualLibriSpeech/German/SnapKV/budget0.8/timing_stats.json
 

@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 
 def load_audio_head_scores(
     score_file: str,
-    use_mean: bool = True
+    use_mean: bool = False
 ) -> Dict[str, List[float]]:
     """
     Load audio head scores from JSON file
@@ -38,7 +38,7 @@ def process_audio_head_scores(
     num_hidden_layers: int,
     num_attention_heads: int,
     num_key_value_groups: int = 1,
-    use_mean: bool = True
+    use_mean: bool = False
 ) -> torch.Tensor:
     """
     Process audio head scores into a tensor format compatible with SparseMM

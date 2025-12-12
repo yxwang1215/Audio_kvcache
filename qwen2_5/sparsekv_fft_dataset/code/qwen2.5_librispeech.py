@@ -78,7 +78,7 @@ ENV_HEAD_SCORE_ALPHA = os.environ.get("HEAD_SCORE_ALPHA", None)
 ENV_HEAD_SCORE_BETA = os.environ.get("HEAD_SCORE_BETA", None)
 ENV_HEAD_SCORE_GAMMA = os.environ.get("HEAD_SCORE_GAMMA", None)
 # Aggregation method for multiple scores in JSON (mean, first, second, max, min, sum)
-ENV_HEAD_SCORE_AGGREGATION = os.environ.get("HEAD_SCORE_AGGREGATION", "mean")
+ENV_HEAD_SCORE_AGGREGATION = os.environ.get("HEAD_SCORE_AGGREGATION", "first")
 
 # Audio-aware TopK selection parameters (from WHY_IMPROVEMENTS.md)
 USE_AUDIO_AWARE_TOPK = os.environ.get("USE_AUDIO_AWARE_TOPK", "false").lower() == "true"
@@ -1002,8 +1002,12 @@ def main():
             if ENV_HEAD_SCORE_PATH:
                 head_score_path = ENV_HEAD_SCORE_PATH
                 print(f"[SparseMM] Using direct head score path: {head_score_path}")
+            # Priority 2: Check if using uniform distribution
+            elif ENV_HEAD_SCORE_FILE == "uniform":
+                head_score_path = "uniform"
+                print(f"[SparseMM] Using uniform head score distribution")
             else:
-                # Priority 2: Construct path from file type and parameters
+                # Priority 3: Construct path from file type and parameters
                 head_score_type = ENV_HEAD_SCORE_FILE
                 head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
                 

@@ -16,13 +16,21 @@ def load_audio_head_scores(
     """
     Load audio head scores from JSON file
     
+    Special handling for "uniform" keyword:
+    - If score_file == "uniform", returns {"__uniform__": 1.0} for uniform distribution
+    
     Args:
-        score_file: Path to the JSON file containing head scores
+        score_file: Path to the JSON file containing head scores, or "uniform" for uniform distribution
         use_mean: If True, use mean of the score list; otherwise use first value
     
     Returns:
         Dictionary with keys "layer-head" and values as score lists
     """
+    # Special handling for uniform distribution
+    if score_file == "uniform":
+        print(f"[Head Score] Using uniform distribution (all heads have equal weight)")
+        return {"__uniform__": 1.0}
+    
     if not os.path.exists(score_file):
         raise FileNotFoundError(f"Head score file not found: {score_file}")
     
