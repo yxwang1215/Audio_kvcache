@@ -109,6 +109,7 @@ class WordAttentionAnalyzer:
         self.current_audio_indices = None  # prefill 阶段的音频 token 位置
         self.current_word_alignments = []  # 当前样本的高质量单词对齐
         self.prefill_length = 0  # prefill 阶段的序列长度
+        self.current_model_size = "unknown"  # 当前模型大小（3B/7B/unknown）
         
         # 注意力捕获
         self.generation_attentions = []  # 每个生成步的注意力: List[Dict[(layer, head), tensor]]
@@ -411,7 +412,7 @@ class WordAttentionAnalyzer:
         token_ids: List[int],
         generated_text: str,
         word_alignments: List[WordAlignment],
-        max_skip_threshold: int = 15,  # 增加阈值，7B模型可能需要更多token
+        max_skip_threshold: Optional[int] = None,  # 如果为None，将根据模型大小自动设置
         debug: bool = False
     ) -> List[Tuple[int, str, Optional[WordAlignment]]]:
         """将生成的 token 对齐到单词
@@ -428,7 +429,18 @@ class WordAttentionAnalyzer:
         - 使用更鲁棒的文本标准化（去除所有非字母数字字符）
         - 支持模糊匹配（允许部分匹配）
         - 增加诊断信息
+        - 根据模型大小自动调整 max_skip_threshold
         """
+        # 根据模型大小自动设置 max_skip_threshold
+        if max_skip_threshold is None:
+            model_size = getattr(self, 'current_model_size', '3B')
+            if model_size == "7B":
+                max_skip_threshold = 30  # 7B模型需要更大的阈值
+            else:
+                max_skip_threshold = 15  # 3B模型使用较小的阈值
+            if debug:
+                print(f"  [Debug] Using max_skip_threshold={max_skip_threshold} for {model_size} model")
+        
         # 解码 token 为文本
         token_texts = []
         for token_id in token_ids:
@@ -703,12 +715,29 @@ class WordAttentionAnalyzer:
                 else:
                     model_size = f"{hidden_size}"
         
+        # 更准确的模型大小检测：检查模型路径或参数量
+        if model_size == "unknown":
+            # 尝试从模型路径判断
+            if hasattr(self.model, 'name_or_path'):
+                model_path = str(self.model.name_or_path).lower()
+                if '7b' in model_path or '7B' in model_path:
+                    model_size = "7B"
+                elif '3b' in model_path or '3B' in model_path:
+                    model_size = "3B"
+        
         # 根据模型大小调整生成参数
         max_new_tokens = 128
         if model_size == "7B":
-            # 7B模型可能需要更多token或不同的采样策略
-            max_new_tokens = 256  # 增加最大token数
+            # 7B模型可能需要更多token
+            max_new_tokens = 512  # 增加到512，给7B模型更多空间
             print(f"  [Info] Detected {model_size} model, using max_new_tokens={max_new_tokens}")
+        elif model_size == "3B":
+            print(f"  [Info] Detected {model_size} model, using max_new_tokens={max_new_tokens}")
+        else:
+            print(f"  [Warning] Unknown model size ({model_size}), using default max_new_tokens={max_new_tokens}")
+        
+        # 保存模型大小供后续使用
+        self.current_model_size = model_size
         
         with torch.no_grad():
             outputs = self.model.generate(
@@ -768,11 +797,12 @@ class WordAttentionAnalyzer:
         print(f"{'='*60}\n")
         
         # 10. 对齐 tokens 到单词
-        
+        # 根据模型大小自动调整 max_skip_threshold
         token_to_word = self.align_tokens_to_words(
             generated_ids.cpu().tolist(),
             generated_text,
             word_alignments,
+            max_skip_threshold=None,  # None 表示根据模型大小自动设置
             debug=True  # 启用调试模式
         )
         
@@ -1396,20 +1426,6 @@ if __name__ == "__main__":
     main()
 
 '''
-使用示例：
-
-# 1. 处理前10个样本（使用默认参数）
-python word_attention_analysis.py --num_samples 10
-
-# 2. 处理所有样本（使用默认参数）
-CUDA_VISIBLE_DEVICES=1 python word_attention_analysis.py --num_samples 0
-
-# 3. 处理第100-200个样本（索引从0开始，左闭右开）
-CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py --start_idx 100 --end_idx 200
-
-# 4. 处理从第500个开始的所有样本
-python word_attention_analysis.py --start_idx 500
-
 # 5. 指定输出目录和topk参数
 CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py \
     --start_idx 1 \

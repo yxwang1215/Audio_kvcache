@@ -2,14 +2,12 @@
 # Multilingual LibriSpeech ASR Evaluation with Qwen2.5-Omni - French
 # 法语 ASR 评估脚本
 
-export CUDA_VISIBLE_DEVICES=4
-# 模型路径配置
+export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 
-# export USE_SPARSEKV="true"
 export USE_SNAPKV="true"
-export BUDGET=0.8
+export BUDGET=0.6
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -33,5 +31,5 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset
 python code/qwen3_multilingual_librispeech.py \
     --model-path "${MODEL_PATH}" \
     --languages french \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/French/SparseKV/budget0.8_topk16_alpha1_beta1_gamma1_first \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/French/SparseKV/budget0.8_topk16_alpha1_beta1_gamma1_first/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/French/SparseKV/budget0.6_win32_ratio0.5_kernel5_topk16_alpha1_beta1_gamma1_1213 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/French/SparseKV/budget0.6_win32_ratio0.5_kernel5_topk16_alpha1_beta1_gamma1_1213/timing_stats.json

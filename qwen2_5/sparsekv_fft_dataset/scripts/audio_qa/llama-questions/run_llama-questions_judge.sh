@@ -3,23 +3,13 @@
 # 使用 LLM as Judge 对推理结果进行打分
 
 set -e
-
-# Judge 模型配置（二选一）
-# export JUDGE_MODEL_PATH="${JUDGE_MODEL_PATH:-/mnt/users/hepeize-20251016/Model/Qwen3-8B}"  # 本地 judge 模型路径
-export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}"  # API judge 模型名称（如 gemini-2.5-flash, gpt4o-mini, qwen-audio）
-
-# API 配置（使用 API judge 时必填）
+export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}" 
 export JUDGE_API_KEY="${JUDGE_API_KEY:-sk-nSeZoIkSf8DGjeO5IvHnZpEc9O0QqeJrUyiJ5Oij55LW4QjF}"  # API Key
 export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}"  # API Base URL
-
-# 输入输出路径
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/llama_questions_Results/SnapKV/budget0.8}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/llama_questions_Results/SparseKV/budget0.8_qwen2_5_3B_new_topk24_alpha1_beta1_gamma1_first}"
 export INFERENCE_OUTPUT_FILE="${INFERENCE_OUTPUT_FILE:-${OUTPUT_DIR}/llama_questions_results_qwen25.json}"
-# Judge 输出文件：与 inference 相同目录，相同格式（JSON）
 export JUDGE_OUTPUT_FILE="${JUDGE_OUTPUT_FILE:-${OUTPUT_DIR}/llama_questions_results_qwen25_judge.json}"
-# 强制重新打分（如果设置为 true，将重新处理所有样本，即使已经处理过）
 export FORCE_REJUDGE="${FORCE_REJUDGE:-true}"
-# =============================================================
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'

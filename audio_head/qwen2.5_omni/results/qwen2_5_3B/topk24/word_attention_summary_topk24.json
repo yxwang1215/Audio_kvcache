@@ -11,49 +11,49 @@
   "high_quality_ratio": 0.22177894819589655,
   "word_coverage": {
     "total_words_in_whisperx": 11285,
-    "total_words_analyzed": 9160,
-    "global_coverage_ratio": 0.8116969428444838,
-    "samples_with_full_coverage": 1275,
-    "samples_with_partial_coverage": 1185,
-    "samples_with_no_coverage": 145
+    "total_words_analyzed": 10021,
+    "global_coverage_ratio": 0.8879929109437306,
+    "samples_with_full_coverage": 1811,
+    "samples_with_partial_coverage": 754,
+    "samples_with_no_coverage": 40
   },
-  "total_tokens_analyzed": 9961,
-  "avg_topk_hits_on_word": 0.8580472523396803,
-  "avg_topk_hits_on_audio": 10.928331952949838,
-  "avg_hit_ratio": 0.03575196884748667,
-  "median_hit_ratio": 0.024739583333333332,
+  "total_tokens_analyzed": 10979,
+  "avg_topk_hits_on_word": 0.9204037569197762,
+  "avg_topk_hits_on_audio": 14.780225316513343,
+  "avg_hit_ratio": 0.03835015653832401,
+  "median_hit_ratio": 0.029730902777777776,
   "hit_ratio_distribution": {
-    "p25": 0.009910300925925925,
-    "p50": 0.024739583333333332,
-    "p75": 0.049479166666666664,
-    "p95": 0.11089409722222222
+    "p25": 0.013599537037037037,
+    "p50": 0.029730902777777776,
+    "p75": 0.0513599537037037,
+    "p95": 0.11075665509259261
   },
-  "avg_word_audio_ratio": 0.08199866078485803,
-  "median_word_audio_ratio": 0.054246165357276464,
+  "avg_word_audio_ratio": 0.06413258539420208,
+  "median_word_audio_ratio": 0.047388980263157895,
   "word_audio_ratio_distribution": {
-    "p25": 0.022900763358778626,
-    "p50": 0.054246165357276464,
-    "p75": 0.1089833411178577,
-    "p95": 0.2511819429617203
+    "p25": 0.022268315147679563,
+    "p50": 0.047388980263157895,
+    "p75": 0.08304164377984438,
+    "p95": 0.19163461160073103
   },
-  "avg_num_word_audio_tokens": 5.302379279188837,
+  "avg_num_word_audio_tokens": 5.313143273522178,
   "median_num_word_audio_tokens": 4.0,
-  "avg_word_audio_coverage_ratio": 0.14769787220334307,
-  "median_word_audio_coverage_ratio": 0.14930555555555555,
+  "avg_word_audio_coverage_ratio": 0.16712363139331066,
+  "median_word_audio_coverage_ratio": 0.16666666666666666,
   "word_audio_coverage_ratio_distribution": {
-    "p25": 0.08472222222222223,
-    "p50": 0.14930555555555555,
-    "p75": 0.20399305555555555,
-    "p95": 0.2934027777777778
+    "p25": 0.10243055555555555,
+    "p50": 0.16666666666666666,
+    "p75": 0.22782118055555556,
+    "p95": 0.3164765211640212
   },
-  "avg_attn_weight_on_word": 0.029947812287979318,
-  "avg_attn_weight_on_audio": 0.22297294645573051,
-  "avg_attn_ratio": 0.13880681907509834,
-  "median_attn_ratio": 0.1194658261694081,
+  "avg_attn_weight_on_word": 0.018263216347612993,
+  "avg_attn_weight_on_audio": 0.28951807398794827,
+  "avg_attn_ratio": 0.06741699145884016,
+  "median_attn_ratio": 0.05035936866550066,
   "attn_ratio_distribution": {
-    "p25": 0.028751857898081764,
-    "p50": 0.1194658261694081,
-    "p75": 0.20852099315557984,
-    "p95": 0.36520056272940915
+    "p25": 0.0221706243572155,
+    "p50": 0.05035936866550066,
+    "p75": 0.08796244747495785,
+    "p95": 0.20008896846156424
   }
 }

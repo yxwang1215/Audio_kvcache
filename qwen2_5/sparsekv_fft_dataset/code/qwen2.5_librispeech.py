@@ -117,12 +117,26 @@ else:
 
 from model.processing_qwen2_5_omni import Qwen2_5OmniProcessor
 from qwen_omni_utils import process_mm_info
+
+# Check if optimized SparseMM should be used
+USE_OPTIMIZED_SPARSEMM = os.environ.get("USE_OPTIMIZED_SPARSEMM", "false").lower() == "true"
+
 # Import SparseMM utilities from model directory
-from model.sparsemm_utils import (
-    SparseMM,
-    DynamicCacheSplitHeadFlatten,
-    init_sparsemm
-)
+if USE_OPTIMIZED_SPARSEMM:
+    from model.sparsemm_utils_optimized import (
+        SparseMM_Optimized as SparseMM,
+        DynamicCacheSplitHeadFlattenOptimized as DynamicCacheSplitHeadFlatten,
+        init_sparsemm_optimized as init_sparsemm
+    )
+    print("Using OPTIMIZED SparseMM implementation for better performance")
+else:
+    from model.sparsemm_utils import (
+        SparseMM,
+        DynamicCacheSplitHeadFlatten,
+        init_sparsemm
+    )
+    print("Using standard SparseMM implementation")
+    
 from transformers.cache_utils import DynamicCache
 
 # Import audio head utilities for SparseMM
@@ -1287,31 +1301,15 @@ def main():
             if USE_SPARSEKV and sparsemm_enabled:
                 past_key_values = DynamicCacheSplitHeadFlatten()
             
-            # Measure prefill time: generate only 1 token to measure prefill phase
-            prefill_start_event = torch.cuda.Event(enable_timing=True)
-            prefill_end_event = torch.cuda.Event(enable_timing=True)
+            # Single generate call for actual inference
+            # NOTE: We removed the separate prefill measurement because:
+            # 1. Using the same past_key_values for two generate calls causes corruption
+            # 2. The first generate modifies the cache state, making the second call invalid
+            start_event = torch.cuda.Event(enable_timing=True)
+            end_event = torch.cuda.Event(enable_timing=True)
             
-            prefill_start_event.record()
+            start_event.record()
             with torch.no_grad():
-                # First generate call: only 1 token to measure prefill time
-                _ = model.generate(
-                    **inputs,
-                    use_audio_in_video=True,
-                    return_audio=False,
-                    thinker_max_new_tokens=1,  
-                    thinker_do_sample=False,
-                    pad_token_id=processor.tokenizer.eos_token_id,
-                    past_key_values=past_key_values
-                )
-            prefill_end_event.record()
-            
-            # Measure decode time: generate full output
-            decode_start_event = torch.cuda.Event(enable_timing=True)
-            decode_end_event = torch.cuda.Event(enable_timing=True)
-            
-            decode_start_event.record()
-            with torch.no_grad():
-                # Second generate call: full generation to measure decode time
                 out_ids = model.generate(
                     **inputs,
                     use_audio_in_video=True,
@@ -1321,13 +1319,23 @@ def main():
                     pad_token_id=processor.tokenizer.eos_token_id,
                     past_key_values=past_key_values
                 )
-            decode_end_event.record()
+            end_event.record()
             
             # Synchronize and calculate times
             torch.cuda.synchronize()
-            prefill_time = prefill_start_event.elapsed_time(prefill_end_event) / 1000.0
-            decode_time = decode_start_event.elapsed_time(decode_end_event) / 1000.0
-            total_time = prefill_time + decode_time
+            total_time = start_event.elapsed_time(end_event) / 1000.0
+            # Estimate prefill vs decode time based on token counts
+            input_token_count = inputs.input_ids.shape[1] if hasattr(inputs, 'input_ids') else 0
+            output_token_count = out_ids.shape[1] if hasattr(out_ids, 'shape') else len(out_ids[0]) if isinstance(out_ids, list) else 0
+            decode_token_count = max(0, output_token_count - input_token_count)
+            # Rough estimate: prefill is proportional to input tokens, decode to output tokens
+            total_tokens = input_token_count + decode_token_count
+            if total_tokens > 0:
+                prefill_time = total_time * (input_token_count / total_tokens)
+                decode_time = total_time * (decode_token_count / total_tokens)
+            else:
+                prefill_time = total_time
+                decode_time = 0.0
             
             resp = processor.batch_decode(
                 out_ids, 
@@ -1344,10 +1352,6 @@ def main():
             # Store original response for debugging
             original_resp = resp[:300] if len(resp) > 300 else resp
             hypothesis = clean_response(resp)
-            
-            # Calculate decode token count (generated tokens only, excluding input)
-            input_token_count = inputs.input_ids.shape[1] if hasattr(inputs, 'input_ids') else 0
-            output_token_count = out_ids.shape[1] if hasattr(out_ids, 'shape') else len(out_ids[0]) if isinstance(out_ids, list) else 0
             decode_token_count = max(0, output_token_count - input_token_count)
             
             # Calculate TPS (Tokens Per Second) using decode time

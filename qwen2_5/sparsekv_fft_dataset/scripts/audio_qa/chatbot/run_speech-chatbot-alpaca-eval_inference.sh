@@ -1,23 +1,20 @@
 #!/bin/bash
 # speech-chatbot-alpaca-eval 推理脚本
-# 用于生成模型答案
 
 set -e
-
-# =================== 用户配置区 ===================
-export GPU_ID="1"
+export GPU_ID="0"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-3B}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_chatbot_alpaca_eval_Results/SnapKV/budget0.2}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_chatbot_alpaca_eval_Results/SparseKV/budget0.8_qwen2_5_3B_new_topk24_alpha1_beta1_gamma1_first}"
 
-# 推理配置
 export SAMPLE_LIMIT=0
 export USE_SPARSEKV="true"
-export BUDGET=0.2
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-export HEAD_SCORE_FILE="uniform"
+# export HEAD_SCORE_FILE="uniform"
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_3B_new/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
 # export HEAD_SCORE_BATCH=None  # 可选
 
 # FFT 滤波配置（可选）
@@ -25,9 +22,8 @@ export HEAD_SCORE_FILE="uniform"
 # export FFT_FILTER_TYPE="lowpass"
 # export FFT_CUTOFF_RATIO="0.3"
 # export FFT_ALPHA="0.5"
-# export FFT_ADAPTIVE_CUTOFF="true"
+# export FFT_ADAPTIVE_CUTOFF="false"
 # export FFT_USE_SALIENCY="false"
-# =============================================================
 
 export CUDA_VISIBLE_DEVICES=$GPU_ID
 GREEN='\033[0;32m'

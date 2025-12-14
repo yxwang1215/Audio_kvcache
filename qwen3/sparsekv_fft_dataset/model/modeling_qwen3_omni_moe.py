@@ -4099,28 +4099,24 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         num_key_value_heads = model_config.num_key_value_heads
         num_key_value_groups = num_attention_heads // num_key_value_heads
         
-        # Set head_score in config for SparseMM initialization
-        def audio_load_head_score(model_type):
-            # Return format: dict with "layer-head" keys and score lists
-            head_scores_dict = {}
-            head_score_list = head_score_data['scores']
-            
-            idx = 0
-            for layer_idx in range(num_hidden_layers):
-                for head_idx in range(num_attention_heads):
-                    key = f"{layer_idx}-{head_idx}"
-                    head_scores_dict[key] = [head_score_list[idx]]
-                    idx += 1
-            
-            return head_scores_dict
+        # Validate head_score_data size
+        expected_size = num_hidden_layers * num_attention_heads
+        actual_size = len(head_score_data['scores'])
+        print(f"[SparseMM DEBUG] Head score validation:")
+        print(f"[SparseMM DEBUG]   Model: {num_hidden_layers} layers x {num_attention_heads} heads = {expected_size} expected scores")
+        print(f"[SparseMM DEBUG]   Got: {actual_size} scores")
         
-        # Temporarily replace load_head_score in sparsemm_utils
-        from . import sparsemm_utils
-        original_load_head_score = sparsemm_utils.load_head_score
-        sparsemm_utils.load_head_score = audio_load_head_score
+        if actual_size != expected_size:
+            print(f"[SparseMM WARNING] Head score size mismatch! Using uniform distribution.")
+            # Use uniform distribution if sizes don't match
+            head_score_list = [1.0 / expected_size] * expected_size
+        else:
+            head_score_list = head_score_data['scores']
         
         # Apply SparseMM configuration to model config
-        model_config.head_score = 'audio'
+        # CRITICAL FIX: Pass the pre-computed head_score list directly instead of 'audio' string
+        # This bypasses the buggy load_head_score function that loads wrong-sized visual head scores
+        model_config.head_score = head_score_list  # Pass list directly, SparseMM now supports this
         model_config.model_type = 'qwen'  # Ensure model_type is set
         model_config.window_size = sparsemm_config.get('window_size', 64)
         budget_value = sparsemm_config.get('budget', 4096)
@@ -4129,7 +4125,8 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
         model_config.ratio = sparsemm_config.get('ratio', 0.2)
         print(f"[SparseMM DEBUG] Set model_config.max_capacity_prompt = {budget_value}")
-        print(f"[SparseMM DEBUG] model_config.max_capacity_prompt after setting: {getattr(model_config, 'max_capacity_prompt', 'NOT SET')}")
+        print(f"[SparseMM DEBUG] model_config.head_score type: {type(model_config.head_score)}")
+        print(f"[SparseMM DEBUG] model_config.head_score length: {len(model_config.head_score) if isinstance(model_config.head_score, list) else 'N/A'}")
         # Set gqa_func for Qwen models
         if not hasattr(model_config, 'gqa_func'):
             model_config.gqa_func = 'mean'
@@ -4164,9 +4161,6 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             # Replace the attention module
             layer.self_attn = new_attn
             patched_count += 1
-        
-        # Restore original load_head_score
-        sparsemm_utils.load_head_score = original_load_head_score
         
         print(f"[SparseMM DEBUG] Total layers patched: {patched_count}/{len(base_model.layers)}")
         return True

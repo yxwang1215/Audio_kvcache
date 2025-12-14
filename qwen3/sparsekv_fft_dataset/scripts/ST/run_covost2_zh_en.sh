@@ -1,14 +1,12 @@
 #!/bin/bash
 # CoVoST2 Chinese-to-English Speech Translation Evaluation with Qwen2.5-Omni
-# 中文到英语语音翻译评估脚本
 
-export CUDA_VISIBLE_DEVICES=3
-# 模型路径配置
+export CUDA_VISIBLE_DEVICES=1
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 
 export USE_SPARSEKV="true"
-export BUDGET=0.8
+export BUDGET=0.6
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -25,12 +23,10 @@ export FFT_ADAPTIVE_CUTOFF="false"
 export FFT_USE_SALIENCY="false"
 
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
-
-# 激活环境并运行（中文到英语）
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
 python code/qwen3_covost2.py \
     --direction zh_en \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/SparseKV/budget0.8 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/SparseKV/budget0.8/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/SparseKV/budget0.6 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/SparseKV/budget0.6/timing_stats.json

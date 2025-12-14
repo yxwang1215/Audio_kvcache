@@ -505,203 +505,266 @@ def load_speech_chatbot_alpaca_eval_dataset(split="test", twinkstart_path=None):
     
     dataset_data = None
     
-    # Try to load from HuggingFace cache first (without downloading)
-    try:
-        from datasets import load_dataset
-        print(f"Attempting to load speech-chatbot-alpaca-eval from HuggingFace cache (no download)...")
-        hf_dataset = load_dataset("TwinkStart/speech-chatbot-alpaca-eval", split=split, download_mode="reuse_cache_if_exists")
-        print(f"Successfully loaded {len(hf_dataset)} samples from HuggingFace cache")
-        
-        # Convert to list format
-        dataset_data = []
-        for idx, item in enumerate(hf_dataset):
-            # Extract question text - prioritize instruction (chatbot format), then input, then QuestionText
-            question_text = item.get("instruction", "")
-            if not question_text:
-                question_text = item.get("input", "")
-            if not question_text:
-                question_text = item.get("QuestionText", "")
-            if not question_text:
-                # Last resort: try other common field names
-                question_text = item.get("question", item.get("prompt", ""))
-            
-            # Extract answer - according to registry, ref_col is "output"
-            answer = item.get("output", "")
-            if not answer:
-                # Fallback to "answer" if "output" is not available
-                answer = item.get("answer", "")
-            
-            # Use local audio file if available, otherwise use audio from HuggingFace dataset
-            audio_path = None
-            audio_array = None
-            sampling_rate = 16000
-            
-            if local_audio_files and idx < len(local_audio_files):
-                audio_path = local_audio_files[idx]
-                # Load audio from local file
-                try:
-                    # Try librosa first, then soundfile
-                    try:
-                        audio_array, sr = librosa.load(audio_path, sr=16000, mono=True)
-                        sampling_rate = 16000
-                    except Exception:
-                        audio, sample_rate = sf.read(audio_path)
-                        if len(audio.shape) > 1 and audio.shape[1] > 1:
-                            audio = np.mean(audio, axis=1)
-                        if sample_rate != 16000:
-                            from scipy import signal
-                            audio = signal.resample(audio, int(len(audio) * 16000 / sample_rate))
-                        audio_array = audio.astype(np.float32)
-                        sampling_rate = 16000
-                except Exception as e:
-                    print(f"Warning: Failed to load audio from {audio_path}: {e}")
-                    audio_array = None
-            elif 'audio' in item and isinstance(item['audio'], dict):
-                audio_path = item['audio'].get('path')
-                audio_array = item['audio'].get('array')
-                sampling_rate = item['audio'].get('sampling_rate', 16000)
-            
-            # Calculate duration if audio array is available
-            duration = 0.0
-            if audio_array is not None:
-                try:
-                    duration = len(audio_array) / sampling_rate
-                except:
-                    duration = 0.0
-            
-            dataset_data.append({
-                "id": item.get("id", f"sample_{idx}"),
-                "QuestionText": question_text,
-                "answer": answer,
-                "duration": duration,
-                "audio": {
-                    "array": audio_array,
-                    "sampling_rate": sampling_rate,
-                    "path": audio_path
-                }
-            })
-            
-    except Exception as e:
-        print(f"Could not load from HuggingFace cache: {e}")
-        print(f"Attempting to load from UltraEval-Audio registry...")
-        
-        # Fallback to registry
+    # Try to load from local metadata.json first (offline mode)
+    local_metadata_file = os.path.join(twinkstart_path, "speech-chatbot-alpaca-eval", "metadata.json")
+    if os.path.exists(local_metadata_file):
         try:
-            from audio_evals.registry import registry
+            print(f"Loading metadata from local file: {local_metadata_file}")
+            with open(local_metadata_file, 'r', encoding='utf-8') as f:
+                local_metadata = json.load(f)
+            print(f"Successfully loaded {len(local_metadata)} samples from local metadata")
             
-            dataset_obj = registry.get_dataset("speech-chatbot-alpaca-eval")
-            if dataset_obj is None:
-                print(f"Error: Dataset 'speech-chatbot-alpaca-eval' not found in registry")
-                # Fall back to local files only
-                if not local_audio_files:
-                    return []
-                dataset_data = []
-                for idx, audio_file in enumerate(local_audio_files):
+            # Convert to dataset format with audio
+            dataset_data = []
+            for idx, item in enumerate(local_metadata):
+                # Use local audio file if available
+                audio_path = None
+                audio_array = None
+                sampling_rate = 16000
+                
+                if local_audio_files and idx < len(local_audio_files):
+                    audio_path = local_audio_files[idx]
                     try:
-                        # Try librosa first, then soundfile
                         try:
-                            audio_array, sr = librosa.load(audio_file, sr=16000, mono=True)
+                            audio_array, sr = librosa.load(audio_path, sr=16000, mono=True)
+                            sampling_rate = 16000
                         except Exception:
-                            audio, sample_rate = sf.read(audio_file)
+                            audio, sample_rate = sf.read(audio_path)
                             if len(audio.shape) > 1 and audio.shape[1] > 1:
                                 audio = np.mean(audio, axis=1)
                             if sample_rate != 16000:
                                 from scipy import signal
                                 audio = signal.resample(audio, int(len(audio) * 16000 / sample_rate))
                             audio_array = audio.astype(np.float32)
-                        duration = len(audio_array) / 16000.0
-                    except:
+                            sampling_rate = 16000
+                    except Exception as e:
+                        print(f"Warning: Failed to load audio from {audio_path}: {e}")
                         audio_array = None
-                        duration = 0.0
-                    dataset_data.append({
-                        'id': f"sample_{idx}",
-                        'QuestionText': '',  # No question available from local files only
-                        'answer': '',  # No answer available from local files only
-                        'duration': duration,
-                        'audio': {
-                            'array': audio_array,
-                            'sampling_rate': 16000,
-                            'path': audio_file
-                        }
-                    })
-            else:
-                # Load dataset data from registry
-                registry_data = dataset_obj.load(limit=0)
-                print(f"Loaded {len(registry_data)} samples from registry")
                 
-                # Convert to list format and map to local audio files
-                dataset_data = []
-                for idx, item in enumerate(registry_data):
-                    # Extract question text
-                    question_text = item.get("instruction", "")
-                    if not question_text:
-                        question_text = item.get("input", "")
-                    if not question_text:
-                        question_text = item.get("QuestionText", "")
-                    if not question_text:
-                        question_text = item.get("question", item.get("prompt", ""))
-                    
-                    # Extract answer
-                    answer = item.get("output", "")
-                    if not answer:
-                        answer = item.get("answer", "")
-                    
-                    # Use local audio file if available
-                    audio_path = None
-                    audio_array = None
-                    sampling_rate = 16000
-                    
-                    if local_audio_files and idx < len(local_audio_files):
-                        audio_path = local_audio_files[idx]
+                # Calculate duration
+                duration = 0.0
+                if audio_array is not None:
+                    try:
+                        duration = len(audio_array) / sampling_rate
+                    except:
+                        duration = 0.0
+                
+                dataset_data.append({
+                    "id": item.get("id", f"sample_{idx}"),
+                    "QuestionText": item.get("instruction", ""),
+                    "answer": item.get("output", ""),
+                    "duration": duration,
+                    "audio": {
+                        "array": audio_array,
+                        "sampling_rate": sampling_rate,
+                        "path": audio_path
+                    }
+                })
+            
+            print(f"Loaded {len(dataset_data)} samples from local metadata + audio files")
+            
+        except Exception as e:
+            print(f"Failed to load from local metadata: {e}")
+            dataset_data = None
+    
+    # Fallback: Try to load from HuggingFace cache (without downloading)
+    if dataset_data is None:
+        try:
+            from datasets import load_dataset
+            print(f"Attempting to load speech-chatbot-alpaca-eval from HuggingFace cache (no download)...")
+            hf_dataset = load_dataset("TwinkStart/speech-chatbot-alpaca-eval", split=split, download_mode="reuse_cache_if_exists")
+            print(f"Successfully loaded {len(hf_dataset)} samples from HuggingFace cache")
+        
+            # Convert to list format
+            dataset_data = []
+            for idx, item in enumerate(hf_dataset):
+                # Extract question text - prioritize instruction (chatbot format), then input, then QuestionText
+                question_text = item.get("instruction", "")
+                if not question_text:
+                    question_text = item.get("input", "")
+                if not question_text:
+                    question_text = item.get("QuestionText", "")
+                if not question_text:
+                    # Last resort: try other common field names
+                    question_text = item.get("question", item.get("prompt", ""))
+                
+                # Extract answer - according to registry, ref_col is "output"
+                answer = item.get("output", "")
+                if not answer:
+                    # Fallback to "answer" if "output" is not available
+                    answer = item.get("answer", "")
+                
+                # Use local audio file if available, otherwise use audio from HuggingFace dataset
+                audio_path = None
+                audio_array = None
+                sampling_rate = 16000
+                
+                if local_audio_files and idx < len(local_audio_files):
+                    audio_path = local_audio_files[idx]
+                    # Load audio from local file
+                    try:
+                        # Try librosa first, then soundfile
+                        try:
+                            audio_array, sr = librosa.load(audio_path, sr=16000, mono=True)
+                            sampling_rate = 16000
+                        except Exception:
+                            audio, sample_rate = sf.read(audio_path)
+                            if len(audio.shape) > 1 and audio.shape[1] > 1:
+                                audio = np.mean(audio, axis=1)
+                            if sample_rate != 16000:
+                                from scipy import signal
+                                audio = signal.resample(audio, int(len(audio) * 16000 / sample_rate))
+                            audio_array = audio.astype(np.float32)
+                            sampling_rate = 16000
+                    except Exception as e:
+                        print(f"Warning: Failed to load audio from {audio_path}: {e}")
+                        audio_array = None
+                elif 'audio' in item and isinstance(item['audio'], dict):
+                    audio_path = item['audio'].get('path')
+                    audio_array = item['audio'].get('array')
+                    sampling_rate = item['audio'].get('sampling_rate', 16000)
+                
+                # Calculate duration if audio array is available
+                duration = 0.0
+                if audio_array is not None:
+                    try:
+                        duration = len(audio_array) / sampling_rate
+                    except:
+                        duration = 0.0
+                
+                dataset_data.append({
+                    "id": item.get("id", f"sample_{idx}"),
+                    "QuestionText": question_text,
+                    "answer": answer,
+                    "duration": duration,
+                    "audio": {
+                        "array": audio_array,
+                        "sampling_rate": sampling_rate,
+                        "path": audio_path
+                    }
+                })
+            
+        except Exception as e:
+            print(f"Could not load from HuggingFace cache: {e}")
+            print(f"Attempting to load from UltraEval-Audio registry...")
+        
+            # Fallback to registry
+            try:
+                from audio_evals.registry import registry
+                
+                dataset_obj = registry.get_dataset("speech-chatbot-alpaca-eval")
+                if dataset_obj is None:
+                    print(f"Error: Dataset 'speech-chatbot-alpaca-eval' not found in registry")
+                    # Fall back to local files only
+                    if not local_audio_files:
+                        return []
+                    dataset_data = []
+                    for idx, audio_file in enumerate(local_audio_files):
                         try:
                             # Try librosa first, then soundfile
                             try:
-                                audio_array, sr = librosa.load(audio_path, sr=16000, mono=True)
-                                sampling_rate = 16000
+                                audio_array, sr = librosa.load(audio_file, sr=16000, mono=True)
                             except Exception:
-                                audio, sample_rate = sf.read(audio_path)
+                                audio, sample_rate = sf.read(audio_file)
                                 if len(audio.shape) > 1 and audio.shape[1] > 1:
                                     audio = np.mean(audio, axis=1)
                                 if sample_rate != 16000:
                                     from scipy import signal
                                     audio = signal.resample(audio, int(len(audio) * 16000 / sample_rate))
                                 audio_array = audio.astype(np.float32)
-                                sampling_rate = 16000
-                        except Exception as e:
-                            print(f"Warning: Failed to load audio from {audio_path}: {e}")
-                            audio_array = None
-                    else:
-                        # Use audio from registry data
-                        audio_data = item.get("audio", {})
-                        if isinstance(audio_data, dict):
-                            audio_array = audio_data.get("array", None)
-                            sampling_rate = audio_data.get("sampling_rate", 16000)
-                            audio_path = audio_data.get("path", None)
-                    
-                    # Calculate duration
-                    duration = 0.0
-                    if audio_array is not None:
-                        try:
-                            duration = len(audio_array) / sampling_rate
+                            duration = len(audio_array) / 16000.0
                         except:
+                            audio_array = None
                             duration = 0.0
+                        dataset_data.append({
+                            'id': f"sample_{idx}",
+                            'QuestionText': '',  # No question available from local files only
+                            'answer': '',  # No answer available from local files only
+                            'duration': duration,
+                            'audio': {
+                                'array': audio_array,
+                                'sampling_rate': 16000,
+                                'path': audio_file
+                            }
+                        })
+                else:
+                    # Load dataset data from registry
+                    registry_data = dataset_obj.load(limit=0)
+                    print(f"Loaded {len(registry_data)} samples from registry")
                     
-                    dataset_data.append({
-                        "id": item.get("id", f"sample_{idx}"),
-                        "QuestionText": question_text,
-                        "answer": answer,
-                        "duration": duration,
-                        "audio": {
-                            "array": audio_array,
-                            "sampling_rate": sampling_rate,
-                            "path": audio_path
-                        }
-                    })
+                    # Convert to list format and map to local audio files
+                    dataset_data = []
+                    for idx, item in enumerate(registry_data):
+                        # Extract question text
+                        question_text = item.get("instruction", "")
+                        if not question_text:
+                            question_text = item.get("input", "")
+                        if not question_text:
+                            question_text = item.get("QuestionText", "")
+                        if not question_text:
+                            question_text = item.get("question", item.get("prompt", ""))
+                        
+                        # Extract answer
+                        answer = item.get("output", "")
+                        if not answer:
+                            answer = item.get("answer", "")
+                        
+                        # Use local audio file if available
+                        audio_path = None
+                        audio_array = None
+                        sampling_rate = 16000
+                        
+                        if local_audio_files and idx < len(local_audio_files):
+                            audio_path = local_audio_files[idx]
+                            try:
+                                # Try librosa first, then soundfile
+                                try:
+                                    audio_array, sr = librosa.load(audio_path, sr=16000, mono=True)
+                                    sampling_rate = 16000
+                                except Exception:
+                                    audio, sample_rate = sf.read(audio_path)
+                                    if len(audio.shape) > 1 and audio.shape[1] > 1:
+                                        audio = np.mean(audio, axis=1)
+                                    if sample_rate != 16000:
+                                        from scipy import signal
+                                        audio = signal.resample(audio, int(len(audio) * 16000 / sample_rate))
+                                    audio_array = audio.astype(np.float32)
+                                    sampling_rate = 16000
+                            except Exception as e:
+                                print(f"Warning: Failed to load audio from {audio_path}: {e}")
+                                audio_array = None
+                        else:
+                            # Use audio from registry data
+                            audio_data = item.get("audio", {})
+                            if isinstance(audio_data, dict):
+                                audio_array = audio_data.get("array", None)
+                                sampling_rate = audio_data.get("sampling_rate", 16000)
+                                audio_path = audio_data.get("path", None)
+                        
+                        # Calculate duration
+                        duration = 0.0
+                        if audio_array is not None:
+                            try:
+                                duration = len(audio_array) / sampling_rate
+                            except:
+                                duration = 0.0
+                        
+                        dataset_data.append({
+                            "id": item.get("id", f"sample_{idx}"),
+                            "QuestionText": question_text,
+                            "answer": answer,
+                            "duration": duration,
+                            "audio": {
+                                "array": audio_array,
+                                "sampling_rate": sampling_rate,
+                                "path": audio_path
+                            }
+                        })
                     
-        except Exception as registry_e:
-            print(f"Error loading from registry: {registry_e}")
-            traceback.print_exc()
-            return []
+            except Exception as registry_e:
+                print(f"Error loading from registry: {registry_e}")
+                traceback.print_exc()
+                return []
     
     if dataset_data is None or len(dataset_data) == 0:
         print("Error: Failed to load any dataset data")
@@ -2455,6 +2518,12 @@ def main():
                 )
             prefill_end_event.record()
             
+
+            # CRITICAL FIX: Reset SparseMM state and create fresh cache for second generate
+            # The first generate call pollutes the cache state, so we MUST reset before the actual generation
+            if USE_SPARSEKV and sparsemm_enabled:
+                reset_sparsemm_state(model)
+                past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
             # Measure decode time: generate full output
             decode_start_event = torch.cuda.Event(enable_timing=True)
             decode_end_event = torch.cuda.Event(enable_timing=True)

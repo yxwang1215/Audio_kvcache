@@ -874,6 +874,70 @@ def load_kespeech_dataset(base_dir, split="test"):
         print(f"Error: Dataset path does not exist: {split_dir}")
         return []
     
+    # ========== Priority 0: Load from local metadata.json ==========
+    # This is the fastest and most reliable method
+    metadata_json_path = os.path.join(base_dir, "metadata.json")
+    if os.path.exists(metadata_json_path):
+        print(f"Found local metadata.json: {metadata_json_path}")
+        try:
+            with open(metadata_json_path, 'r', encoding='utf-8') as f:
+                metadata_list = json.load(f)
+            print(f"Loaded {len(metadata_list)} samples from metadata.json")
+            
+            # Build dataset from metadata
+            for item in metadata_list:
+                idx = int(item.get("id", 0))
+                audio_id = item.get("audio_id", f"kespeech_{idx}")
+                transcription = item.get("Text", item.get("text", ""))
+                speaker_id = item.get("speaker_id", "unknown")
+                chapter_id = item.get("chapter_id", "")
+                duration = item.get("duration", 0.0)
+                
+                # Find audio file path
+                local_audio_path = os.path.join(split_dir, f"{idx}.wav")
+                if not os.path.exists(local_audio_path):
+                    # Try path from metadata
+                    path_from_meta = item.get("path", "")
+                    if path_from_meta:
+                        if os.path.isabs(path_from_meta):
+                            local_audio_path = path_from_meta
+                        else:
+                            local_audio_path = os.path.join(split_dir, path_from_meta)
+                
+                if not os.path.exists(local_audio_path):
+                    print(f"Warning: Audio file not found for index {idx}: {local_audio_path}, skipping")
+                    continue
+                
+                # Get duration if not in metadata
+                if duration == 0.0:
+                    try:
+                        audio_info = sf.info(local_audio_path)
+                        duration = audio_info.duration
+                    except:
+                        duration = 0.0
+                
+                dataset.append({
+                    "id": audio_id,
+                    "speaker_id": speaker_id,
+                    "chapter_id": chapter_id,
+                    "path": local_audio_path,
+                    "transcription": transcription,
+                    "duration": duration,
+                    "audio": {
+                        "path": local_audio_path,
+                        "array": None,
+                        "sampling_rate": None
+                    }
+                })
+            
+            print(f"Successfully loaded {len(dataset)} KeSpeech samples from metadata.json")
+            return dataset
+        except Exception as e:
+            print(f"Failed to load from metadata.json: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # ========== Priority 1: Load from saved dataset ==========
     # Try to load from local saved dataset first (if exists)
     hf_dataset = None
     try:
@@ -889,6 +953,7 @@ def load_kespeech_dataset(base_dir, split="test"):
         print(f"Could not load from saved dataset: {e}")
         hf_dataset = None
     
+    # ========== Priority 2: Load from HuggingFace cache ==========
     # If saved dataset not available, try to load from HuggingFace cache (without downloading)
     if hf_dataset is None:
         try:

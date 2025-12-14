@@ -487,6 +487,69 @@ def load_kespeech_dataset(base_dir, split="test"):
         if len(wav_files) > 0:
             print(f"Found {len(wav_files)} local audio files in {split_dir}")
     
+    # ========== Priority 0: Load from local metadata.json ==========
+    # This is the fastest and most reliable method
+    metadata_json_path = os.path.join(base_dir, "metadata.json")
+    if os.path.exists(metadata_json_path):
+        print(f"Found local metadata.json: {metadata_json_path}")
+        try:
+            with open(metadata_json_path, 'r', encoding='utf-8') as f:
+                metadata_list = json.load(f)
+            print(f"Loaded {len(metadata_list)} samples from metadata.json")
+            
+            # Build dataset from metadata
+            for item in metadata_list:
+                idx = int(item.get("id", 0))
+                audio_id = item.get("audio_id", f"kespeech_{idx}")
+                transcription = item.get("Text", item.get("text", ""))
+                speaker_id = item.get("speaker_id", "unknown")
+                chapter_id = item.get("chapter_id", "")
+                duration = item.get("duration", 0.0)
+                
+                # Find audio file path
+                local_audio_path = os.path.join(split_dir, f"{idx}.wav")
+                if not os.path.exists(local_audio_path):
+                    # Try path from metadata
+                    path_from_meta = item.get("path", "")
+                    if path_from_meta:
+                        if os.path.isabs(path_from_meta):
+                            local_audio_path = path_from_meta
+                        else:
+                            local_audio_path = os.path.join(split_dir, path_from_meta)
+                
+                if not os.path.exists(local_audio_path):
+                    print(f"Warning: Audio file not found for index {idx}: {local_audio_path}, skipping")
+                    continue
+                
+                # Get duration if not in metadata
+                if duration == 0.0:
+                    try:
+                        audio_info = sf.info(local_audio_path)
+                        duration = audio_info.duration
+                    except:
+                        duration = 0.0
+                
+                dataset.append({
+                    "id": audio_id,
+                    "speaker_id": speaker_id,
+                    "chapter_id": chapter_id,
+                    "path": local_audio_path,
+                    "transcription": transcription,
+                    "duration": duration,
+                    "audio": {
+                        "path": local_audio_path,
+                        "array": None,
+                        "sampling_rate": None
+                    }
+                })
+            
+            print(f"Successfully loaded {len(dataset)} KeSpeech samples from metadata.json")
+            return dataset
+        except Exception as e:
+            print(f"Failed to load from metadata.json: {e}")
+            traceback.print_exc()
+    
+    # ========== Priority 1: Load from saved dataset ==========
     # Try to load from local saved dataset first
     hf_dataset = None
     try:
@@ -502,6 +565,7 @@ def load_kespeech_dataset(base_dir, split="test"):
         print(f"Could not load from saved dataset: {e}")
         hf_dataset = None
     
+    # ========== Priority 2: Load from HuggingFace cache ==========
     # If saved dataset not available, try to load from HuggingFace cache (without downloading)
     if hf_dataset is None:
         try:
@@ -962,7 +1026,7 @@ def calculate_cer(reference, hypothesis):
     
     # CER can exceed 100% when there are many insertions
     # CER = (S + D + I) / N, where N is the number of characters in reference
-    # If insertions are very high, CER can be > 100%, but we cap it at 100%
+    # If insertions are very high, CER can be > 100%
     if cer_percent > 100.0:
         # Calculate detailed metrics for debugging
         try:
@@ -975,24 +1039,22 @@ def calculate_cer(reference, hypothesis):
                 deletions = measures.get('deletions', 0)
                 insertions = measures.get('insertions', 0)
                 hits = measures.get('hits', 0)
-                print(f"[CER Analysis] Raw CER={cer_percent:.2f}% (capped at 100%), Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
+                print(f"[CER Analysis] CER={cer_percent:.2f}%, Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
                 print(f"  Substitutions={substitutions}, Deletions={deletions}, Insertions={insertions}, Hits={hits}")
                 if insertions > len(ref_chars):
-                    print(f"  [Issue] Insertions ({insertions}) > Reference chars ({len(ref_chars)}) - CER capped at 100%")
+                    print(f"  [Issue] Insertions ({insertions}) > Reference chars ({len(ref_chars)}) - this causes CER > 100%")
             else:
                 # Fallback: just print basic info
-                print(f"[CER Analysis] Raw CER={cer_percent:.2f}% (capped at 100%), Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
+                print(f"[CER Analysis] CER={cer_percent:.2f}%, Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
                 print(f"  [Note] Detailed metrics unavailable (jiwer.compute_measures not available in this version)")
                 if len(hyp_chars) > len(ref_chars):
-                    print(f"  [Issue] Hypothesis has more chars ({len(hyp_chars)}) than reference ({len(ref_chars)}) - CER capped at 100%")
+                    print(f"  [Issue] Hypothesis has more chars ({len(hyp_chars)}) than reference ({len(ref_chars)}) - this may cause CER > 100%")
         except AttributeError:
             # Fallback if compute_measures doesn't exist
-            print(f"[CER Analysis] Raw CER={cer_percent:.2f}% (capped at 100%), Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
+            print(f"[CER Analysis] CER={cer_percent:.2f}%, Ref chars={len(ref_chars)}, Hyp chars={len(hyp_chars)}")
             print(f"  [Note] Detailed metrics unavailable (jiwer.compute_measures not available in this version)")
             if len(hyp_chars) > len(ref_chars):
-                print(f"  [Issue] Hypothesis has more chars ({len(hyp_chars)}) than reference ({len(ref_chars)}) - CER capped at 100%")
-        # Cap CER at 100%
-        cer_percent = 100.0
+                print(f"  [Issue] Hypothesis has more chars ({len(hyp_chars)}) than reference ({len(ref_chars)}) - this may cause CER > 100%")
 
     return cer_percent
 
@@ -1007,10 +1069,7 @@ def save_results_realtime(output_file, results, total_cer, processed_samples, sp
     try:
         # Calculate current statistics
         current_avg_cer = total_cer / processed_samples if processed_samples > 0 else 100.0
-        # Limit CER to maximum 100%
-        current_avg_cer = min(current_avg_cer, 100.0)
-        # Calculate accuracy and ensure it's not negative (minimum 0%)
-        current_avg_accuracy = max(100.0 - current_avg_cer, 0.0)
+        current_avg_accuracy = 100.0 - current_avg_cer
         
         # Calculate speaker-level statistics
         speaker_cer = defaultdict(list)
@@ -1028,17 +1087,12 @@ def save_results_realtime(output_file, results, total_cer, processed_samples, sp
         # Calculate CER statistics
         cer_scores = [r["cer"] for r in results]
         if len(cer_scores) > 0:
-            # Ensure all CER scores are capped at 100%
-            cer_scores = [min(cer, 100.0) for cer in cer_scores]
             cer_mean = np.mean(cer_scores)
             cer_std = np.std(cer_scores)
             cer_min = np.min(cer_scores)
             cer_max = np.max(cer_scores)
-            # Limit cer_max to 100%
-            cer_max = min(cer_max, 100.0)
             perfect_predictions = len([cer for cer in cer_scores if cer == 0.0])
-            # Calculate accuracy and ensure it's not negative (minimum 0%)
-            char_accuracy = max(100.0 - cer_mean, 0.0)
+            char_accuracy = 100.0 - cer_mean
         else:
             cer_mean = 100.0
             cer_std = 0.0
@@ -1136,21 +1190,17 @@ def calculate_kespeech_metrics(references, hypotheses):
         }
     
     
-    # Ensure all CER scores are capped at 100%
-    cer_scores = [min(cer, 100.0) for cer in cer_scores]
+    
     cer_mean = np.mean(cer_scores)
     cer_std = np.std(cer_scores)
     cer_min = np.min(cer_scores)
     cer_max = np.max(cer_scores)
-    # Limit cer_max to 100%
-    cer_max = min(cer_max, 100.0)
     
     
     perfect_predictions = len([cer for cer in cer_scores if cer == 0.0])
     
     
-    # Calculate accuracy and ensure it's not negative (minimum 0%)
-    char_accuracy = max(100.0 - cer_mean, 0.0)
+    char_accuracy = 100.0 - cer_mean
     
     return {
         'cer_mean': float(cer_mean),
@@ -1618,6 +1668,12 @@ def main():
                     past_key_values=past_key_values
                 )
             prefill_end_event.record()
+            
+            # CRITICAL FIX: Reset SparseMM state and create fresh cache for second generate
+            # The first generate call pollutes the cache state, so we MUST reset before the actual generation
+            if USE_SPARSEKV and sparsemm_enabled:
+                reset_sparsemm_state(model)
+                past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
             
             # Measure decode time: generate full output
             decode_start_event = torch.cuda.Event(enable_timing=True)

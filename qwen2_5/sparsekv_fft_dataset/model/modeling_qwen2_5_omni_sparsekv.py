@@ -60,7 +60,16 @@ import sys
 import os
 # Import sparsemm_utils from current directory (model directory)
 # Use relative import since sparsemm_utils.py is in the same directory
-from .sparsemm_utils import init_sparsemm, DynamicCacheSplitHeadFlatten
+# Check if optimized SparseMM should be used
+USE_OPTIMIZED_SPARSEMM = os.environ.get("USE_OPTIMIZED_SPARSEMM", "false").lower() == "true"
+
+if USE_OPTIMIZED_SPARSEMM:
+    from .sparsemm_utils_optimized import init_sparsemm_optimized as init_sparsemm, DynamicCacheSplitHeadFlattenOptimized as DynamicCacheSplitHeadFlatten
+    print("[modeling] Using OPTIMIZED SparseMM implementation")
+else:
+    from .sparsemm_utils import init_sparsemm, DynamicCacheSplitHeadFlatten
+    print("[modeling] Using standard SparseMM implementation")
+    
 from flash_attn import flash_attn_func, flash_attn_varlen_func as sparsemm_flash_attn_varlen_func
 from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 SPARSEM_AVAILABLE = True
@@ -4760,14 +4769,36 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         model_config = base_model.config
         num_hidden_layers = model_config.num_hidden_layers
         num_attention_heads = model_config.num_attention_heads
-        num_key_value_heads = num_attention_heads
+        # FIX: Read actual num_key_value_heads from config instead of assuming it equals num_attention_heads
+        # This is critical for GQA (Grouped Query Attention) models like Qwen2.5-Omni-7B
+        # 7B: num_attention_heads=28, num_key_value_heads=4, num_key_value_groups=7
+        # 3B: num_attention_heads=16, num_key_value_heads=2, num_key_value_groups=8
+        num_key_value_heads = getattr(model_config, 'num_key_value_heads', num_attention_heads)
         num_key_value_groups = num_attention_heads // num_key_value_heads
+        
+        print(f"[SparseMM DEBUG] Model config: num_hidden_layers={num_hidden_layers}, "
+              f"num_attention_heads={num_attention_heads}, num_key_value_heads={num_key_value_heads}, "
+              f"num_key_value_groups={num_key_value_groups}")
         
         # Set head_score in config for SparseMM initialization
         def audio_load_head_score(model_type):
             # Return format: dict with "layer-head" keys and score lists
+            # The head_score_data['scores'] has shape [num_hidden_layers * num_attention_heads]
+            # For GQA models, we need to aggregate scores from attention heads to KV heads
             head_scores_dict = {}
             head_score_list = head_score_data['scores']
+            
+            # Check if head_score_list matches expected size
+            expected_size = num_hidden_layers * num_attention_heads
+            actual_size = len(head_score_list)
+            
+            if actual_size != expected_size:
+                print(f"[SparseMM WARNING] Head score list size mismatch: expected {expected_size} "
+                      f"(layers={num_hidden_layers} * heads={num_attention_heads}), got {actual_size}")
+                # If sizes don't match, fall back to uniform distribution
+                print(f"[SparseMM WARNING] Falling back to uniform head score distribution")
+                uniform_score = 1.0 / expected_size
+                head_score_list = [uniform_score] * expected_size
             
             idx = 0
             for layer_idx in range(num_hidden_layers):
@@ -4783,6 +4814,17 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         from . import sparsemm_utils
         original_load_head_score = sparsemm_utils.load_head_score
         sparsemm_utils.load_head_score = audio_load_head_score
+        
+        # Also patch optimized module if it's being used
+        original_load_head_score_optimized = None
+        if USE_OPTIMIZED_SPARSEMM:
+            try:
+                from . import sparsemm_utils_optimized
+                if hasattr(sparsemm_utils_optimized, 'load_head_score'):
+                    original_load_head_score_optimized = sparsemm_utils_optimized.load_head_score
+                    sparsemm_utils_optimized.load_head_score = audio_load_head_score
+            except ImportError:
+                pass
         
         # Apply SparseMM configuration to model config
         model_config.head_score = 'audio'

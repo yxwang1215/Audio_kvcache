@@ -1434,6 +1434,12 @@ def main():
                 )
             prefill_end_event.record()
             
+
+            # CRITICAL FIX: Reset SparseMM state and create fresh cache for second generate
+            # The first generate call pollutes the cache state, so we MUST reset before the actual generation
+            if USE_SPARSEKV and sparsemm_enabled:
+                reset_sparsemm_state(model)
+                past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
             # Measure decode time: generate full output
             # Use language-specific max_new_tokens (German words are longer, need more tokens)
             max_new_tokens = LANGUAGE_MAX_NEW_TOKENS.get(language.lower(), DEFAULT_MAX_NEW_TOKENS)

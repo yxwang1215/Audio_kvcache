@@ -857,7 +857,7 @@ class SparseMM():
         self.cu_offset = None
         self.cu_headlens = None
 
-        self.num_key_value_groups = num_key_value_groups # Qwen2.5 Omni 3B = 8
+        self.num_key_value_groups = num_key_value_groups # Qwen2.5 Omni 3B = 8, 7B = 7
         self.gqa_func = gqa_func
 
         if head_score == 'random':
@@ -870,11 +870,28 @@ class SparseMM():
             head_score_list = [np.mean(l[1]) for l in head_score.items()]
         else:
             raise ValueError('head_score type not supported')
-            
+        
+        # First normalize across all attention heads
         head_score_list = torch.tensor(head_score_list / sum(head_score_list))
-        # GQA support
-        self.score = head_score_list.view(self.num_hidden_layers, self.num_attention_heads//self.num_key_value_groups, self.num_key_value_groups)
-        self.score = self.score.sum(dim=-1)
+        
+        # GQA support: aggregate attention head scores to KV head scores
+        # For 7B: num_attention_heads=28, num_key_value_heads=4, num_key_value_groups=7
+        #   - Each KV head corresponds to 7 attention heads
+        #   - Sum the scores of those 7 attention heads for each KV head
+        # For 3B: num_attention_heads=16, num_key_value_heads=2, num_key_value_groups=8
+        #   - Each KV head corresponds to 8 attention heads
+        num_kv_heads = self.num_attention_heads // self.num_key_value_groups
+        self.score = head_score_list.view(self.num_hidden_layers, num_kv_heads, self.num_key_value_groups)
+        self.score = self.score.sum(dim=-1)  # Sum scores within each GQA group -> [num_layers, num_kv_heads]
+        
+        # CRITICAL: Re-normalize after aggregation so that scores sum to 1
+        # This ensures fair comparison and allocation across all KV heads
+        score_sum = self.score.sum()
+        if score_sum > 0:
+            self.score = self.score / score_sum
+        else:
+            # Fallback to uniform if all scores are zero
+            self.score = torch.ones_like(self.score) / self.score.numel()
 
         self._compute_head_adaptive_capacity()
         
@@ -883,10 +900,31 @@ class SparseMM():
         self.head_token_usage = []
 
     def _compute_head_adaptive_capacity(self):
-        """Compute head_adaptive_capacity based on current base_capacity"""
-        min_cache = int(self.base_capacity * self.ratio)
-        remain_capacity = (self.base_capacity - min_cache) * self.num_hidden_layers * self.num_attention_heads // self.num_key_value_groups
-        self.head_adaptive_capacity = torch.round(self.score * remain_capacity + min_cache).int()
+        """Compute head_adaptive_capacity based on current base_capacity
+        
+        base_capacity is the PER-HEAD capacity (e.g., if BUDGET=0.6 and prefill=1000, base_capacity=600-window_size).
+        We distribute this capacity across KV heads based on their normalized scores.
+        
+        For GQA models:
+        - 7B: 28 layers × 4 KV heads = 112 total KV heads
+        - 3B: 36 layers × 2 KV heads = 72 total KV heads
+        
+        Each KV head gets: min_cache + score[layer][head] * (base_capacity - min_cache) * total_kv_heads
+        where score is normalized to sum to 1 across all KV heads.
+        """
+        min_cache = int(self.base_capacity * self.ratio)  # Minimum cache per head
+        
+        # Calculate number of KV heads per layer
+        num_kv_heads_per_layer = self.num_attention_heads // self.num_key_value_groups
+        total_kv_heads = self.num_hidden_layers * num_kv_heads_per_layer
+        
+        # Total variable capacity to distribute across ALL KV heads
+        # = (per_head_capacity - min_per_head) × total_kv_heads
+        total_variable_capacity = (self.base_capacity - min_cache) * total_kv_heads
+        
+        # Distribute based on normalized scores (score sums to 1 across all KV heads)
+        # Each head gets: min_cache + score * total_variable_capacity
+        self.head_adaptive_capacity = torch.round(self.score * total_variable_capacity + min_cache).int()
     
     def update_budget(self, new_budget):
         """

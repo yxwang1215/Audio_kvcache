@@ -860,18 +860,64 @@ class SparseMM():
         self.num_key_value_groups = num_key_value_groups # Qwen2.5 Omni 3B = 8
         self.gqa_func = gqa_func
 
+        # Support multiple head_score input formats:
+        # 1. 'random': Generate random scores
+        # 2. 'visual': Load from visual head score file (legacy)
+        # 3. 'audio': Load from audio head score file via load_head_score (legacy, may have size mismatch)
+        # 4. list/ndarray: Use pre-computed scores directly (recommended for audio models)
+        # 5. torch.Tensor: Use pre-computed tensor directly
+        expected_size = self.num_hidden_layers * self.num_attention_heads
+        
         if head_score == 'random':
-            head_score_list = np.array([random.random() for _ in range(self.num_hidden_layers * self.num_attention_heads)])
+            head_score_list = np.array([random.random() for _ in range(expected_size)])
         elif head_score == 'visual':
             head_score = load_head_score(model_type)
             head_score_list = [np.mean(l[1]) for l in head_score.items()]
         elif head_score == 'audio':
+            # Legacy audio mode - uses visual head score file which may have size mismatch
+            # For Qwen3-Omni, this is WRONG because qwen.json has 784 entries (28*28)
+            # but Qwen3-Omni needs 1536 entries (48*32)
             head_score = load_head_score(model_type)
             head_score_list = [np.mean(l[1]) for l in head_score.items()]
+            # Check size mismatch and warn
+            if len(head_score_list) != expected_size:
+                print(f"[SparseMM] WARNING: head_score 'audio' mode has size mismatch!")
+                print(f"[SparseMM]   Expected: {expected_size} (layers={self.num_hidden_layers} x heads={self.num_attention_heads})")
+                print(f"[SparseMM]   Got: {len(head_score_list)}")
+                print(f"[SparseMM]   Falling back to uniform distribution!")
+                head_score_list = np.ones(expected_size)
+        elif isinstance(head_score, (list, np.ndarray)):
+            # Pre-computed scores as list or numpy array - recommended for audio models
+            head_score_list = np.array(head_score)
+            if len(head_score_list) != expected_size:
+                raise ValueError(
+                    f"head_score list size mismatch: expected {expected_size} "
+                    f"(layers={self.num_hidden_layers} x heads={self.num_attention_heads}), "
+                    f"got {len(head_score_list)}"
+                )
+        elif isinstance(head_score, torch.Tensor):
+            # Pre-computed tensor - recommended for audio models
+            head_score_list = head_score.cpu().numpy()
+            if len(head_score_list) != expected_size:
+                raise ValueError(
+                    f"head_score tensor size mismatch: expected {expected_size} "
+                    f"(layers={self.num_hidden_layers} x heads={self.num_attention_heads}), "
+                    f"got {len(head_score_list)}"
+                )
         else:
-            raise ValueError('head_score type not supported')
+            raise ValueError(f'head_score type not supported: {type(head_score)}. '
+                           f'Expected: "random", "visual", "audio", list, np.ndarray, or torch.Tensor')
+        
+        # Normalize head scores
+        head_score_list = np.array(head_score_list, dtype=np.float32)
+        score_sum = head_score_list.sum()
+        if score_sum > 0:
+            head_score_list = head_score_list / score_sum
+        else:
+            # If all zeros, use uniform distribution
+            head_score_list = np.ones(expected_size, dtype=np.float32) / expected_size
             
-        head_score_list = torch.tensor(head_score_list / sum(head_score_list))
+        head_score_list = torch.tensor(head_score_list)
         # GQA support
         self.score = head_score_list.view(self.num_hidden_layers, self.num_attention_heads//self.num_key_value_groups, self.num_key_value_groups)
         self.score = self.score.sum(dim=-1)

@@ -5,11 +5,10 @@
 set -e
 
 # =================== 用户配置区 ===================
-export GPU_ID="4"
+export GPU_ID="5"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct}"
 export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/llama_questions_Results/SparseKV/budget0.8}"
 
-# 推理配置
 export SAMPLE_LIMIT=0
 export USE_SPARSEKV="true"
 export BUDGET=0.8
