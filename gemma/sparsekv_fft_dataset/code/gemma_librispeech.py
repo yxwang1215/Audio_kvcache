@@ -18,12 +18,25 @@ from transformers import __version__ as TRANSFORMERS_VERSION
 from transformers.cache_utils import DynamicCache, Cache
 
 # 根据环境变量决定是否使用 sparsekv 版本
-USE_SPARSEKV = os.environ.get("USE_SPARSEKV", "true").lower() == "true"
+# KV Cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
+# sparsekv is alias for sparsemm, vanilla means no KV compression
+KV_METHOD = os.environ.get("KV_METHOD", "sparsekv").lower()
+# USE_SPARSEKV is derived from KV_METHOD for backward compatibility
+USE_SPARSEKV = KV_METHOD != "vanilla"
+
+# KV cache method selection: sparsemm, snapkv, adakv, pyramidkv, mixkv
 
 if USE_SPARSEKV:
     # Import from current directory (added to sys.path)
-    from modeling_gemma3n import Gemma3nForConditionalGeneration, Gemma3nTextAttentionSparseMM
-    print("Using sparsekv version of the model")
+    from modeling_gemma3n import (
+        Gemma3nForConditionalGeneration, 
+        Gemma3nTextAttentionSparseMM,
+        Gemma3nTextAttentionSnapKV,
+        Gemma3nTextAttentionAdaKV,
+        Gemma3nTextAttentionPyramidKV,
+        Gemma3nTextAttentionMixKV
+    )
+    print(f"Using sparsekv version of the model with KV_METHOD={KV_METHOD}")
 else:
     from modeling_gemma3n import Gemma3nForConditionalGeneration
     print("Using standard version of the model (sparsekv disabled)")
@@ -36,7 +49,14 @@ try:
     from sparsemm_utils import (
         SparseMM,
         DynamicCacheSplitHeadFlatten,
-        init_sparsemm
+        init_sparsemm,
+        init_snapkv,
+        init_adakv,
+        init_pyramidkv,
+        init_mixkv,
+        SnapKVCluster,
+        AdaKVCluster,
+        MixKVCluster
     )
     SPARSEM_AVAILABLE = True
 except ImportError:
@@ -918,45 +938,87 @@ def init_model():
     
     # Enable SparseMM if available and USE_SPARSEKV is True
     if USE_SPARSEKV and SPARSEM_AVAILABLE:
-        print("[SparseMM] Enabling SparseMM attention...")
+        print(f"[KVCache] Enabling {KV_METHOD} attention...")
         try:
-            # Load head scores
-            if AUDIO_HEAD_UTILS_AVAILABLE:
-                # Priority 1: Use direct path if provided
-                if ENV_HEAD_SCORE_PATH:
-                    head_score_path = ENV_HEAD_SCORE_PATH
-                    print(f"[SparseMM] Using direct head score path: {head_score_path}")
-                # Priority 2: Check if using uniform distribution
-                elif ENV_HEAD_SCORE_FILE == "uniform":
-                    head_score_path = "uniform"
-                    print(f"[SparseMM] Using uniform head score distribution")
-                else:
-                    # Priority 3: Construct path from file type and parameters
-                    head_score_path = get_audio_head_score_path(
-                        score_type=ENV_HEAD_SCORE_FILE,
-                        batch=ENV_HEAD_SCORE_BATCH
-                    )
-                    print(f"[SparseMM] Constructed head score path: {head_score_path}")
-                raw_head_scores = load_audio_head_scores(head_score_path)
-                # Process head scores with model config
-                num_layers = model.config.text_config.num_hidden_layers
-                num_heads = model.config.text_config.num_attention_heads
-                num_key_value_heads = getattr(model.config.text_config, 'num_key_value_heads', num_heads)
-                num_key_value_groups = num_heads // num_key_value_heads
-                head_score_tensor = process_audio_head_scores(
-                    raw_head_scores,
-                    num_hidden_layers=num_layers,
-                    num_attention_heads=num_heads,
-                    num_key_value_groups=num_key_value_groups
-                )
-                # Convert to list for compatibility
-                head_score_list = head_score_tensor.tolist()
-                head_score_data = {
-                    'scores': head_score_list,
-                    'tensor': head_score_tensor
-                }
+            # Prepare SparseMM config
+            # Handle budget as ratio vs absolute value
+            if ENV_BUDGET_IS_RATIO:
+                estimated_seq_len = 1024  # Reasonable estimate for audio ASR
+                budget_value = max(64, int(estimated_seq_len * ENV_BUDGET))
+                print(f"[KVCache] Budget ratio mode: {ENV_BUDGET} -> estimated budget: {budget_value}")
             else:
-                # Use default head scores (uniform)
+                budget_value = int(ENV_BUDGET)
+                print(f"[KVCache] Budget absolute mode: {budget_value}")
+            
+            sparsemm_config = {
+                'budget': budget_value,
+                'budget_ratio': ENV_BUDGET if ENV_BUDGET_IS_RATIO else None,
+                'ratio': ENV_RATIO,
+                'window_size': ENV_WINDOW_SIZE,
+                'kernel_size': ENV_KERNEL_SIZE,
+                'pooling': ENV_POOLING,
+            }
+            
+            # Enable based on KV_METHOD
+            if KV_METHOD in ("sparsekv", "sparsemm"):
+                # Load head scores for SparseMM
+                if AUDIO_HEAD_UTILS_AVAILABLE:
+                    if ENV_HEAD_SCORE_PATH:
+                        head_score_path = ENV_HEAD_SCORE_PATH
+                        print(f"[SparseMM] Using direct head score path: {head_score_path}")
+                    elif ENV_HEAD_SCORE_FILE == "uniform":
+                        head_score_path = "uniform"
+                        print(f"[SparseMM] Using uniform head score distribution")
+                    else:
+                        head_score_path = get_audio_head_score_path(
+                            score_type=ENV_HEAD_SCORE_FILE,
+                            batch=ENV_HEAD_SCORE_BATCH
+                        )
+                        print(f"[SparseMM] Constructed head score path: {head_score_path}")
+                    raw_head_scores = load_audio_head_scores(head_score_path)
+                    num_layers = model.config.text_config.num_hidden_layers
+                    num_heads = model.config.text_config.num_attention_heads
+                    num_key_value_heads = getattr(model.config.text_config, 'num_key_value_heads', num_heads)
+                    num_key_value_groups = num_heads // num_key_value_heads
+                    head_score_tensor = process_audio_head_scores(
+                        raw_head_scores,
+                        num_hidden_layers=num_layers,
+                        num_attention_heads=num_heads,
+                        num_key_value_groups=num_key_value_groups
+                    )
+                    head_score_list = head_score_tensor.tolist()
+                    head_score_data = {
+                        'scores': head_score_list,
+                        'tensor': head_score_tensor
+                    }
+                else:
+                    num_layers = model.config.text_config.num_hidden_layers
+                    num_heads = model.config.text_config.num_attention_heads
+                    num_total_heads = num_layers * num_heads
+                    head_score_data = {
+                        'scores': [1.0 / num_total_heads] * num_total_heads,
+                        'tensor': torch.ones(num_total_heads) / num_total_heads
+                    }
+                model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+                print("[SparseMM] SparseMM attention enabled successfully")
+            elif KV_METHOD == "snapkv":
+                model.enable_snapkv_attention(sparsemm_config)
+                print("[SnapKV] SnapKV attention enabled successfully")
+            elif KV_METHOD == "adakv":
+                model.enable_adakv_attention(sparsemm_config)
+                print("[AdaKV] AdaKV attention enabled successfully")
+            elif KV_METHOD == "pyramidkv":
+                model.enable_pyramidkv_attention(sparsemm_config)
+                print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "mixkv":
+                # Add select_method for MixKV
+                select_method = os.environ.get("SELECT_METHOD", "mixkv")
+                sparsemm_config['select_method'] = select_method
+                model.enable_mixkv_attention(sparsemm_config)
+                print(f"[MixKV] MixKV attention enabled successfully with select_method={select_method}")
+            else:
+                print(f"[KVCache WARNING] Unknown KV_METHOD '{KV_METHOD}', falling back to SparseMM")
+                # Fallback to SparseMM with uniform scores
                 num_layers = model.config.text_config.num_hidden_layers
                 num_heads = model.config.text_config.num_attention_heads
                 num_total_heads = num_layers * num_heads
@@ -964,38 +1026,14 @@ def init_model():
                     'scores': [1.0 / num_total_heads] * num_total_heads,
                     'tensor': torch.ones(num_total_heads) / num_total_heads
                 }
+                model.enable_sparsemm_attention(head_score_data, sparsemm_config)
             
-            # Prepare SparseMM config
-            # Handle budget as ratio vs absolute value
-            if ENV_BUDGET_IS_RATIO:
-                # For ratio mode, we need to compute budget based on expected sequence length
-                # Use a reasonable default sequence length estimate for audio (e.g., 1024 tokens)
-                # The actual budget will be dynamically adjusted in update_kv based on real seq_len
-                estimated_seq_len = 1024  # Reasonable estimate for audio ASR
-                budget_value = max(64, int(estimated_seq_len * ENV_BUDGET))
-                print(f"[SparseMM] Budget ratio mode: {ENV_BUDGET} -> estimated budget: {budget_value}")
-            else:
-                budget_value = int(ENV_BUDGET)
-                print(f"[SparseMM] Budget absolute mode: {budget_value}")
-            
-            sparsemm_config = {
-                'budget': budget_value,
-                'budget_ratio': ENV_BUDGET if ENV_BUDGET_IS_RATIO else None,  # Store ratio for dynamic adjustment
-                'ratio': ENV_RATIO,
-                'window_size': ENV_WINDOW_SIZE,
-                'kernel_size': ENV_KERNEL_SIZE,
-                'pooling': ENV_POOLING,
-            }
-            
-            # Enable SparseMM
-            model.enable_sparsemm_attention(head_score_data, sparsemm_config)
             SPARSEM_ENABLED = True
-            print("[SparseMM] SparseMM attention enabled successfully")
         except Exception as e:
-            print(f"[SparseMM ERROR] Failed to enable SparseMM: {e}")
+            print(f"[KVCache ERROR] Failed to enable {KV_METHOD}: {e}")
             import traceback
             traceback.print_exc()
-            print("[SparseMM] Continuing without SparseMM...")
+            print("[KVCache] Continuing without KVCache compression...")
             SPARSEM_ENABLED = False
 
     if ENABLE_COMPILE and device.type == "cuda":

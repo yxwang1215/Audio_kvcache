@@ -30,10 +30,23 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 try:
-    from sparsemm_utils import init_sparsemm, DynamicCacheSplitHeadFlatten, repeat_kv
+    from sparsemm_utils import (
+        init_sparsemm, 
+        init_adakv, 
+        init_pyramidkv, 
+        init_snapkv,
+        init_mixkv, 
+        DynamicCacheSplitHeadFlatten, 
+        repeat_kv
+    )
     SPARSEM_AVAILABLE = True
 except ImportError:
     SPARSEM_AVAILABLE = False
+    init_sparsemm = None
+    init_adakv = None
+    init_pyramidkv = None
+    init_snapkv = None
+    init_mixkv = None
     print("[WARNING] sparsemm_utils not available, SparseMM features will be disabled")
 
 # Import flash_attn_varlen_func for SparseMM decode phase
@@ -1861,6 +1874,310 @@ class Gemma3nTextAttentionSparseMM(Gemma3nTextAttention):
         return attn_output, attn_weights
 
 
+class Gemma3nTextAttentionSnapKV(Gemma3nTextAttention):
+    """
+    Gemma3n text attention module with SnapKV integration.
+    SnapKV selects important tokens based on attention patterns with pooling.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.config.head_dim)
+
+        cos, sin = position_embeddings
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_norm(query_states)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        query_states = query_states.transpose(1, 2)
+
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_norm(key_states)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+        key_states = key_states.transpose(1, 2)
+
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_norm(value_states)
+        value_states = value_states.transpose(1, 2)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
+
+        # Initialize SnapKV cluster
+        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+            init_snapkv(self)
+
+        if past_key_values is not None:
+            if q_len == 1:  # Decoding
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            else:  # Prefill
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=1.0,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Gemma3nTextAttentionAdaKV(Gemma3nTextAttention):
+    """
+    Gemma3n text attention module with AdaKV integration for adaptive KVCache.
+    AdaKV uses head-adaptive capacity allocation based on attention scores.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.config.head_dim)
+
+        cos, sin = position_embeddings
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_norm(query_states)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        query_states = query_states.transpose(1, 2)
+
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_norm(key_states)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+        key_states = key_states.transpose(1, 2)
+
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_norm(value_states)
+        value_states = value_states.transpose(1, 2)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
+
+        # Initialize AdaKV cluster
+        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+            init_adakv(self)
+
+        if past_key_values is not None:
+            if q_len == 1:  # Decoding
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            else:  # Prefill
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=1.0,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
+    """
+    Gemma3n text attention module with PyramidKV integration.
+    PyramidKV uses layer-wise pyramidal capacity allocation.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.config.head_dim)
+
+        cos, sin = position_embeddings
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_norm(query_states)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        query_states = query_states.transpose(1, 2)
+
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_norm(key_states)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+        key_states = key_states.transpose(1, 2)
+
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_norm(value_states)
+        value_states = value_states.transpose(1, 2)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
+
+        # Initialize PyramidKV cluster
+        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+            init_pyramidkv(self)
+
+        if past_key_values is not None:
+            if q_len == 1:  # Decoding
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            else:  # Prefill
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=1.0,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Gemma3nTextAttentionMixKV(Gemma3nTextAttention):
+    """
+    Gemma3n text attention module with MixKV integration.
+    MixKV uses mixed scoring strategies (attention, key similarity, value norm) for token selection.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.config.head_dim)
+
+        cos, sin = position_embeddings
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_norm(query_states)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        query_states = query_states.transpose(1, 2)
+
+        key_states = self.k_proj(hidden_states).view(hidden_shape)
+        key_states = self.k_norm(key_states)
+        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+        key_states = key_states.transpose(1, 2)
+
+        value_states = self.v_proj(hidden_states).view(hidden_shape)
+        value_states = self.v_norm(value_states)
+        value_states = value_states.transpose(1, 2)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
+
+        # Initialize MixKV cluster
+        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+            init_mixkv(self)
+
+        if past_key_values is not None:
+            if q_len == 1:  # Decoding
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            else:  # Prefill
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=1.0,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
 class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Gemma3nTextConfig, layer_idx: int):
         super().__init__()
@@ -2982,6 +3299,208 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         
         return True
 
+    def enable_snapkv_attention(
+        self,
+        sparsemm_config: Dict[str, Any]
+    ):
+        """
+        Replace attention modules with SnapKV version for KVCache compression.
+        
+        Args:
+            sparsemm_config: Dictionary containing configuration:
+                - 'budget': KV cache budget
+                - 'window_size': Window size
+                - 'kernel_size': Kernel size for pooling
+                - 'pooling': Pooling method
+        """
+        if not SPARSEM_AVAILABLE:
+            raise ImportError("sparsemm_utils is not available.")
+        
+        base_model = self.model.language_model
+        model_config = base_model.config
+        
+        # Apply configuration to model config
+        model_config.window_size = sparsemm_config.get('window_size', 64)
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        model_config.kernel_size = sparsemm_config.get('kernel_size', 7)
+        model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Gemma3nTextAttentionSnapKV(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            # Copy weights
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            new_attn.v_norm.load_state_dict(old_attn.v_norm.state_dict())
+            
+            init_snapkv(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[SnapKV] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_adakv_attention(
+        self,
+        sparsemm_config: Dict[str, Any]
+    ):
+        """
+        Replace attention modules with AdaKV version for adaptive KVCache compression.
+        
+        Args:
+            sparsemm_config: Dictionary containing configuration:
+                - 'budget': KV cache budget
+                - 'window_size': Window size
+                - 'kernel_size': Kernel size for pooling
+                - 'pooling': Pooling method
+        """
+        if not SPARSEM_AVAILABLE:
+            raise ImportError("sparsemm_utils is not available.")
+        
+        base_model = self.model.language_model
+        model_config = base_model.config
+        
+        # Apply configuration to model config
+        model_config.window_size = sparsemm_config.get('window_size', 64)
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        model_config.kernel_size = sparsemm_config.get('kernel_size', 7)
+        model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Gemma3nTextAttentionAdaKV(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            # Copy weights
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            new_attn.v_norm.load_state_dict(old_attn.v_norm.state_dict())
+            
+            init_adakv(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[AdaKV] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_pyramidkv_attention(
+        self,
+        sparsemm_config: Dict[str, Any]
+    ):
+        """
+        Replace attention modules with PyramidKV version for layer-wise pyramidal KVCache.
+        
+        Args:
+            sparsemm_config: Dictionary containing configuration:
+                - 'budget': KV cache budget
+                - 'window_size': Window size
+                - 'kernel_size': Kernel size for pooling
+                - 'pooling': Pooling method
+        """
+        if not SPARSEM_AVAILABLE:
+            raise ImportError("sparsemm_utils is not available.")
+        
+        base_model = self.model.language_model
+        model_config = base_model.config
+        
+        # Apply configuration to model config
+        model_config.window_size = sparsemm_config.get('window_size', 64)
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        model_config.kernel_size = sparsemm_config.get('kernel_size', 7)
+        model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Gemma3nTextAttentionPyramidKV(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            # Copy weights
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            new_attn.v_norm.load_state_dict(old_attn.v_norm.state_dict())
+            
+            init_pyramidkv(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[PyramidKV] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_mixkv_attention(
+        self,
+        sparsemm_config: Dict[str, Any]
+    ):
+        """
+        Replace attention modules with MixKV version for mixed-strategy KVCache compression.
+        
+        Args:
+            sparsemm_config: Dictionary containing configuration:
+                - 'budget': KV cache budget
+                - 'window_size': Window size
+                - 'kernel_size': Kernel size for pooling
+                - 'pooling': Pooling method
+                - 'select_method': Selection method ('attn', 'keydiff', 'mixkv', etc.)
+        """
+        if not SPARSEM_AVAILABLE:
+            raise ImportError("sparsemm_utils is not available.")
+        
+        base_model = self.model.language_model
+        model_config = base_model.config
+        
+        # Apply configuration to model config
+        model_config.window_size = sparsemm_config.get('window_size', 64)
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        model_config.kernel_size = sparsemm_config.get('kernel_size', 7)
+        model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
+        model_config.select_method = sparsemm_config.get('select_method', 'mixkv')
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Gemma3nTextAttentionMixKV(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            # Copy weights
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            new_attn.v_norm.load_state_dict(old_attn.v_norm.state_dict())
+            
+            init_mixkv(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[MixKV] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
 
 __all__ = [
     "Gemma3nAudioEncoder",
@@ -2991,4 +3510,8 @@ __all__ = [
     "Gemma3nPreTrainedModel",
     "Gemma3nTextModel",
     "Gemma3nTextAttentionSparseMM",
+    "Gemma3nTextAttentionSnapKV",
+    "Gemma3nTextAttentionAdaKV",
+    "Gemma3nTextAttentionPyramidKV",
+    "Gemma3nTextAttentionMixKV",
 ]

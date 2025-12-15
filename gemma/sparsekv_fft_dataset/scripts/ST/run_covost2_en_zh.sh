@@ -5,6 +5,8 @@ export MODEL_PATH="/mnt/public/models/gemma-3n-E4B-it"
 export SAMPLE_LIMIT=4898
 export COVOST2_DIRECTION="en_zh"
 
+# KV Cache compression method: sparsemm, snapkv, adakv, pyramidkv, mixkv
+export KV_METHOD="sparsekv"
 export USE_SPARSEKV="true"
 export BUDGET=0.8  
 export RATIO=0.5

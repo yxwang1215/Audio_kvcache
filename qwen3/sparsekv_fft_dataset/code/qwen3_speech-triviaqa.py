@@ -52,7 +52,12 @@ def convert_numpy_types(obj):
 
 
 # 根据环境变量决定是否使用 sparsekv 版本
-USE_SPARSEKV = os.environ.get("USE_SPARSEKV", "true").lower() == "true"
+# KV Cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
+# sparsekv is alias for sparsemm, vanilla means no KV compression
+KV_METHOD = os.environ.get("KV_METHOD", "sparsekv").lower()
+# USE_SPARSEKV is derived from KV_METHOD for backward compatibility
+USE_SPARSEKV = KV_METHOD != "vanilla"
+
 
 _AUDIO_TOKEN_ID = 151646        
 _AUDIO_BOS_TOKEN_ID = 151647      
@@ -121,7 +126,7 @@ def safe_makedirs(path, exist_ok=False):
 if USE_SPARSEKV:
     # Import from model directory
     from model.modeling_qwen3_omni_moe import Qwen3OmniMoeForConditionalGeneration
-    print("Using sparsekv version of the model (SparseMM enabled)")
+    print(f"Using sparsekv version of the model (SparseMM enabled, KV_METHOD={KV_METHOD})")
 else:
     # Try importing from transformers first, then fallback to local file
     try:
@@ -1860,9 +1865,31 @@ def main():
             }
             
             print(f"[SparseMM] Enabling SparseMM with config: {sparsemm_config}")
-            model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+            
+            # Enable based on KV_METHOD
+            if KV_METHOD in ("sparsekv", "sparsemm"):
+                model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+                print("[SparseMM] SparseMM attention enabled successfully")
+            elif KV_METHOD == "snapkv":
+                model.enable_snapkv_attention(sparsemm_config)
+                print("[SnapKV] SnapKV attention enabled successfully")
+            elif KV_METHOD == "adakv":
+                model.enable_adakv_attention(sparsemm_config)
+                print("[AdaKV] AdaKV attention enabled successfully")
+            elif KV_METHOD == "pyramidkv":
+                model.enable_pyramidkv_attention(sparsemm_config)
+                print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "mixkv":
+                select_method = os.environ.get("SELECT_METHOD", "mixkv")
+                sparsemm_config['select_method'] = select_method
+                model.enable_mixkv_attention(sparsemm_config)
+                print(f"[MixKV] MixKV attention enabled successfully with select_method={select_method}")
+            else:
+                print(f"[KVCache WARNING] Unknown KV_METHOD '{KV_METHOD}', falling back to SparseMM")
+                model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+            
             sparsemm_enabled = True
-            print(f"[SparseMM] SparseMM enabled successfully")
+            print(f"[KVCache] {KV_METHOD} enabled successfully")
         else:
             print("[SparseMM] Warning: Cannot find thinker model, skipping SparseMM initialization")
 

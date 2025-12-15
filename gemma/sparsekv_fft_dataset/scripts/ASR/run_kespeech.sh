@@ -5,6 +5,8 @@ export CUDA_VISIBLE_DEVICES=1
 export MODEL_PATH="/mnt/public/models/gemma-3n-E4B-it"
 export SAMPLE_LIMIT=0
 
+# KV Cache compression method: sparsemm, snapkv, adakv, pyramidkv, mixkv (disabled when USE_SPARSEKV=false)
+export KV_METHOD="sparsekv"
 export USE_SPARSEKV="false"
 export BUDGET=1.0
 export RATIO=0.5

@@ -13,7 +13,8 @@ export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qw
 
 # 推理配置
 export SAMPLE_LIMIT=0
-export USE_SPARSEKV="false"
+# KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
+export KV_METHOD="vanilla"
 export BUDGET=0.7
 export RATIO=0.5
 export WINDOW_SIZE=32

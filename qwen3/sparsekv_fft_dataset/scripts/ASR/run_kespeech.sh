@@ -5,7 +5,8 @@ export CUDA_VISIBLE_DEVICES=2
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 
-export USE_SPARSEKV="true"
+# KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
+export KV_METHOD="sparsekv"
 export BUDGET=0.4
 export RATIO=0.5
 export WINDOW_SIZE=32

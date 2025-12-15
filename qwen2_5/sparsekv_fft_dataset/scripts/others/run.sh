@@ -1,7 +1,7 @@
 # Example 1: Using absolute budget value (>= 1.0)
 conda activate Qwen3_2 &&
 CUDA_VISIBLE_DEVICES=0 \
-USE_SPARSEKV=true \
+KV_METHOD=sparsekv \
 BUDGET=4096 \
 RATIO=0.5 \
 WINDOW_SIZE=32 \
@@ -14,7 +14,7 @@ python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/spar
 # Example 2: Using budget as ratio of prefill tokens (< 1.0, e.g., 0.7 = 70%)
 conda activate Qwen3_2 &&
 CUDA_VISIBLE_DEVICES=0 \
-USE_SPARSEKV=true \
+KV_METHOD=sparsekv \
 BUDGET=0.5 \
 RATIO=0.5 \
 WINDOW_SIZE=32 \
@@ -28,7 +28,7 @@ python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/spar
 
 conda activate Qwen3_2 &&
 CUDA_VISIBLE_DEVICES=1 \
-USE_SPARSEKV=true \
+KV_METHOD=sparsekv \
 USE_AUDIO_AWARE_TOPK=true \
 AUDIO_BOUNDARY_BOOST=1.0 \
 AUDIO_CONTINUITY_WEIGHT=0.1 \
@@ -47,7 +47,7 @@ python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/spar
 # Advantages: Global receptive field, adaptive cutoff, better separation of trends vs noise
 conda activate Qwen3_2 &&
 CUDA_VISIBLE_DEVICES=4 \
-USE_SPARSEKV=true \
+KV_METHOD=sparsekv \
 USE_FFT_FILTER=true \
 FFT_FILTER_TYPE=lowpass \
 FFT_CUTOFF_RATIO=0.35 \
@@ -67,7 +67,7 @@ python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/spar
 # Example 2.3: FFT with saliency detection (Spectral Residual method)
 conda activate Qwen3_2 &&
 CUDA_VISIBLE_DEVICES=0 \
-USE_SPARSEKV=true \
+KV_METHOD=sparsekv \
 USE_FFT_FILTER=true \
 FFT_FILTER_TYPE=saliency \
 FFT_CUTOFF_RATIO=0.15 \
@@ -83,6 +83,6 @@ python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/spar
 
 # Example 3: Baseline without SparseMM
 CUDA_VISIBLE_DEVICES=1 \
-USE_SPARSEKV=false \
+KV_METHOD=none \
 RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv_fft/LibriSpeech_vanilla \
 python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/src/Qwen_2.5_Omni/sparsekv_fft/LibriSpeech_qwen2.5.py

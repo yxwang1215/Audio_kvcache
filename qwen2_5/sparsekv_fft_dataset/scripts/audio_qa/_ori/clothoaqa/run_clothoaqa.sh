@@ -13,7 +13,7 @@ export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qw
 
 # 推理配置
 export SAMPLE_LIMIT=0
-export USE_SPARSEKV="false"
+export KV_METHOD="none"
 export BUDGET=0.7
 export RATIO=0.5
 export WINDOW_SIZE=32

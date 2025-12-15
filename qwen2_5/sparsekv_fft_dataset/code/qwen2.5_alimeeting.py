@@ -24,9 +24,24 @@ parent_dir = os.path.dirname(current_dir)
 os.chdir(current_dir)
 sys.path.insert(0, parent_dir)
 
-# Import model modules
-USE_SPARSEKV = os.environ.get("USE_SPARSEKV", "false").lower() == "true"
+# KV cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, none
+# Priority: KV_METHOD > USE_SPARSEKV (for backward compatibility)
+KV_METHOD = os.environ.get("KV_METHOD", None)
+if KV_METHOD is None:
+    # Backward compatibility: check USE_SPARSEKV
+    USE_SPARSEKV_ENV = os.environ.get("USE_SPARSEKV", "false").lower()
+    if USE_SPARSEKV_ENV == "true":
+        KV_METHOD = "sparsekv"
+    else:
+        KV_METHOD = "none"
+KV_METHOD = KV_METHOD.lower()
 
+# For backward compatibility, set USE_SPARSEKV based on KV_METHOD
+USE_SPARSEKV = KV_METHOD != "none"
+
+print(f"[KV Cache] Using method: {KV_METHOD}, USE_SPARSEKV={USE_SPARSEKV}")
+
+# Import model modules
 if USE_SPARSEKV:
     from model.modeling_qwen2_5_omni_sparsekv import Qwen2_5OmniForConditionalGeneration
     print("Using sparsekv version of the model")

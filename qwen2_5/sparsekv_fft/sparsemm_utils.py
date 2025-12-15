@@ -26,6 +26,52 @@ def load_head_score(model_type):
         head_score = json.load(f)
     return head_score
 
+
+def load_similarity_score():
+    """
+    Load pre-computed KV similarity scores for head-wise token selection.
+    Returns a tensor of shape [num_layers, num_kv_heads] containing similarity scores.
+    """
+    similarity_score_path = os.environ.get("SIMILARITY_SCORE_PATH", "./visual_head/head_score/qwen_kv_similarity.json")
+    
+    if not os.path.exists(similarity_score_path):
+        # Return None if file doesn't exist - will use uniform scores
+        return None
+    
+    with open(similarity_score_path, 'r') as f:
+        similarity_score = json.load(f)
+
+    key_scores = {}
+    value_scores = {}
+
+    max_layer = 0
+    max_head = 0
+
+    for full_key, values in similarity_score.items():
+        layer_head, score_type = full_key.rsplit('-', 1)
+        layer, head = map(int, layer_head.split('-'))
+        avg_score = sum(values) / len(values) if len(values) > 0 else 0.0
+
+        if score_type == "key":
+            key_scores[(layer, head)] = avg_score
+        elif score_type == "value":
+            value_scores[(layer, head)] = avg_score
+
+        max_layer = max(max_layer, layer)
+        max_head = max(max_head, head)
+
+    key_tensor = torch.zeros((max_layer + 1, max_head + 1))
+    value_tensor = torch.zeros((max_layer + 1, max_head + 1))
+
+    for (layer, head), score in key_scores.items():
+        key_tensor[layer][head] = score
+
+    for (layer, head), score in value_scores.items():
+        value_tensor[layer][head] = score
+    
+    return key_tensor
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -1324,3 +1370,256 @@ def init_mask(self):
                     continue
                 else:
                     self.head_list.append((l, h))
+
+
+class MixKVCluster():
+    """
+    MixKV: Mixed strategy for KV cache compression combining multiple scoring methods.
+    Supports methods: 'attn', 'keydiff', 'mixkv', 'headwisemixkv', 'knorm', 'vnorm'
+    """
+    def __init__(self, window_size=32, max_capacity_prompt=256+64, kernel_size=5, pooling='avgpool',
+                 layer_idx=None, num_hidden_layers=None, pyram_mode=False, pyram_beta=20,
+                 num_key_value_groups=1, gqa_func='mean', select_method='mixkv', config=None):
+        self.window_size = window_size
+        self.max_capacity_prompt = max_capacity_prompt
+        assert self.max_capacity_prompt - self.window_size > 0
+        self.kernel_size = kernel_size
+        self.pooling = pooling
+
+        self.pyram_init = False
+        self.pyram_mode = pyram_mode
+        self.pyram_beta = pyram_beta
+        self.layer_idx = layer_idx
+        self.num_hidden_layers = num_hidden_layers
+
+        self.num_key_value_groups = num_key_value_groups
+        self.gqa_func = gqa_func
+        self.method = select_method
+        self.config = config
+        
+        # Load similarity scores for head-wise mixing
+        self.key_score = load_similarity_score()
+        
+        # Debug flag
+        self._debug_printed_info = False
+
+    @torch.compile
+    def calcul_similarity_score(self, key_states):
+        """Calculate key similarity scores for token selection."""
+        device = key_states.device
+        bsz, num_heads, seq_len, head_dim = key_states.shape
+        
+        # Normalize vectors
+        key_norm = F.normalize(key_states, dim=-1)
+        # Only consider tokens before the last `window_size`
+        valid_len = seq_len - self.window_size
+        key_valid = key_norm[:, :, :valid_len, :]  # (B, H, valid_len, D)
+
+        # Compute mean of valid tokens
+        key_mean = key_norm.sum(dim=2, keepdim=True) / seq_len  # (B, H, 1, D)
+        # Compute similarity of all tokens to the valid mean
+        
+        key_sim = torch.matmul(key_valid, key_mean.transpose(-2, -1)).squeeze(-1)  # (B, H, N-W)
+        key_mean_norm_sq = torch.sum(key_mean ** 2, dim=-1)
+        avg_similarity = (seq_len * key_mean_norm_sq - 1) / (seq_len - 1)
+        return key_sim, avg_similarity
+
+    def reset(self, window_size=64, max_capacity_prompt=256+64, kernel_size=5, pooling='avgpool'):
+        self.window_size = window_size
+        self.max_capacity_prompt = max_capacity_prompt
+        assert self.max_capacity_prompt - self.window_size > 0
+        self.kernel_size = kernel_size
+        self.pooling = pooling
+
+    def update_kv(self, origin_key_states, query_states, origin_value_states):
+        B, H, N, D = origin_key_states.shape
+        # Support GQA
+        key_states = repeat_kv(origin_key_states, self.num_key_value_groups)
+        value_states = repeat_kv(origin_value_states, self.num_key_value_groups)
+        
+        assert key_states.shape[-2] == query_states.shape[-2]
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        origin_heads_key_states = torch.split(origin_key_states, 1, dim=1)
+        origin_heads_value_states = torch.split(origin_value_states, 1, dim=1)
+        
+        # Compute pyramidal capacity
+        if self.pyram_mode and not self.pyram_init:
+            base_capacity = self.max_capacity_prompt - self.window_size
+            min_num = base_capacity // self.pyram_beta
+            max_num = base_capacity * 2 - min_num
+            
+            if max_num >= q_len - self.window_size:
+                max_num = q_len - self.window_size
+                min_num = base_capacity * 2 - max_num
+            
+            steps = (max_num - min_num) // (self.num_hidden_layers - 1)
+            self.max_capacity_prompt = max_num - self.layer_idx * steps + self.window_size
+            self.pyram_init = True
+            print(f"[MixKV] Pyram mode adaptive capacity, layer: {self.layer_idx}, "
+                  f"max_capacity_prompt: {self.max_capacity_prompt}, "
+                  f"base_capacity: {self.max_capacity_prompt - self.window_size}", flush=True)
+
+        if q_len < self.max_capacity_prompt or q_len < self.window_size:
+            return origin_key_states, origin_value_states
+        
+        # Calculate attention scores
+        attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(head_dim)
+        mask = torch.full((self.window_size, self.window_size), torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
+        mask_cond = torch.arange(mask.size(-1), device=attn_weights.device)
+        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+        attention_mask = mask[None, None, :, :]
+        attn_weights[:, :, -self.window_size:, -self.window_size:] += attention_mask
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights_mean = attn_weights[:, :, -self.window_size:, :-self.window_size].mean(dim=-2)
+        
+        attn_weights_mean = attn_weights_mean.view(attn_weights_mean.shape[0], -1, self.num_key_value_groups, attn_weights_mean.shape[-1])
+        if self.gqa_func == 'max':
+            attn_weights_mean = attn_weights_mean.max(dim=-2).values
+        elif self.gqa_func == 'mean':
+            attn_weights_mean = attn_weights_mean.mean(dim=-2)
+        else:
+            raise ValueError('gqa_func not supported')
+        
+        if self.pooling == 'avgpool':
+            attn_cache = F.avg_pool1d(attn_weights_mean, kernel_size=self.kernel_size, padding=self.kernel_size//2, stride=1)
+        elif self.pooling == 'maxpool':
+            attn_cache = F.max_pool1d(attn_weights_mean, kernel_size=self.kernel_size, padding=self.kernel_size//2, stride=1)
+        else:
+            raise ValueError('Pooling method not supported')
+
+        capacity = self.max_capacity_prompt - self.window_size
+        attn_score = attn_cache
+        
+        # Calculate similarity score
+        similarity_score, online_score = self.calcul_similarity_score(origin_key_states)
+        neg_sim = -similarity_score
+        sim_min = neg_sim.amin(dim=-1, keepdim=True)
+        sim_max = neg_sim.amax(dim=-1, keepdim=True)
+        sim_norm = (neg_sim - sim_min) / (sim_max - sim_min + 1e-8)
+        sim_mean = sim_norm.mean(dim=-1, keepdim=True)
+        att_mean = attn_score.mean(dim=-1, keepdim=True)
+        scale = att_mean / (sim_mean + 1e-8)
+        sim_scaled = sim_norm * scale
+        
+        _device = key_states.device
+        valid_len = N - self.window_size
+        
+        # Calculate value/key norm scores if needed
+        vnorm_score_head = None
+        knorm_score_head = None
+        
+        if self.method in ['vnorm', 'headwisemixkv', 'mixkv']:
+            origin_value_states_valid = origin_value_states[:, :, :valid_len, :]
+            vnorm_score = torch.norm(origin_value_states_valid, p=2, dim=-1)
+            vnorm_min = vnorm_score.amin(dim=-1, keepdim=True)
+            vnorm_max = vnorm_score.amax(dim=-1, keepdim=True)
+            vnorm_score = (vnorm_score - vnorm_min) / (vnorm_max - vnorm_min + 1e-8)
+            vnorm_mean = vnorm_score.mean(dim=-1, keepdim=True)
+            scale = att_mean / (vnorm_mean + 1e-8)
+            vnorm_score = vnorm_score * scale
+            vnorm_score_head = vnorm_score.split(1, dim=1)
+            
+        if self.method == 'knorm':
+            origin_key_states_valid = origin_key_states[:, :, :valid_len, :]
+            knorm_score = -torch.norm(origin_key_states_valid, p=2, dim=-1)
+            knorm_min = knorm_score.amin(dim=-1, keepdim=True)
+            knorm_max = knorm_score.amax(dim=-1, keepdim=True)
+            knorm_score = (knorm_score - knorm_min) / (knorm_max - knorm_min + 1e-8)
+            knorm_mean = knorm_score.mean(dim=-1, keepdim=True)
+            scale = att_mean / (knorm_mean + 1e-8)
+            knorm_score = knorm_score * scale
+            knorm_score_head = knorm_score.split(1, dim=1)
+
+        head_attn_score = torch.split(attn_score, 1, dim=1)
+        head_sim_score = torch.split(sim_scaled, 1, dim=1)
+        
+        heads_key_states = []
+        heads_value_states = []
+        
+        for head_idx in range(num_heads // self.num_key_value_groups):
+            # Get head-wise scores
+            if self.key_score is not None and self.layer_idx < self.key_score.shape[0] and head_idx < self.key_score.shape[1]:
+                head_score = self.key_score[self.layer_idx][head_idx].item()
+            else:
+                head_score = 0.5  # Default uniform weight
+            
+            attn_score_head = head_attn_score[head_idx]
+            sim_score_head = head_sim_score[head_idx]
+            
+            # Compute combined score based on method
+            if self.method == 'attn':
+                combined_score_head = attn_score_head
+            elif self.method == 'keydiff':
+                combined_score_head = sim_score_head
+            elif self.method == 'mixkv':
+                vnorm_score = vnorm_score_head[head_idx]
+                combined_score_head = 0.33 * sim_score_head + 0.33 * attn_score_head + 0.33 * vnorm_score
+            elif self.method == 'headwisemixkv':
+                vnorm_score = vnorm_score_head[head_idx]
+                importance_score = attn_score_head + vnorm_score
+                combined_score_head = head_score * sim_score_head + (1 - head_score) * importance_score
+            elif self.method == 'knorm':
+                knorm_score = knorm_score_head[head_idx]
+                combined_score_head = attn_score_head + knorm_score
+            elif self.method == 'vnorm':
+                vnorm_score = vnorm_score_head[head_idx]
+                combined_score_head = attn_score_head + vnorm_score
+            else:
+                combined_score_head = attn_score_head  # Default to attention
+            
+            _, indices_head = combined_score_head.sort(dim=-1, descending=True)
+            cache_index = indices_head.squeeze()[..., :capacity]
+            cache_index = cache_index.view(1, 1, -1, 1).expand(-1, -1, -1, head_dim)
+            
+            k_past_compress = origin_heads_key_states[head_idx][:, :, :-self.window_size, :].gather(dim=2, index=cache_index)
+            v_past_compress = origin_heads_value_states[head_idx][:, :, :-self.window_size, :].gather(dim=2, index=cache_index)
+            k_cur = origin_heads_key_states[head_idx][:, :, -self.window_size:, :]
+            v_cur = origin_heads_value_states[head_idx][:, :, -self.window_size:, :]
+            
+            key_states_head = torch.cat([k_past_compress, k_cur], dim=2)
+            value_states_head = torch.cat([v_past_compress, v_cur], dim=2)
+            heads_key_states.append(key_states_head)
+            heads_value_states.append(value_states_head)
+
+        heads_key_states = torch.cat(heads_key_states, dim=1)
+        heads_value_states = torch.cat(heads_value_states, dim=1)
+
+        return heads_key_states, heads_value_states
+
+
+def init_mixkv(self):
+    """Initialize MixKV cluster for head-wise mixed scoring KV cache compression."""
+    if not hasattr(self, "kv_cluster"):
+        if not hasattr(self.config, 'window_size'):
+            self.config.window_size = int(os.getenv('WINDOW_SIZE', 32))
+        if not hasattr(self.config, 'max_capacity_prompt'):
+            self.config.max_capacity_prompt = int(os.getenv('BUDGET', 256))
+        if not hasattr(self.config, 'kernel_size'):
+            self.config.kernel_size = int(os.getenv('KERNEL_SIZE', 5))
+        if not hasattr(self.config, 'pooling'):
+            self.config.pooling = os.getenv('POOLING', 'avgpool')
+        if not hasattr(self.config, 'num_hidden_layers'):
+            raise ValueError('num_hidden_layers should be set')
+        if not hasattr(self.config, 'gqa_func'):
+            if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                self.config.gqa_func = 'mean'
+        if not hasattr(self.config, 'select_method'):
+            self.config.select_method = os.getenv('SELECT_METHOD', 'mixkv')
+
+    if not hasattr(self, "kv_cluster"):
+        self.kv_cluster = MixKVCluster(
+            window_size=self.config.window_size,
+            max_capacity_prompt=self.config.max_capacity_prompt,
+            kernel_size=self.config.kernel_size,
+            pooling=self.config.pooling,
+            layer_idx=self.layer_idx,
+            num_hidden_layers=self.config.num_hidden_layers,
+            pyram_mode=False,
+            num_key_value_groups=self.config.num_attention_heads // self.config.num_key_value_heads,
+            gqa_func=self.config.gqa_func,
+            select_method=self.config.select_method,
+            config=self.config
+        )

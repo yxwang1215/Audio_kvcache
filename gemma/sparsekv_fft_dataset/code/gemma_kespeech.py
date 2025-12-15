@@ -24,12 +24,25 @@ os.chdir(current_dir)
 sys.path.insert(0, parent_dir)  # Add parent directory to path for model imports
 
 # 根据环境变量决定是否使用 sparsekv 版本
-USE_SPARSEKV = os.environ.get("USE_SPARSEKV", "true").lower() == "true"
+# KV Cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
+# sparsekv is alias for sparsemm, vanilla means no KV compression
+KV_METHOD = os.environ.get("KV_METHOD", "sparsekv").lower()
+# USE_SPARSEKV is derived from KV_METHOD for backward compatibility
+USE_SPARSEKV = KV_METHOD != "vanilla"
+
+# KV Cache method selection: sparsemm, snapkv, adakv, pyramidkv, mixkv
 
 if USE_SPARSEKV:
     # Import from model directory
-    from model.modeling_gemma3n import Gemma3nForConditionalGeneration, Gemma3nTextAttentionSparseMM
-    print("Using sparsekv version of the model")
+    from model.modeling_gemma3n import (
+        Gemma3nForConditionalGeneration, 
+        Gemma3nTextAttentionSparseMM,
+        Gemma3nTextAttentionSnapKV,
+        Gemma3nTextAttentionAdaKV,
+        Gemma3nTextAttentionPyramidKV,
+        Gemma3nTextAttentionMixKV
+    )
+    print(f"Using sparsekv version of the model (KV_METHOD={KV_METHOD})")
 else:
     from model.modeling_gemma3n import Gemma3nForConditionalGeneration
     print("Using standard version of the model (sparsekv disabled)")
@@ -1264,15 +1277,34 @@ def init_model():
                 'pooling': ENV_POOLING,
             }
             
-            # Enable SparseMM
-            model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+            # Enable based on KV_METHOD
+            if KV_METHOD in ("sparsekv", "sparsemm"):
+                model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+                print("[SparseMM] SparseMM attention enabled successfully")
+            elif KV_METHOD == "snapkv":
+                model.enable_snapkv_attention(sparsemm_config)
+                print("[SnapKV] SnapKV attention enabled successfully")
+            elif KV_METHOD == "adakv":
+                model.enable_adakv_attention(sparsemm_config)
+                print("[AdaKV] AdaKV attention enabled successfully")
+            elif KV_METHOD == "pyramidkv":
+                model.enable_pyramidkv_attention(sparsemm_config)
+                print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "mixkv":
+                select_method = os.environ.get("SELECT_METHOD", "mixkv")
+                sparsemm_config['select_method'] = select_method
+                model.enable_mixkv_attention(sparsemm_config)
+                print(f"[MixKV] MixKV attention enabled successfully with select_method={select_method}")
+            else:
+                print(f"[KVCache WARNING] Unknown KV_METHOD '{KV_METHOD}', falling back to SparseMM")
+                model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+            
             SPARSEM_ENABLED = True
-            print("[SparseMM] SparseMM attention enabled successfully")
         except Exception as e:
-            print(f"[SparseMM ERROR] Failed to enable SparseMM: {e}")
+            print(f"[KVCache ERROR] Failed to enable {KV_METHOD}: {e}")
             import traceback
             traceback.print_exc()
-            print("[SparseMM] Continuing without SparseMM...")
+            print("[KVCache] Continuing without KVCache compression...")
             SPARSEM_ENABLED = False
 
     if ENABLE_COMPILE and device.type == "cuda":

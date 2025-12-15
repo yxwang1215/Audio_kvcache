@@ -5,6 +5,8 @@ export CUDA_VISIBLE_DEVICES=6
 export MODEL_PATH="/mnt/public/models/gemma-3n-E4B-it"
 export SAMPLE_LIMIT=0
 
+# KV Cache compression method: sparsemm, snapkv, adakv, pyramidkv, mixkv
+export KV_METHOD="snapkv"
 # export USE_SPARSEKV="true"
 export USE_SPARSEKV="false"
 export BUDGET=0.8
@@ -13,6 +15,8 @@ export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
 export HEAD_SCORE_FILE="uniform"
+# For MixKV: select method can be 'attn', 'keydiff', 'mixkv', 'headwisemixkv', 'knorm', 'vnorm'
+# export SELECT_METHOD="mixkv"
 
 # FFT 滤波配置（可选）
 # export USE_FFT_FILTER="true"

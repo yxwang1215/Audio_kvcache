@@ -48,8 +48,22 @@ def convert_numpy_types(obj):
         return obj
 
 
-# 根据环境变量决定是否使用 sparsekv 版本
-USE_SPARSEKV = os.environ.get("USE_SPARSEKV", "true").lower() == "true"
+# KV cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, none
+# Priority: KV_METHOD > USE_SPARSEKV (for backward compatibility)
+KV_METHOD = os.environ.get("KV_METHOD", None)
+if KV_METHOD is None:
+    # Backward compatibility: check USE_SPARSEKV
+    USE_SPARSEKV_ENV = os.environ.get("USE_SPARSEKV", "true").lower()
+    if USE_SPARSEKV_ENV == "true":
+        KV_METHOD = "sparsekv"
+    else:
+        KV_METHOD = "none"
+KV_METHOD = KV_METHOD.lower()
+
+# For backward compatibility, set USE_SPARSEKV based on KV_METHOD
+USE_SPARSEKV = KV_METHOD != "none"
+
+print(f"[KV Cache] Using method: {KV_METHOD}, USE_SPARSEKV={USE_SPARSEKV}")
 
 _AUDIO_TOKEN_ID = 151646        
 _AUDIO_BOS_TOKEN_ID = 151647      

@@ -3,7 +3,7 @@
 export CUDA_VISIBLE_DEVICES=2
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
 export SAMPLE_LIMIT=0
-export USE_SPARSEKV="false"
+export KV_METHOD="none"
 # export BUDGET=0.7
 export RATIO=0.5
 export WINDOW_SIZE=32

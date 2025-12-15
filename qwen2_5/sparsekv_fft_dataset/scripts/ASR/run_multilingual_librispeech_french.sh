@@ -1,12 +1,11 @@
 #!/bin/bash
 # Multilingual LibriSpeech ASR Evaluation with Qwen2.5-Omni - French
-# 法语 ASR 评估脚本
 
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-7B"
 export SAMPLE_LIMIT=0
 
-export USE_SPARSEKV="true"
+export KV_METHOD="sparsekv"
 export BUDGET=0.4
 export RATIO=0.5
 export WINDOW_SIZE=32
@@ -16,9 +15,9 @@ export POOLING="maxpool"
 export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_7B/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
 export HEAD_SCORE_AGGREGATION="first"
 
-export USE_FFT_FILTER="false"
+export USE_FFT_FILTER="true"
 export FFT_FILTER_TYPE="lowpass"
-export FFT_CUTOFF_RATIO="0.3"
+export FFT_CUTOFF_RATIO="0.7"
 export FFT_ALPHA="0.5"
 export FFT_ADAPTIVE_CUTOFF="false"
 export FFT_USE_SALIENCY="false"
@@ -31,5 +30,5 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_datas
 python code/qwen2.5_multilingual_librispeech.py \
     --model-path "${MODEL_PATH}" \
     --languages french \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/MultilingualLibriSpeech/French/SparseKV/budget0.4_topk24_alpha1_beta1_gamma1_1213 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/MultilingualLibriSpeech/French/SparseKV/budget0.4_topk24_alpha1_beta1_gamma1_1213/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/MultilingualLibriSpeech/French/SparseKV_FFT/lowpass_0.7_alpha0.5/budget0.4_win32_ratio0.5_kernel5_poolmax_ketopk24_alpha1_beta1_gamma1_1214 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/MultilingualLibriSpeech/French/SparseKV_FFT/lowpass_0.7_alpha0.5/budget0.4_win32_ratio0.5_kernel5_poolmax_ketopk24_alpha1_beta1_gamma1_1214/timing_stats.json

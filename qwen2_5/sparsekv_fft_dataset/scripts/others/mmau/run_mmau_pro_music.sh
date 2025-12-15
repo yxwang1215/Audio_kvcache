@@ -23,7 +23,7 @@ export SAMPLE_LIMIT=0
 # SparseKV 配置
 # ============================================
 # 是否使用 SparseKV（默认 true）
-export USE_SPARSEKV="true"
+export KV_METHOD="sparsekv"
 
 # 预算配置（可以是绝对数值或比例，如 0.2 表示 20%）
 export BUDGET=0.7

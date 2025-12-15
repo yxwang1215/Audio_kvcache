@@ -3,14 +3,11 @@
 # 使用 LLM as Judge 对推理结果进行打分
 
 set -e
-
-# =================== 用户配置区 ===================
-# GPU 配置
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-3}" 
 export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}" 
 export JUDGE_API_KEY="${JUDGE_API_KEY:-sk-nSeZoIkSf8DGjeO5IvHnZpEc9O0QqeJrUyiJ5Oij55LW4QjF}"  # API Key
 export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}"  
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results/SparseKV/budget0.8_qwen2_5_3B_new_topk24_alpha1_beta1_gamma1_first}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results/SparseKV_FFT/lowpass_0.7_alpha0.5/budget0.6_topk24_alpha1_beta1_gamma1_1214/}"
 export INFERENCE_OUTPUT_FILE="${INFERENCE_OUTPUT_FILE:-${OUTPUT_DIR}/speech_web_questions_results_qwen25.json}"
 # Judge 输出文件：与 inference 相同目录，相同格式（JSON）
 export JUDGE_OUTPUT_FILE="${JUDGE_OUTPUT_FILE:-${OUTPUT_DIR}/speech_web_questions_results_qwen25_judge.json}"

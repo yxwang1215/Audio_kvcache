@@ -105,6 +105,7 @@ class WordAttentionAnalyzer:
             self.num_layers = num_layers
         
         self.num_heads = None
+        self.head_dim = None  # 每个 head 的维度，由 hook 动态获取
         self.hooks = []
         self.topk = topk  # top-k 注意力位置（参考 SparseMM）
         
@@ -120,8 +121,7 @@ class WordAttentionAnalyzer:
         self.current_audio_indices = None  # prefill 阶段的音频 token 位置
         self.current_word_alignments = []  # 当前样本的高质量单词对齐
         self.prefill_length = 0  # prefill 阶段的序列长度
-        self._hook_call_count = 0  # 调试：hook调用次数
-        self._debug_first_call = True  # 调试：是否第一次调用
+        self.current_model_size = "unknown"  # 当前模型大小（E2B/E4B/unknown）
         
         # 注意力捕获
         self.generation_attentions = []  # 每个生成步的注意力: List[Dict[(layer, head), tensor]]
@@ -136,46 +136,6 @@ class WordAttentionAnalyzer:
         
         self.device = next(model.parameters()).device
         self.dtype = next(model.parameters()).dtype
-        
-        # 强制使用 eager attention 以确保返回注意力权重
-        # SDPA 不支持返回 attention weights，必须使用 eager
-        self._original_attn_impl = None
-        self._set_eager_attention()
-    
-    def _set_eager_attention(self):
-        """设置所有 attention 模块使用 eager 实现以获取注意力权重"""
-        if hasattr(self.model, 'model') and hasattr(self.model.model, 'language_model'):
-            lang_model = self.model.model.language_model
-            if hasattr(lang_model, 'config') and hasattr(lang_model.config, '_attn_implementation'):
-                self._original_attn_impl = lang_model.config._attn_implementation
-                lang_model.config._attn_implementation = "eager"
-                print(f"[Analyzer] Set attention implementation to 'eager' (was: '{self._original_attn_impl}')")
-                
-                # 同时更新所有 layers 中的 attention 模块的配置
-                if hasattr(lang_model, 'layers'):
-                    for layer in lang_model.layers:
-                        if hasattr(layer, 'self_attn') and hasattr(layer.self_attn, 'config'):
-                            layer.self_attn.config._attn_implementation = "eager"
-        elif hasattr(self.model, 'config') and hasattr(self.model.config, 'text_config'):
-            text_config = self.model.config.text_config
-            if hasattr(text_config, '_attn_implementation'):
-                self._original_attn_impl = text_config._attn_implementation
-                text_config._attn_implementation = "eager"
-                print(f"[Analyzer] Set attention implementation to 'eager' (was: '{self._original_attn_impl}')")
-    
-    def _restore_attention_impl(self):
-        """恢复原始的 attention 实现"""
-        if self._original_attn_impl is not None:
-            if hasattr(self.model, 'model') and hasattr(self.model.model, 'language_model'):
-                lang_model = self.model.model.language_model
-                lang_model.config._attn_implementation = self._original_attn_impl
-                if hasattr(lang_model, 'layers'):
-                    for layer in lang_model.layers:
-                        if hasattr(layer, 'self_attn') and hasattr(layer.self_attn, 'config'):
-                            layer.self_attn.config._attn_implementation = self._original_attn_impl
-            elif hasattr(self.model, 'config') and hasattr(self.model.config, 'text_config'):
-                self.model.config.text_config._attn_implementation = self._original_attn_impl
-            print(f"[Analyzer] Restored attention implementation to '{self._original_attn_impl}'")
         
     def load_whisperx_alignment(self, json_path: str, score_threshold: float = 0.95) -> Tuple[List[WordAlignment], int]:
         """加载 WhisperX JSON 并筛选高质量单词
@@ -251,154 +211,168 @@ class WordAttentionAnalyzer:
             return None
     
     def register_attention_hooks(self):
-        """注册 hooks 捕获生成过程中的注意力"""
+        """注册 hooks 捕获生成过程中的注意力
         
-        def make_hook(layer_idx):
-            def hook(module, input, output):
-                # 调试：记录hook调用
-                self._hook_call_count += 1
+        改进版本：在 self_attn 模块上 hook，手动从 Q/K 计算 attention weights，
+        这样可以使用 sdpa/flash_attention_2 正常运行模型。
+        
+        使用 with_kwargs=True 来接收 kwargs 参数（transformers 新版本用 kwargs 传参）。
+        """
+        
+        def make_attn_hook(layer_idx):
+            """为 self_attn 模块创建 hook，手动计算 attention weights"""
+            def hook(module, args, kwargs, output):
+                # 获取 hidden_states - 优先从 kwargs，否则从 args
+                hidden_states = kwargs.get('hidden_states', None)
+                if hidden_states is None and len(args) > 0:
+                    hidden_states = args[0]
                 
-                # Gemma3nTextAttention.forward 返回格式: (attn_output, attn_weights)
-                # 直接在 attention 模块上，output 就是 (attn_output, attn_weights)
-                attn_weights = None
-                
-                if isinstance(output, tuple):
-                    # attention 模块返回: (attn_output, attn_weights)
-                    if len(output) >= 2:
-                        attn_weights = output[1]
-                    
-                    # 调试：第一次调用时打印输出格式
-                    if self._debug_first_call and layer_idx == 0:
-                        print(f"  [Debug] Attention {layer_idx} output: tuple with {len(output)} elements")
-                        if len(output) > 0:
-                            print(f"  [Debug]   output[0] type: {type(output[0])}, shape: {output[0].shape if hasattr(output[0], 'shape') else 'N/A'}")
-                        if len(output) > 1:
-                            print(f"  [Debug]   output[1] type: {type(output[1])}, is None: {output[1] is None}")
-                            if output[1] is not None and hasattr(output[1], 'shape'):
-                                print(f"  [Debug]   output[1] shape: {output[1].shape}")
-                
-                # 如果没有提取到注意力权重，直接返回
-                if attn_weights is None:
-                    if self._debug_first_call and layer_idx == 0:
-                        print(f"  [Debug] Attention {layer_idx}: No attention weights (output[1] is None)")
-                        self._debug_first_call = False  # 只打印一次
+                if hidden_states is None:
                     return output
                 
-                # 检查 attn_weights 的形状
-                if not isinstance(attn_weights, torch.Tensor):
-                    return output
+                batch_size, seq_len, hidden_dim = hidden_states.shape
                 
-                # attn_weights shape: [batch, num_heads, seq_len, seq_len] 或 [batch, seq_len, seq_len]
-                # 需要处理不同的形状
-                if len(attn_weights.shape) == 3:
-                    # [batch, seq_len, seq_len] -> 需要添加head维度
-                    batch_size, seq_len, _ = attn_weights.shape
-                    # 假设是单head或者需要reshape
-                    # 这种情况下可能需要特殊处理，先跳过
-                    return output
-                elif len(attn_weights.shape) != 4:
-                    return output
+                # 检测是否在生成阶段（seq_len == 1 表示 decode step）
+                is_decode_step = (seq_len == 1)
                 
-                batch_size, num_heads, seq_len, _ = attn_weights.shape
-                
+                # 初始化 num_heads 和 head_dim
                 if self.num_heads is None:
-                    self.num_heads = num_heads
+                    # Gemma3n 的 attention 配置
+                    config = module.config
+                    self.num_heads = config.num_attention_heads
+                    self.head_dim = getattr(config, 'head_dim', config.hidden_size // config.num_attention_heads)
                 
-                # 改进的生成阶段判断逻辑
-                # 使用 KV cache 时:
-                # - Prefill 阶段: seq_len = 完整的输入序列长度 (如 222)
-                # - 生成阶段: seq_len = 1 (只处理新生成的 token，attention 对所有历史 token)
-                #            attn_weights shape 的最后一维是完整的历史长度
-                # 
-                # 检测策略: 如果 seq_len 突然变成 1，说明进入了生成阶段
-                if not self.is_generating and self.current_audio_indices:
-                    max_audio_pos = max(self.current_audio_indices) if self.current_audio_indices else 0
-                    
-                    if self.prefill_length == 0:
-                        # 第一次看到足够长的序列，记录为 prefill 长度
-                        if seq_len >= max_audio_pos:
-                            self.prefill_length = seq_len
-                            if self._debug_first_call and layer_idx == 0:
-                                print(f"  [Debug] Set prefill_length={self.prefill_length} (seq_len={seq_len}, max_audio={max_audio_pos})")
-                    else:
-                        # prefill_length 已设置，检查是否开始生成
-                        # 使用 KV cache 时，生成阶段的 query seq_len = 1
-                        # 但 attn_weights 的形状是 [batch, heads, 1, history_len]
-                        # 其中 history_len >= prefill_length
-                        if seq_len == 1:
-                            # seq_len = 1 表示进入了生成阶段（只处理一个新 token）
-                            self.is_generating = True
-                            if self._debug_first_call and layer_idx == 0:
-                                print(f"  [Debug] Entering generation phase (seq_len=1, using KV cache)")
-                        elif seq_len > self.prefill_length:
-                            # 不使用 KV cache 时，seq_len 会累积增加
-                            self.is_generating = True
-                            if self._debug_first_call and layer_idx == 0:
-                                print(f"  [Debug] Entering generation phase (seq_len={seq_len} > prefill={self.prefill_length})")
+                # 标记生成开始
+                if is_decode_step and not self.is_generating:
+                    self.is_generating = True
                 
-                # 在生成阶段捕获注意力
-                if self.is_generating:
-                    # 保存最后一个 token 的注意力（新生成的token关注所有之前的tokens）
-                    last_token_attn = attn_weights[0, :, -1, :].detach().cpu()  # [num_heads, seq_len]
+                # 只在生成阶段（decode step）捕获注意力
+                if not is_decode_step or not self.is_generating:
+                    return output
+                
+                # 手动计算 attention weights
+                try:
+                    # 从 kwargs 获取 past_key_values
+                    past_key_value = kwargs.get('past_key_values', None)
+                    if past_key_value is None and len(args) > 3:
+                        past_key_value = args[3]
                     
-                    # 检查是否需要开始新的生成步
-                    # 每个生成步会经过所有layers，所以当收集完所有layer*head时，开始新步
+                    # 检查是否有 cache
+                    if past_key_value is None:
+                        return output
+                    
+                    # 获取 position_embeddings (cos, sin) for RoPE
+                    position_embeddings = kwargs.get('position_embeddings', None)
+                    if position_embeddings is None and len(args) > 1:
+                        position_embeddings = args[1]
+                    
+                    # 获取 Q 投影并应用归一化和 RoPE
+                    config = module.config
+                    num_heads = config.num_attention_heads
+                    num_kv_heads = config.num_key_value_heads
+                    head_dim = self.head_dim
+                    
+                    hidden_shape = (batch_size, seq_len, num_heads, head_dim)
+                    query_states = module.q_proj(hidden_states).view(hidden_shape)
+                    query_states = module.q_norm(query_states)
+                    
+                    # 应用 RoPE (如果有 position_embeddings)
+                    if position_embeddings is not None:
+                        cos, sin = position_embeddings
+                        # 简化的 RoPE 应用（与模型一致的 unsqueeze_dim=2）
+                        cos = cos.unsqueeze(2)
+                        sin = sin.unsqueeze(2)
+                        # rotate_half 和 RoPE 应用
+                        x1 = query_states[..., : head_dim // 2]
+                        x2 = query_states[..., head_dim // 2 :]
+                        query_states = (query_states * cos) + (torch.cat((-x2, x1), dim=-1) * sin)
+                    
+                    # Reshape: [batch, seq_len, num_heads, head_dim] -> [batch, num_heads, seq_len, head_dim]
+                    query_states = query_states.transpose(1, 2)
+                    
+                    # 从 cache 获取完整的 K
+                    full_key = None
+                    if hasattr(past_key_value, 'key_cache') and len(past_key_value.key_cache) > layer_idx:
+                        # DynamicCache
+                        full_key = past_key_value.key_cache[layer_idx]
+                    elif hasattr(past_key_value, 'shared_layers') and layer_idx in past_key_value.shared_layers:
+                        # Gemma3n shared layers
+                        full_key, _ = past_key_value.shared_layers[layer_idx]
+                    elif hasattr(past_key_value, '__getitem__'):
+                        try:
+                            # 尝试 tuple/list 格式
+                            if isinstance(past_key_value[layer_idx], tuple):
+                                full_key = past_key_value[layer_idx][0]
+                            else:
+                                full_key = past_key_value[layer_idx]
+                        except:
+                            pass
+                    
+                    if full_key is None:
+                        return output
+                    
+                    # full_key: [batch, num_kv_heads, kv_seq_len, head_dim]
+                    kv_seq_len = full_key.shape[2]
+                    
+                    # 处理 GQA (grouped query attention)
+                    num_key_value_groups = num_heads // num_kv_heads
+                    if num_kv_heads != num_heads:
+                        full_key = full_key.unsqueeze(2).expand(-1, -1, num_key_value_groups, -1, -1)
+                        full_key = full_key.reshape(batch_size, num_heads, kv_seq_len, head_dim)
+                    
+                    # 计算 attention scores: Q @ K^T
+                    # Gemma3n 使用 scaling=1.0 因为 Q 和 K 已经被 q_norm 和 k_norm 归一化了
+                    attn_weights = torch.matmul(query_states, full_key.transpose(2, 3))
+                    # attn_weights: [batch, num_heads, 1, kv_seq_len]
+                    
+                    # Softmax
+                    attn_weights = torch.nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)
+                    attn_weights = attn_weights.squeeze(2)  # [batch, num_heads, kv_seq_len]
+                    
+                    # 保存注意力
+                    last_token_attn = attn_weights[0].detach().cpu()  # [num_heads, kv_seq_len]
+                    
+                    # 开始新的生成步
                     if len(self.generation_attentions) == 0:
                         self.generation_attentions.append({})
-                        if self._debug_first_call:
-                            print(f"  [Debug] Started capturing generation attentions (seq_len={seq_len}, prefill={self.prefill_length})")
                     
                     current_step = self.generation_attentions[-1]
                     # 如果当前步骤已经收集了所有 layer*head，开始新步骤
-                    expected_keys = self.num_layers * num_heads
-                    if len(current_step) >= expected_keys:
+                    if len(current_step) >= self.num_layers * num_heads:
                         self.generation_attentions.append({})
                         current_step = self.generation_attentions[-1]
-                        if self._debug_first_call:
-                            print(f"  [Debug] Started new generation step (step {len(self.generation_attentions)})")
                     
                     # 保存当前 layer 的注意力
                     for head_idx in range(num_heads):
                         key = (layer_idx, head_idx)
                         current_step[key] = last_token_attn[head_idx]
                     
-                    # 调试：第一次成功捕获时打印
-                    if self._debug_first_call and layer_idx == 0:
-                        print(f"  [Debug] Successfully captured attention for layer {layer_idx}, step {len(self.generation_attentions)}, keys={len(current_step)}/{expected_keys}")
-                        self._debug_first_call = False
+                    del last_token_attn, attn_weights, full_key
                     
-                    del last_token_attn
+                except Exception as e:
+                    # 如果计算失败，静默跳过（可以打开下面的注释来调试）
+                    # print(f"Hook error at layer {layer_idx}: {e}")
+                    pass
                 
-                # 释放注意力权重（如果需要）
-                if isinstance(output, tuple):
-                    output_list = list(output)
-                    if len(output_list) > 1:
-                        output_list[1] = None
-                    if attn_weights is not None:
-                        del attn_weights
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    return tuple(output_list)
-                else:
-                    return output
+                return output
             
             return hook
         
         # Gemma3n model structure: model.model.language_model.layers
-        # 直接在 self_attn 模块上注册 hook，因为 layer 的输出可能不包含 attention weights
         if hasattr(self.model, 'model') and hasattr(self.model.model, 'language_model'):
             base_model = self.model.model.language_model
             if hasattr(base_model, 'layers'):
                 layers = base_model.layers
                 self.num_layers = len(layers)
                 for layer_idx, layer in enumerate(layers):
-                    # 直接在 self_attn 模块上注册 hook
+                    # Hook on self_attn module with with_kwargs=True
                     if hasattr(layer, 'self_attn'):
-                        hook = layer.self_attn.register_forward_hook(make_hook(layer_idx))
+                        hook = layer.self_attn.register_forward_hook(
+                            make_attn_hook(layer_idx), 
+                            with_kwargs=True
+                        )
                         self.hooks.append(hook)
-                    else:
-                        print(f"Warning: Layer {layer_idx} has no self_attn attribute")
-                print(f"Registered attention hooks for {len(self.hooks)} attention modules on language_model.layers[*].self_attn")
+                print(f"Registered attention hooks for {len(self.hooks)} self_attn modules")
             else:
                 print("Warning: Could not find language_model.layers")
         else:
@@ -410,12 +384,78 @@ class WordAttentionAnalyzer:
             hook.remove()
         self.hooks = []
     
+    def _normalize_text(self, text: str) -> str:
+        """标准化文本用于匹配：去除标点、空格，转小写"""
+        import re
+        # 去除所有标点符号和空格
+        text = re.sub(r'[^\w]', '', text.lower())
+        return text
+    
+    def _diagnose_generation_quality(
+        self,
+        generated_text: str,
+        whisperx_words: List[str],
+        token_ids: List[int]
+    ) -> Dict:
+        """诊断生成文本的质量和与WhisperX单词的匹配情况"""
+        import re
+        
+        diagnosis = {
+            'generated_text_length': len(generated_text),
+            'generated_text_preview': generated_text[:100],
+            'num_tokens': len(token_ids),
+            'whisperx_word_count': len(whisperx_words),
+            'issues': []
+        }
+        
+        # 检查生成文本是否为空或过短
+        if len(generated_text.strip()) == 0:
+            diagnosis['issues'].append('empty_generation')
+        elif len(generated_text.strip()) < 10:
+            diagnosis['issues'].append('very_short_generation')
+        
+        # 检查是否有重复模式（可能是模型卡住了）
+        if len(generated_text) > 20:
+            # 检查是否有重复的短语
+            words_in_text = generated_text.split()
+            if len(words_in_text) > 5:
+                # 检查前5个词是否重复出现
+                first_5 = ' '.join(words_in_text[:5])
+                if first_5 in generated_text[len(first_5):]:
+                    diagnosis['issues'].append('repetitive_pattern')
+        
+        # 检查特殊字符或异常模式
+        if re.search(r'[^\w\s\.,!?;:\-\'"]', generated_text):
+            diagnosis['issues'].append('unusual_characters')
+        
+        # 尝试直接匹配：检查WhisperX单词有多少出现在生成文本中
+        normalized_generated = self._normalize_text(generated_text)
+        matched_words = []
+        unmatched_words = []
+        
+        for word in whisperx_words:
+            normalized_word = self._normalize_text(word)
+            if normalized_word in normalized_generated:
+                matched_words.append(word)
+            else:
+                unmatched_words.append(word)
+        
+        diagnosis['direct_matches'] = len(matched_words)
+        diagnosis['direct_match_ratio'] = len(matched_words) / len(whisperx_words) if whisperx_words else 0.0
+        diagnosis['unmatched_words_preview'] = unmatched_words[:10]
+        
+        if len(unmatched_words) > len(matched_words):
+            diagnosis['issues'].append('low_direct_match_ratio')
+        
+        return diagnosis
+    
     def align_tokens_to_words(
         self,
         token_ids: List[int],
         generated_text: str,
         word_alignments: List[WordAlignment],
-        max_skip_threshold: int = 10  # 最多累积多少个token仍未匹配就跳过
+        max_skip_threshold: Optional[int] = None,  # 如果为None，将根据模型大小自动设置
+        debug: bool = False
     ) -> List[Tuple[int, str, Optional[WordAlignment]]]:
         """将生成的 token 对齐到单词
         
@@ -426,7 +466,23 @@ class WordAttentionAnalyzer:
         2. 累积 token 直到匹配到一个单词
         3. 将该单词的所有 token 都标记为属于该单词
         4. 如果累积token数超过阈值仍未匹配，跳过当前WhisperX单词
+        
+        改进：
+        - 使用更鲁棒的文本标准化（去除所有非字母数字字符）
+        - 支持模糊匹配（允许部分匹配）
+        - 增加诊断信息
+        - 根据模型大小自动调整 max_skip_threshold
         """
+        # 根据模型大小自动设置 max_skip_threshold
+        if max_skip_threshold is None:
+            model_size = getattr(self, 'current_model_size', 'E4B')
+            if model_size == "E4B":
+                max_skip_threshold = 30  # E4B模型需要更大的阈值
+            else:
+                max_skip_threshold = 15  # E2B模型使用较小的阈值
+            if debug:
+                print(f"  [Debug] Using max_skip_threshold={max_skip_threshold} for {model_size} model")
+        
         # 解码 token 为文本
         token_texts = []
         for token_id in token_ids:
@@ -439,6 +495,12 @@ class WordAttentionAnalyzer:
         accumulated_text = ""
         word_start_token_idx = 0  # 当前单词的起始 token 索引
         skipped_words = []  # 记录跳过的单词
+        match_details = []  # 用于诊断
+        
+        # 预处理：标准化所有 WhisperX 单词
+        normalized_words = []
+        for wa in word_alignments:
+            normalized_words.append(self._normalize_text(wa.word))
         
         for i, (token_id, token_text) in enumerate(zip(token_ids, token_texts)):
             accumulated_text += token_text
@@ -447,11 +509,12 @@ class WordAttentionAnalyzer:
             matched_word = None
             if current_word_idx < len(word_alignments):
                 word = word_alignments[current_word_idx].word.strip()
-                # 清理accumulated_text进行匹配（去除空格和标点）
-                clean_accumulated = accumulated_text.strip().lower().replace('.', '').replace(',', '').replace('!', '').replace('?', '')
-                clean_word = word.lower().replace('.', '').replace(',', '').replace('!', '').replace('?', '')
+                clean_word = normalized_words[current_word_idx]
                 
-                # 检查是否匹配
+                # 标准化累积文本
+                clean_accumulated = self._normalize_text(accumulated_text)
+                
+                # 检查是否匹配（完全匹配或包含匹配）
                 if clean_word in clean_accumulated:
                     matched_word = word_alignments[current_word_idx]
                     
@@ -467,7 +530,7 @@ class WordAttentionAnalyzer:
                     
                     for j in range(word_start_token_idx, i + 1):
                         token_txt = token_texts[j]
-                        temp_clean = (temp_accumulated + token_txt).strip().lower().replace('.', '').replace(',', '').replace('!', '').replace('?', '')
+                        temp_clean = self._normalize_text(temp_accumulated + token_txt)
                         
                         # 找到单词开始的 token
                         if len(temp_clean) <= match_start_pos:
@@ -476,7 +539,7 @@ class WordAttentionAnalyzer:
                         temp_accumulated += token_txt
                         
                         # 找到单词结束的 token
-                        temp_clean_after = temp_accumulated.strip().lower().replace('.', '').replace(',', '').replace('!', '').replace('?', '')
+                        temp_clean_after = self._normalize_text(temp_accumulated)
                         if len(temp_clean_after) >= match_end_pos:
                             word_token_end = j
                             break
@@ -503,13 +566,13 @@ class WordAttentionAnalyzer:
                 if tokens_accumulated > max_skip_threshold:
                     # 尝试匹配下一个单词
                     if current_word_idx + 1 < len(word_alignments):
-                        next_word = word_alignments[current_word_idx + 1].word.strip()
-                        clean_next_word = next_word.lower().replace('.', '').replace(',', '').replace('!', '').replace('?', '')
+                        next_clean_word = normalized_words[current_word_idx + 1]
                         
                         # 如果累积文本包含下一个单词，跳过当前单词
-                        if clean_next_word in clean_accumulated:
+                        if next_clean_word in clean_accumulated:
                             skipped_words.append(word_alignments[current_word_idx].word)
-                            print(f"  [Skip] Word '{word}' not found in generated text, skipping...")
+                            if debug:
+                                print(f"  [Skip] Word '{word}' not found in generated text, skipping...")
                             current_word_idx += 1
                             # 继续尝试匹配新的当前单词（不重置accumulated_text）
                             continue
@@ -518,7 +581,8 @@ class WordAttentionAnalyzer:
                     # 检查累积长度是否过长，如果是则强制跳过
                     if len(clean_accumulated) > len(clean_word) * 3:
                         skipped_words.append(word_alignments[current_word_idx].word)
-                        print(f"  [Skip] Word '{word}' timeout (accumulated {tokens_accumulated} tokens), forcing skip...")
+                        if debug:
+                            print(f"  [Skip] Word '{word}' timeout (accumulated {tokens_accumulated} tokens), forcing skip...")
                         current_word_idx += 1
                         accumulated_text = ""
                         word_start_token_idx = i + 1
@@ -528,7 +592,7 @@ class WordAttentionAnalyzer:
                 token_to_word.append((token_id, token_text, None))
         
         # 输出跳过信息
-        if skipped_words:
+        if skipped_words and debug:
             print(f"  [Warning] Skipped {len(skipped_words)} WhisperX words: {skipped_words}")
         
         return token_to_word
@@ -668,8 +732,6 @@ class WordAttentionAnalyzer:
         self.generated_token_ids = []
         self.is_generating = False  # 重置生成标志
         self.prefill_length = 0
-        self._hook_call_count = 0  # 重置hook调用计数
-        self._debug_first_call = True  # 重置调试标志
         
         # 调试信息：检查初始状态
         initial_seq_len = inputs.input_ids.shape[1]
@@ -678,7 +740,7 @@ class WordAttentionAnalyzer:
         print(f"Number of hooks registered: {len(self.hooks)}")
         
         # 7. 生成并捕获注意力
-        # eager attention 已在 __init__ 中设置（SDPA 不支持返回 attention weights）
+        # 注意力通过 hook 手动从 Q/K 计算，兼容 sdpa/flash_attention
         print(f"Generating transcription...")
         with torch.no_grad():
             outputs = self.model.generate(
@@ -687,7 +749,6 @@ class WordAttentionAnalyzer:
                 input_features=inputs.input_features if hasattr(inputs, 'input_features') else None,
                 input_features_mask=inputs.input_features_mask if hasattr(inputs, 'input_features_mask') else None,
                 max_new_tokens=128,
-                output_attentions=True,
                 return_dict_in_generate=True,
                 use_cache=True,
                 do_sample=False,
@@ -703,12 +764,11 @@ class WordAttentionAnalyzer:
         print(f"Captured {len(self.generation_attentions)} generation steps")
         print(f"is_generating flag: {self.is_generating}")
         print(f"prefill_length: {self.prefill_length}")
-        print(f"Hook call count: {self._hook_call_count}")
         if len(self.generation_attentions) > 0:
             print(f"  - First step has {len(self.generation_attentions[0])} layer-head pairs")
             print(f"  - Expected: {self.num_layers} layers × {self.num_heads} heads = {self.num_layers * self.num_heads} pairs")
         else:
-            print(f"  - Warning: No attention captured! Check hook registration and output_attentions=True")
+            print(f"  - Warning: No attention captured! Check hook registration")
             print(f"  - Debug: is_generating={self.is_generating}, prefill_length={self.prefill_length}, max_audio_pos={max(self.current_audio_indices) if self.current_audio_indices else 'N/A'}")
         
         # 9. 对齐 tokens 到单词
