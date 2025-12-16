@@ -1,0 +1,7 @@
+3b_libri_snapkv(改名) 16900
+3b_libri_adakv（改名） 16900
+3b_libri_pyramidkv 16900
+
+7b_libri_snapkv 17300
+7b_libri_adakv 17300
+7b_libri_pyramidkv 17300

@@ -49,7 +49,8 @@ try:
         init_adakv, 
         init_pyramidkv, 
         init_snapkv,
-        init_mixkv, 
+        init_mixkv,
+        init_mixsparsemm,
         DynamicCacheSplitHeadFlatten
     )
     from flash_attn import flash_attn_varlen_func as sparsemm_flash_attn_varlen_func
@@ -62,6 +63,7 @@ except ImportError:
     init_pyramidkv = None
     init_snapkv = None
     init_mixkv = None
+    init_mixsparsemm = None
     sparsemm_flash_attn_varlen_func = None
 
 
@@ -1773,39 +1775,100 @@ class Qwen3OmniMoeThinkerTextAttentionSnapKV(Qwen3OmniMoeThinkerTextAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
+        is_prefill = q_len != 1
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position} if past_key_values is not None else None
 
         # Initialize SnapKV cluster
         if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
             init_snapkv(self)
 
-        if past_key_values is not None:
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
+        if is_prefill:
+            # Prefill phase: compress and store, use original for attention
+            if past_key_values is not None:
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            # Use original KV for attention computation
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states_attn,
+                value_states_attn,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                sliding_window=self.sliding_window,
+                **kwargs,
+            )
+            attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        else:
+            # Decode phase: use flattened cache with varlen attention
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            # Initialize head metadata if needed - get actual length from cache
+            if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                # Get actual KV length from cache (prefill already stored compressed KV)
+                cache_key = past_key_values.key_cache[self.layer_idx]
+                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                head_len = total_cache_len // num_kv_heads  # Each head has same length for SnapKV
+                
+                self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                self.kv_cluster.klen_sum = total_cache_len
+                self.kv_cluster.max_seqlen_k = head_len
+                self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
+            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            self.kv_cluster.klen_sum += num_kv_heads
+            self.kv_cluster.max_seqlen_k += 1
+            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+            self.kv_cluster.head_lens.add_(1)
+
+            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+            key_states = key_states.view(-1, 1, self.head_dim)
+            value_states = value_states.view(-1, 1, self.head_dim)
+
+            if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
+                attn_output = sparsemm_flash_attn_varlen_func(
+                    query_states, key_states, value_states,
+                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                    1, self.kv_cluster.max_seqlen_k, causal=True
+                )
+                attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+                attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
+                attn_weights = None
+            else:
+                # Fallback to standard attention if SparseMM not available
+                key_states = repeat_kv(key_states, self.num_key_value_groups)
+                value_states = repeat_kv(value_states, self.num_key_value_groups)
+                attention_interface: Callable = eager_attention_forward
+                if self.config._attn_implementation != "eager":
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attn_output, attn_weights = attention_interface(
+                    self,
+                    query_states,
+                    key_states,
+                    value_states,
+                    attention_mask,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    scaling=self.scaling,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
+                attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -1842,39 +1905,100 @@ class Qwen3OmniMoeThinkerTextAttentionAdaKV(Qwen3OmniMoeThinkerTextAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
+        is_prefill = q_len != 1
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position} if past_key_values is not None else None
 
         # Initialize AdaKV cluster
         if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
             init_adakv(self)
 
-        if past_key_values is not None:
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
-                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+        if is_prefill:
+            if isinstance(past_key_values, DynamicCacheSplitHeadFlatten):
+                # Compress KV using AdaKV
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(
+                    key_states, query_states, value_states
+                )
                 past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+                
+                # Use uncompressed KV for attention computation
+                key_states = repeat_kv(key_states, self.num_key_value_groups)
+                value_states = repeat_kv(value_states, self.num_key_value_groups)
+            else:
+                past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                key_states = repeat_kv(key_states, self.num_key_value_groups)
+                value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                sliding_window=self.sliding_window,
+                **kwargs,
+            )
+            attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        else:
+            # Decode phase
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            if self.kv_cluster.head_lens is None:
+                self.kv_cluster.head_lens = torch.zeros(num_kv_heads, dtype=torch.int32, device=device)
+                self.kv_cluster.klen_sum = 0
+                self.kv_cluster.max_seqlen_k = 0
+                self.kv_cluster.cu_klen = torch.zeros(num_kv_heads + 1, dtype=torch.int32, device=device)
+                self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
+            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            self.kv_cluster.klen_sum += num_kv_heads
+            self.kv_cluster.max_seqlen_k += 1
+            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+            self.kv_cluster.head_lens.add_(1)
+
+            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+            key_states = key_states.view(-1, 1, self.head_dim)
+            value_states = value_states.view(-1, 1, self.head_dim)
+
+            if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
+                attn_output = sparsemm_flash_attn_varlen_func(
+                    query_states, key_states, value_states,
+                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                    1, self.kv_cluster.max_seqlen_k, causal=True
+                )
+                attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+                attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
+                attn_weights = None
+            else:
+                # Fallback to standard attention if SparseMM not available
+                key_states = repeat_kv(key_states, self.num_key_value_groups)
+                value_states = repeat_kv(value_states, self.num_key_value_groups)
+                attention_interface: Callable = eager_attention_forward
+                if self.config._attn_implementation != "eager":
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attn_output, attn_weights = attention_interface(
+                    self,
+                    query_states,
+                    key_states,
+                    value_states,
+                    attention_mask,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    scaling=self.scaling,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
+                attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -1911,39 +2035,100 @@ class Qwen3OmniMoeThinkerTextAttentionPyramidKV(Qwen3OmniMoeThinkerTextAttention
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
+        is_prefill = q_len != 1
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position} if past_key_values is not None else None
 
-        # Initialize PyramidKV cluster
+        # Initialize PyramidKV cluster (uses SnapKVCluster with pyram_mode=True)
         if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
             init_pyramidkv(self)
 
-        if past_key_values is not None:
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
+        if is_prefill:
+            # Prefill phase: compress and store, use original for attention
+            if past_key_values is not None:
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            # Use original KV for attention computation
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states_attn,
+                value_states_attn,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                sliding_window=self.sliding_window,
+                **kwargs,
+            )
+            attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        else:
+            # Decode phase: use flattened cache with varlen attention
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            # Initialize head metadata if needed - get actual length from cache
+            if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                # Get actual KV length from cache (prefill already stored compressed KV)
+                cache_key = past_key_values.key_cache[self.layer_idx]
+                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                head_len = total_cache_len // num_kv_heads  # Each head has same length for PyramidKV
+                
+                self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                self.kv_cluster.klen_sum = total_cache_len
+                self.kv_cluster.max_seqlen_k = head_len
+                self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
+            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            self.kv_cluster.klen_sum += num_kv_heads
+            self.kv_cluster.max_seqlen_k += 1
+            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+            self.kv_cluster.head_lens.add_(1)
+
+            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+            key_states = key_states.view(-1, 1, self.head_dim)
+            value_states = value_states.view(-1, 1, self.head_dim)
+
+            if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
+                attn_output = sparsemm_flash_attn_varlen_func(
+                    query_states, key_states, value_states,
+                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                    1, self.kv_cluster.max_seqlen_k, causal=True
+                )
+                attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+                attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
+                attn_weights = None
+            else:
+                # Fallback to standard attention if SparseMM not available
+                key_states = repeat_kv(key_states, self.num_key_value_groups)
+                value_states = repeat_kv(value_states, self.num_key_value_groups)
+                attention_interface: Callable = eager_attention_forward
+                if self.config._attn_implementation != "eager":
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attn_output, attn_weights = attention_interface(
+                    self,
+                    query_states,
+                    key_states,
+                    value_states,
+                    attention_mask,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    scaling=self.scaling,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
+                attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -4418,6 +4603,17 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         if not hasattr(model_config, 'gqa_func'):
             model_config.gqa_func = 'mean'
         
+        # Check if METHOD=mixsparsemm to use MixedSparseMM instead of SparseMM
+        env_method = os.environ.get("METHOD", None)
+        use_mixsparsemm = (env_method is not None and env_method.lower() == 'mixsparsemm')
+        if use_mixsparsemm:
+            # Set select_method from config or environment
+            if 'select_method' in sparsemm_config:
+                model_config.select_method = sparsemm_config['select_method']
+            else:
+                model_config.select_method = os.environ.get("SELECT_METHOD", "mixkv")
+            print(f"[MixedSparseMM] Using MixedSparseMM with select_method={model_config.select_method}")
+        
         patched_count = 0
         for layer_idx, layer in enumerate(base_model.layers):
             # Get the current attention module
@@ -4440,7 +4636,11 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             if hasattr(old_attn, 'k_norm'):
                 new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
             
-            init_sparsemm(new_attn)
+            # Use init_mixsparsemm if METHOD=mixsparsemm, otherwise use init_sparsemm
+            if use_mixsparsemm and init_mixsparsemm is not None:
+                init_mixsparsemm(new_attn)
+            else:
+                init_sparsemm(new_attn)
             
             if hasattr(new_attn, 'kv_cluster') and hasattr(new_attn.kv_cluster, 'head_adaptive_capacity'):
                 new_attn.head_adaptive_capacity = new_attn.kv_cluster.head_adaptive_capacity

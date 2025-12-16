@@ -1,17 +1,12 @@
 #!/bin/bash
 # speech-web-questions Judge 打分脚本
-# 使用 LLM as Judge 对推理结果进行打分
 
 set -e
-
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-3}"  
-export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}"  # API judge 模型名称（如 gemini-2.5-flash, qwen2.5）
-
-# API 配置（使用 API judge 时必填）
+export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}" 
 export JUDGE_API_KEY="${JUDGE_API_KEY:-sk-nSeZoIkSf8DGjeO5IvHnZpEc9O0QqeJrUyiJ5Oij55LW4QjF}"  # API Key
-export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}"  # API Base URL
+export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}"  
 
-# 输入输出路径
 # 优先从 INFERENCE_OUTPUT_FILE 推导 OUTPUT_DIR，确保路径一致
 if [ -n "${INFERENCE_OUTPUT_FILE}" ]; then
     # 如果 INFERENCE_OUTPUT_FILE 被显式指定，从它推导 OUTPUT_DIR
@@ -25,7 +20,6 @@ fi
 export JUDGE_OUTPUT_FILE="${JUDGE_OUTPUT_FILE:-${OUTPUT_DIR}/speech_web_questions_results_qwen3_judge.json}"
 # 强制重新打分（如果设置为 true，将重新处理所有样本，即使已经处理过）
 export FORCE_REJUDGE="${FORCE_REJUDGE:-true}"
-# =============================================================
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'

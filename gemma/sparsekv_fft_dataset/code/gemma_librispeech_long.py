@@ -898,6 +898,91 @@ def reset_sparsemm_state(model):
         # Model structure doesn't match expected format, skip reset
         pass
 
+
+def update_sparsemm_budget(model, prefill_token_count):
+    """
+    Update SparseMM/SnapKV/AdaKV/PyramidKV budget for all layers based on prefill token count.
+    If ENV_BUDGET_IS_RATIO is True, calculate budget as ratio of prefill tokens.
+    Otherwise, use the absolute budget value.
+    
+    This function should be called BEFORE each inference when budget is a ratio,
+    to ensure the budget is computed based on actual sequence length.
+    
+    Args:
+        model: The model with KV compression enabled
+        prefill_token_count: Number of tokens in prefill phase
+    
+    Returns:
+        The actual budget value used (integer)
+    """
+    if not ENV_BUDGET_IS_RATIO:
+        # Use absolute budget value, no update needed
+        return int(ENV_BUDGET)
+    
+    # Calculate budget as ratio of prefill tokens
+    budget_ratio = ENV_BUDGET
+    actual_budget = int(prefill_token_count * budget_ratio)
+    
+    # Ensure budget is at least window_size + 1 to avoid errors
+    min_budget = ENV_WINDOW_SIZE + 1
+    if actual_budget < min_budget:
+        actual_budget = min_budget
+        print(f"[KVCache] Warning: Calculated budget {int(prefill_token_count * budget_ratio)} is too small, using minimum {min_budget}")
+    
+    # Update budget in all layers
+    try:
+        base_model = model.model.language_model  # Gemma3nTextModel
+        if hasattr(base_model, 'layers'):
+            updated_count = 0
+            total_layers = len(base_model.layers)
+            for layer_idx, layer in enumerate(base_model.layers):
+                has_self_attn = hasattr(layer, 'self_attn')
+                has_kv_cluster = has_self_attn and hasattr(layer.self_attn, 'kv_cluster')
+                if layer_idx == 0:
+                    print(f"[KVCache DEBUG] Layer 0: has_self_attn={has_self_attn}, has_kv_cluster={has_kv_cluster}")
+                if has_self_attn and has_kv_cluster:
+                    kv_cluster = layer.self_attn.kv_cluster
+                    # CRITICAL: Always use update_budget() if available to properly reset pyram_init
+                    # This is essential for PyramidKV and MixKV to recalculate pyramidal capacity
+                    if hasattr(kv_cluster, 'update_budget'):
+                        old_budget = getattr(kv_cluster, 'max_capacity_prompt', getattr(kv_cluster, 'base_capacity', None))
+                        kv_cluster.update_budget(actual_budget)
+                        new_budget = getattr(kv_cluster, 'max_capacity_prompt', getattr(kv_cluster, 'base_capacity', None))
+                        if layer_idx == 0:
+                            print(f"[KVCache DEBUG] Layer 0 update_budget: {old_budget} -> {new_budget}")
+                        updated_count += 1
+                    elif hasattr(kv_cluster, 'base_capacity'):
+                        # Fallback for older versions without update_budget method
+                        kv_cluster.base_capacity = actual_budget - kv_cluster.window_size
+                        if kv_cluster.base_capacity <= 0:
+                            kv_cluster.base_capacity = 1
+                        updated_count += 1
+                    elif hasattr(kv_cluster, 'max_capacity_prompt'):
+                        # Fallback: Direct assignment (should not happen if update_budget exists)
+                        # For PyramidKV/MixKV, this won't reset pyram_init, so it's not ideal
+                        # But we still update the budget value
+                        old_budget = kv_cluster.max_capacity_prompt
+                        kv_cluster.max_capacity_prompt = actual_budget
+                        # Try to reset pyram_init if pyram_mode is enabled
+                        if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
+                            kv_cluster.pyram_init = False
+                        if layer_idx == 0:
+                            print(f"[KVCache WARNING] Layer 0: Direct budget assignment (no update_budget method): "
+                                  f"{old_budget} -> {actual_budget}")
+                        updated_count += 1
+            
+            # Also update model config for consistency
+            if hasattr(base_model, 'config'):
+                base_model.config.max_capacity_prompt = actual_budget
+            
+            print(f"[KVCache] Updated budget: {prefill_token_count} tokens * {budget_ratio:.2%} = {actual_budget} "
+                  f"(base_capacity={actual_budget - ENV_WINDOW_SIZE}, updated {updated_count}/{total_layers} layers)")
+    except (AttributeError, KeyError) as e:
+        print(f"[KVCache] Warning: Failed to update budget: {e}")
+    
+    return actual_budget
+
+
 def init_model():
     if not os.path.exists(LOCAL_MODEL_PATH):
         raise FileNotFoundError(f"模型路径不存在: {LOCAL_MODEL_PATH}")
@@ -938,16 +1023,25 @@ def init_model():
         print("[SparseMM] Enabling SparseMM attention...")
         try:
             # Load head scores
-            if AUDIO_HEAD_UTILS_AVAILABLE:
+            # Get model config for head scores
+            num_layers = model.config.text_config.num_hidden_layers
+            num_heads = model.config.text_config.num_attention_heads
+            num_total_heads = num_layers * num_heads
+            
+            # Priority 2: Check if using uniform distribution (no need to load file)
+            if ENV_HEAD_SCORE_FILE == "uniform" or not AUDIO_HEAD_UTILS_AVAILABLE:
+                # Use uniform head scores directly - no file loading needed
+                print(f"[SparseMM] Using uniform head score distribution")
+                head_score_data = {
+                    'scores': [1.0 / num_total_heads] * num_total_heads,
+                    'tensor': torch.ones(num_total_heads) / num_total_heads
+                }
+            elif AUDIO_HEAD_UTILS_AVAILABLE:
                 # Use correct parameter order: base_dir (default), score_type, batch
                 # Priority 1: Use direct path if provided
                 if ENV_HEAD_SCORE_PATH:
                     head_score_path = ENV_HEAD_SCORE_PATH
                     print(f"[SparseMM] Using direct head score path: {head_score_path}")
-                # Priority 2: Check if using uniform distribution
-                elif ENV_HEAD_SCORE_FILE == "uniform":
-                    head_score_path = "uniform"
-                    print(f"[SparseMM] Using uniform head score distribution")
                 else:
                     # Priority 3: Construct path from file type and parameters
                     head_score_path = get_audio_head_score_path(
@@ -957,8 +1051,6 @@ def init_model():
                     print(f"[SparseMM] Constructed head score path: {head_score_path}")
                 raw_head_scores = load_audio_head_scores(head_score_path)
                 # Process head scores with model config
-                num_layers = model.config.text_config.num_hidden_layers
-                num_heads = model.config.text_config.num_attention_heads
                 num_key_value_heads = getattr(model.config.text_config, 'num_key_value_heads', num_heads)
                 num_key_value_groups = num_heads // num_key_value_heads
                 head_score_tensor = process_audio_head_scores(
@@ -973,25 +1065,16 @@ def init_model():
                     'scores': head_score_list,
                     'tensor': head_score_tensor
                 }
-            else:
-                # Use default head scores (uniform)
-                num_layers = model.config.text_config.num_hidden_layers
-                num_heads = model.config.text_config.num_attention_heads
-                num_total_heads = num_layers * num_heads
-                head_score_data = {
-                    'scores': [1.0 / num_total_heads] * num_total_heads,
-                    'tensor': torch.ones(num_total_heads) / num_total_heads
-                }
             
             # Prepare SparseMM config
             # Handle budget as ratio vs absolute value
             if ENV_BUDGET_IS_RATIO:
-                # For ratio mode, we need to compute budget based on expected sequence length
-                # Use a reasonable default sequence length estimate for audio (e.g., 1024 tokens)
-                # The actual budget will be dynamically adjusted in update_kv based on real seq_len
-                estimated_seq_len = 1024  # Reasonable estimate for audio ASR
-                budget_value = max(64, int(estimated_seq_len * ENV_BUDGET))
-                print(f"[SparseMM] Budget ratio mode: {ENV_BUDGET} -> estimated budget: {budget_value}")
+                # For ratio mode, use a placeholder budget for initialization.
+                # The actual budget will be dynamically adjusted by update_sparsemm_budget()
+                # BEFORE each inference based on actual prefill token count.
+                placeholder_budget = 4096  # Placeholder, will be updated before inference
+                budget_value = placeholder_budget
+                print(f"[SparseMM] Budget ratio mode: {ENV_BUDGET:.2%} (will be dynamically adjusted per sample)")
             else:
                 budget_value = int(ENV_BUDGET)
                 print(f"[SparseMM] Budget absolute mode: {budget_value}")
@@ -1278,6 +1361,10 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
     if sparsem_enabled:
         reset_sparsemm_state(model)
     
+    # Debug: Print audio duration before processing
+    audio_duration = len(audio_np) / sr
+    print(f"[DEBUG] Audio before processor: {len(audio_np)} samples, {audio_duration:.2f}s ({audio_duration/60:.2f}min)")
+    
     # === Use official Gemma-3n format ===
     # Build messages with prompt (audio passed separately)
     messages = _build_asr_messages_with_audio()
@@ -1301,6 +1388,21 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
 
     float_dtype = getattr(model, "dtype", None) or _preferred_dtype()
     model_inputs = _move_to_device_safely(model_inputs, device, float_dtype)
+    
+    # Debug: Print input token counts including audio tokens
+    prefill_token_count = 0
+    if hasattr(model_inputs, 'input_ids') or 'input_ids' in model_inputs:
+        input_ids = model_inputs.input_ids if hasattr(model_inputs, 'input_ids') else model_inputs['input_ids']
+        prefill_token_count = input_ids.shape[1] if len(input_ids.shape) > 1 else input_ids.shape[0]
+        # Count audio soft tokens (audio_token_id = 262273 for Gemma-3n)
+        audio_token_id = getattr(model.config, 'audio_token_id', 262273)
+        audio_token_count = (input_ids == audio_token_id).sum().item()
+        print(f"[DEBUG] Processor output: total_input_tokens={prefill_token_count}, audio_tokens={audio_token_count}")
+
+    # CRITICAL: Update KV cache budget based on actual prefill token count
+    # This ensures budget ratio (e.g., 0.99) is applied to actual sequence length
+    if sparsem_enabled and ENV_BUDGET_IS_RATIO and prefill_token_count > 0:
+        update_sparsemm_budget(model, prefill_token_count)
 
     terminators = None
     try:

@@ -57,6 +57,11 @@ KV_METHOD = os.environ.get("KV_METHOD", "sparsekv").lower()
 # USE_SPARSEKV is derived from KV_METHOD for backward compatibility
 USE_SPARSEKV = KV_METHOD != "vanilla"
 
+# METHOD specifies the base method (sparsemm, snapkv, adakv, pyramidkv)
+# When METHOD is set, it enables mixkv scoring on top of the base method
+# METHOD=mixsparsemm means use MixedSparseMM (SparseMM base + mixkv scoring)
+ENV_METHOD = os.environ.get("METHOD", None)  # sparsemm, snapkv, adakv, pyramidkv, mixsparsemm
+
 
 _AUDIO_TOKEN_ID = 151646        
 _AUDIO_BOS_TOKEN_ID = 151647      
@@ -1015,6 +1020,14 @@ def main():
             
             # Enable based on KV_METHOD
             if KV_METHOD in ("sparsekv", "sparsemm"):
+                # Check if METHOD=mixsparsemm to use MixedSparseMM
+                if ENV_METHOD is not None and ENV_METHOD.lower() == 'mixsparsemm':
+                    # Set select_method in config
+                    select_method = os.environ.get("SELECT_METHOD", "mixkv")
+                    sparsemm_config['select_method'] = select_method
+                    print(f"[MixedSparseMM] Using MixedSparseMM with select_method={select_method}")
+                    # Set METHOD environment variable for init_mixsparsemm
+                    os.environ["METHOD"] = "mixsparsemm"
                 model.enable_sparsemm_attention(head_score_data, sparsemm_config)
                 print("[SparseMM] SparseMM attention enabled successfully")
             elif KV_METHOD == "snapkv":

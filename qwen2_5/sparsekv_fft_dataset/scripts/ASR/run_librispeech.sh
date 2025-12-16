@@ -5,8 +5,12 @@ export CUDA_VISIBLE_DEVICES=6
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-7B"
 export SAMPLE_LIMIT=0
 
-export KV_METHOD="sparsekv"
-export BUDGET=0.4
+# export KV_METHOD="sparsekv"
+export KV_METHOD="pyramidkv"
+# export KV_METHOD="mixkv"
+# export METHOD="mixsparsemm"
+# export SELECT_METHOD="headwisemixkv"
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -26,5 +30,31 @@ conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
 python code/qwen2.5_librispeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/librispeech_Results/SparseKV_FFT/budget0.4_topk24_alpha1_beta1_gamma1_1214 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/librispeech_Results/SparseKV_FFT/budget0.4_topk24_alpha1_beta1_gamma1_1214/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/librispeech_Results/PyramidKV/budget0.8_topk24_alpha1_beta1_gamma1_1214 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/librispeech_Results/PyramidKV/budget0.8_topk24_alpha1_beta1_gamma1_1214/timing_stats.json
+
+
+'''
+# 1. SparseMM + MixKV 评分（MixedSparseMM）
+export METHOD="mixsparsemm"
+export SELECT_METHOD="headwisemixkv"  # 或其他评分策略
+export KV_METHOD="sparsekv"
+
+# 2. SnapKV + MixKV 评分
+export METHOD="snapkv"
+export SELECT_METHOD="headwisemixkv"
+export KV_METHOD="snapkv"
+
+# 3. AdaKV + MixKV 评分
+export METHOD="adakv"
+export SELECT_METHOD="headwisemixkv"
+export KV_METHOD="adakv"
+'''
+
+# python code/qwen2.5_librispeech.py \
+#     --model-path "${MODEL_PATH}" \
+#     --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/librispeech_Results/MixKV/headwisemixkv/budget0.8_topk24_alpha1_beta1_gamma1_1214 \
+#     --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/librispeech_Results/MixKV/headwisemixkv/budget0.8_topk24_alpha1_beta1_gamma1_1214/timing_stats.json
+
+
+# '''

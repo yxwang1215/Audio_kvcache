@@ -55,6 +55,11 @@ KV_METHOD = os.environ.get("KV_METHOD", "sparsekv").lower()
 # USE_SPARSEKV is derived from KV_METHOD for backward compatibility
 USE_SPARSEKV = KV_METHOD != "vanilla"
 
+# METHOD specifies the base method (sparsemm, snapkv, adakv, pyramidkv)
+# When METHOD is set, it enables mixkv scoring on top of the base method
+# METHOD=mixsparsemm means use MixedSparseMM (SparseMM base + mixkv scoring)
+ENV_METHOD = os.environ.get("METHOD", None)  # sparsemm, snapkv, adakv, pyramidkv, mixsparsemm
+
 _AUDIO_TOKEN_ID = 151646        
 _AUDIO_BOS_TOKEN_ID = 151647      
 _AUDIO_EOS_TOKEN_ID = 151648      
@@ -63,6 +68,7 @@ ENV_BUDGET_RAW = os.environ.get("BUDGET", "4096")
 try:
     ENV_BUDGET = float(ENV_BUDGET_RAW)
     ENV_BUDGET_IS_RATIO = (ENV_BUDGET < 1.0)
+    print(f"[DEBUG] BUDGET environment variable: '{ENV_BUDGET_RAW}' -> parsed as {ENV_BUDGET} (is_ratio={ENV_BUDGET_IS_RATIO})")
 except ValueError:
     ENV_BUDGET = 4096.0
     ENV_BUDGET_IS_RATIO = False
@@ -272,8 +278,11 @@ def update_sparsemm_budget(model, prefill_token_count):
         return int(ENV_BUDGET)
     
     # Calculate budget as ratio of prefill tokens
-    budget_ratio = ENV_BUDGET
+    budget_ratio = ENV_BUDGET  # Use the actual ENV_BUDGET value (should be 0.99 if set correctly)
     actual_budget = int(prefill_token_count * budget_ratio)
+    
+    # Debug: Print the actual budget ratio being used
+    print(f"[DEBUG] update_sparsemm_budget: ENV_BUDGET={ENV_BUDGET}, budget_ratio={budget_ratio}, prefill_token_count={prefill_token_count}")
     
     # Ensure budget is at least window_size to avoid errors
     min_budget = ENV_WINDOW_SIZE + 1
@@ -290,11 +299,20 @@ def update_sparsemm_budget(model, prefill_token_count):
                 # Use the new update_budget method to properly recalculate head_adaptive_capacity
                 if hasattr(kv_cluster, 'update_budget'):
                     kv_cluster.update_budget(actual_budget)
+                elif hasattr(kv_cluster, 'max_capacity_prompt'):
+                    # For SnapKVCluster (used by pyramidkv, snapkv, and mixkv)
+                    kv_cluster.max_capacity_prompt = actual_budget
+                    # Reset pyram_init so pyramid mode recalculates with new budget
+                    if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
+                        kv_cluster.pyram_init = False
                 elif hasattr(kv_cluster, 'base_capacity'):
-                    # Fallback for older versions without update_budget method
+                    # For AdaKVCluster and SparseMM (they use base_capacity)
                     kv_cluster.base_capacity = actual_budget - kv_cluster.window_size
                     if kv_cluster.base_capacity <= 0:
                         kv_cluster.base_capacity = 1
+                    # For SparseMM, recompute head_adaptive_capacity if method exists
+                    if hasattr(kv_cluster, '_compute_head_adaptive_capacity'):
+                        kv_cluster._compute_head_adaptive_capacity()
         # Also update model config for consistency
         if hasattr(base_model, 'config'):
             base_model.config.max_capacity_prompt = actual_budget
@@ -1188,6 +1206,15 @@ def main():
             
             # Enable based on KV_METHOD
             if KV_METHOD in ("sparsekv", "sparsemm"):
+                # Check if METHOD=mixsparsemm to use MixedSparseMM
+                if ENV_METHOD is not None and ENV_METHOD.lower() == 'mixsparsemm':
+                    # Set select_method in config
+                    select_method = os.environ.get("SELECT_METHOD", "mixkv")
+                    sparsemm_config['select_method'] = select_method
+                    print(f"[MixedSparseMM] Using MixedSparseMM with select_method={select_method}")
+                    # Set METHOD environment variable for init_mixsparsemm
+                    os.environ["METHOD"] = "mixsparsemm"
+                
                 # Load head score file for SparseMM
                 if ENV_HEAD_SCORE_PATH:
                     head_score_path = ENV_HEAD_SCORE_PATH

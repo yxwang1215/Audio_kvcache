@@ -73,6 +73,7 @@ ENV_BUDGET_RAW = os.environ.get("BUDGET", "4096")
 try:
     ENV_BUDGET = float(ENV_BUDGET_RAW)
     ENV_BUDGET_IS_RATIO = (ENV_BUDGET < 1.0)
+    print(f"[DEBUG] BUDGET environment variable: '{ENV_BUDGET_RAW}' -> parsed as {ENV_BUDGET} (is_ratio={ENV_BUDGET_IS_RATIO})")
 except ValueError:
     ENV_BUDGET = 4096.0
     ENV_BUDGET_IS_RATIO = False
@@ -97,6 +98,11 @@ ENV_HEAD_SCORE_AGGREGATION = os.environ.get("HEAD_SCORE_AGGREGATION", "first")
 # MixKV specific parameters
 ENV_SELECT_METHOD = os.environ.get("SELECT_METHOD", "mixkv")  # attn, keydiff, mixkv, headwisemixkv, knorm, vnorm
 ENV_SIMILARITY_SCORE_PATH = os.environ.get("SIMILARITY_SCORE_PATH", None)
+
+# Base method parameter for combining base methods with mixkv scoring
+# METHOD specifies the base method (sparsemm, snapkv, adakv, pyramidkv)
+# When METHOD is set, it enables mixkv scoring on top of the base method
+ENV_METHOD = os.environ.get("METHOD", None)  # sparsemm, snapkv, adakv, pyramidkv, mixsparsemm
 
 # Audio-aware TopK selection parameters (from WHY_IMPROVEMENTS.md)
 USE_AUDIO_AWARE_TOPK = os.environ.get("USE_AUDIO_AWARE_TOPK", "false").lower() == "true"
@@ -296,8 +302,11 @@ def update_sparsemm_budget(model, prefill_token_count):
         return int(ENV_BUDGET)
     
     # Calculate budget as ratio of prefill tokens
-    budget_ratio = ENV_BUDGET
+    budget_ratio = ENV_BUDGET  # Use the actual ENV_BUDGET value (should be 0.99 if set correctly)
     actual_budget = int(prefill_token_count * budget_ratio)
+    
+    # Debug: Print the actual budget ratio being used
+    print(f"[DEBUG] update_sparsemm_budget: ENV_BUDGET={ENV_BUDGET}, budget_ratio={budget_ratio}, prefill_token_count={prefill_token_count}")
     
     # Ensure budget is at least window_size to avoid errors
     min_budget = ENV_WINDOW_SIZE + 1
@@ -314,11 +323,20 @@ def update_sparsemm_budget(model, prefill_token_count):
                 # Use the new update_budget method to properly recalculate head_adaptive_capacity
                 if hasattr(kv_cluster, 'update_budget'):
                     kv_cluster.update_budget(actual_budget)
+                elif hasattr(kv_cluster, 'max_capacity_prompt'):
+                    # For SnapKVCluster (used by pyramidkv, snapkv, and mixkv)
+                    kv_cluster.max_capacity_prompt = actual_budget
+                    # Reset pyram_init so pyramid mode recalculates with new budget
+                    if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
+                        kv_cluster.pyram_init = False
                 elif hasattr(kv_cluster, 'base_capacity'):
-                    # Fallback for older versions without update_budget method
+                    # For AdaKVCluster and SparseMM (they use base_capacity)
                     kv_cluster.base_capacity = actual_budget - kv_cluster.window_size
                     if kv_cluster.base_capacity <= 0:
                         kv_cluster.base_capacity = 1
+                    # For SparseMM, recompute head_adaptive_capacity if method exists
+                    if hasattr(kv_cluster, '_compute_head_adaptive_capacity'):
+                        kv_cluster._compute_head_adaptive_capacity()
         # Also update model config for consistency
         if hasattr(base_model, 'config'):
             base_model.config.max_capacity_prompt = actual_budget

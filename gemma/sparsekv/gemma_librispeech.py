@@ -18,12 +18,25 @@ from transformers import __version__ as TRANSFORMERS_VERSION
 from transformers.cache_utils import DynamicCache, Cache
 
 # 根据环境变量决定是否使用 sparsekv 版本
-USE_SPARSEKV = os.environ.get("USE_SPARSEKV", "true").lower() == "true"
+# KV Cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
+# sparsekv is alias for sparsemm, vanilla means no KV compression
+KV_METHOD = os.environ.get("KV_METHOD", None)
+if KV_METHOD is None:
+    # Backward compatibility: use USE_SPARSEKV if KV_METHOD is not set
+    USE_SPARSEKV = os.environ.get("USE_SPARSEKV", "true").lower() == "true"
+    KV_METHOD = "sparsekv" if USE_SPARSEKV else "vanilla"
+else:
+    KV_METHOD = KV_METHOD.lower()
+    USE_SPARSEKV = KV_METHOD != "vanilla"
 
 if USE_SPARSEKV:
     # Import from current directory (added to sys.path)
+    # Note: sparsekv directory only supports SparseMM, other methods are not available
     from modeling_gemma3n import Gemma3nForConditionalGeneration, Gemma3nTextAttentionSparseMM
-    print("Using sparsekv version of the model")
+    if KV_METHOD not in ("sparsekv", "sparsemm", "vanilla"):
+        print(f"[WARNING] KV_METHOD '{KV_METHOD}' is not supported in sparsekv directory, falling back to sparsemm")
+        KV_METHOD = "sparsemm"
+    print(f"Using sparsekv version of the model with KV_METHOD={KV_METHOD}")
 else:
     from modeling_gemma3n import Gemma3nForConditionalGeneration
     print("Using standard version of the model (sparsekv disabled)")
@@ -913,9 +926,9 @@ def init_model():
     # Track if SparseMM is actually enabled (for performance optimization)
     SPARSEM_ENABLED = False
     
-    # Enable SparseMM if available and USE_SPARSEKV is True
+    # Enable KV cache compression if available and USE_SPARSEKV is True
     if USE_SPARSEKV and SPARSEM_AVAILABLE:
-        print("[SparseMM] Enabling SparseMM attention...")
+        print(f"[KVCache] Enabling {KV_METHOD} attention...")
         try:
             # Load head scores
             if AUDIO_HEAD_UTILS_AVAILABLE:
@@ -974,15 +987,23 @@ def init_model():
                 'pooling': ENV_POOLING,
             }
             
-            # Enable SparseMM
-            model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+            # Enable based on KV_METHOD
+            # Note: sparsekv directory only supports SparseMM, other methods will fallback to SparseMM
+            if KV_METHOD in ("sparsekv", "sparsemm"):
+                model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+                print("[SparseMM] SparseMM attention enabled successfully")
+            else:
+                # Fallback to SparseMM for unsupported methods
+                print(f"[KVCache WARNING] KV_METHOD '{KV_METHOD}' is not supported in sparsekv directory, falling back to SparseMM")
+                model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+                print("[SparseMM] SparseMM attention enabled successfully (fallback)")
+            
             SPARSEM_ENABLED = True
-            print("[SparseMM] SparseMM attention enabled successfully")
         except Exception as e:
-            print(f"[SparseMM ERROR] Failed to enable SparseMM: {e}")
+            print(f"[KVCache ERROR] Failed to enable {KV_METHOD}: {e}")
             import traceback
             traceback.print_exc()
-            print("[SparseMM] Continuing without SparseMM...")
+            print("[KVCache] Continuing without KVCache compression...")
             SPARSEM_ENABLED = False
 
     if ENABLE_COMPILE and device.type == "cuda":

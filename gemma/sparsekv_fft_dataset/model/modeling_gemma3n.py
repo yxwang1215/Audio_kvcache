@@ -51,10 +51,11 @@ except ImportError:
 
 # Import flash_attn_varlen_func for SparseMM decode phase
 try:
-    from flash_attn import flash_attn_varlen_func
+    from flash_attn import flash_attn_varlen_func as sparsemm_flash_attn_varlen_func
     FLASH_ATTN_VARLEN_AVAILABLE = True
 except ImportError:
     FLASH_ATTN_VARLEN_AVAILABLE = False
+    sparsemm_flash_attn_varlen_func = None
     print("[WARNING] flash_attn_varlen_func not available, SparseMM decode will use fallback")
 
 logger = logging.get_logger(__name__)
@@ -1733,10 +1734,10 @@ class Gemma3nTextAttentionSparseMM(Gemma3nTextAttention):
                             max_seqlen_q = 1
                             max_seqlen_k = kv_cluster.max_seqlen_k
                             
-                            # Call flash_attn_varlen_func
+                            # Call sparsemm_flash_attn_varlen_func (flash_attn_varlen_func with alias)
                             # CRITICAL: Gemma uses scaling=1.0 because Q and K are already normalized
                             # by q_norm and k_norm. We must pass softmax_scale=1.0 to match this behavior.
-                            attn_output = flash_attn_varlen_func(
+                            attn_output = sparsemm_flash_attn_varlen_func(
                                 query_states_varlen,
                                 key_states_varlen,
                                 value_states_varlen,
@@ -1878,6 +1879,10 @@ class Gemma3nTextAttentionSnapKV(Gemma3nTextAttention):
     """
     Gemma3n text attention module with SnapKV integration.
     SnapKV selects important tokens based on attention patterns with pooling.
+    
+    Following Qwen's implementation pattern:
+    - Prefill: compress KV and store to cache, but use original KV for attention
+    - Decode: use variable-length flash attention with compressed KV from cache
     """
 
     def __init__(self, *args, **kwargs):
@@ -1913,22 +1918,77 @@ class Gemma3nTextAttentionSnapKV(Gemma3nTextAttention):
         value_states = value_states.transpose(1, 2)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
+        num_kv_heads = self.config.num_key_value_heads
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
 
         # Initialize SnapKV cluster
         if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
             init_snapkv(self)
 
+        is_prefill = q_len != 1
+
         if past_key_values is not None:
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
+            if is_prefill:
+                # Prefill phase: compress KV and store to cache
+                # Following Qwen's pattern: compress for cache, use original for attention
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+                
+                # Use original (uncompressed) KV for attention computation during prefill
+                key_states_attn = key_states
+                value_states_attn = value_states
+            else:
+                # Decode phase: use variable-length flash attention with compressed KV
+                device = key_states.device
+                
+                # Initialize head metadata if needed - get actual length from cache
+                if getattr(self.kv_cluster, 'head_lens', None) is None:
+                    # Get actual KV length from cache (prefill already stored compressed KV)
+                    cache_key = past_key_values.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                    head_len = total_cache_len // num_kv_heads  # Each head has same length for SnapKV
+                    
+                    self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                    self.kv_cluster.klen_sum = total_cache_len
+                    self.kv_cluster.max_seqlen_k = head_len
+                    self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                    self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                    self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                key_states_updated, value_states_updated = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+                # Update metadata for next decode step
+                self.kv_cluster.klen_sum += num_kv_heads
+                self.kv_cluster.max_seqlen_k += 1
+                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+                self.kv_cluster.head_lens.add_(1)
+
+                # Use sparsemm_flash_attn_varlen_func for variable-length attention
+                num_key_value_groups = num_heads // num_kv_heads
+                query_states_varlen = query_states.view(-1, num_key_value_groups, head_dim)
+                key_states_varlen = key_states_updated.view(-1, 1, head_dim)
+                value_states_varlen = value_states_updated.view(-1, 1, head_dim)
+
+                # CRITICAL: Gemma uses scaling=1.0 because Q and K are already normalized
+                # by q_norm and k_norm. We must pass softmax_scale=1.0 to match this behavior.
+                attn_output = sparsemm_flash_attn_varlen_func(
+                    query_states_varlen, key_states_varlen, value_states_varlen,
+                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                    1, self.kv_cluster.max_seqlen_k, causal=True,
+                    softmax_scale=1.0
+                )
+                attn_output = attn_output.reshape(bsz, num_heads, q_len, head_dim)
+                attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
+                attn_output = self.o_proj(attn_output)
+                return attn_output, None
+        else:
+            # No cache - use original KV
+            key_states_attn = key_states
+            value_states_attn = value_states
+
+        # Standard attention for prefill (or no cache case)
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -1936,8 +1996,8 @@ class Gemma3nTextAttentionSnapKV(Gemma3nTextAttention):
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
-            key_states,
-            value_states,
+            key_states_attn,
+            value_states_attn,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=1.0,
@@ -1954,6 +2014,10 @@ class Gemma3nTextAttentionAdaKV(Gemma3nTextAttention):
     """
     Gemma3n text attention module with AdaKV integration for adaptive KVCache.
     AdaKV uses head-adaptive capacity allocation based on attention scores.
+    
+    Following Qwen's implementation pattern:
+    - Prefill: compress KV and store to cache, but use original KV for attention
+    - Decode: use variable-length flash attention with compressed KV from cache
     """
 
     def __init__(self, *args, **kwargs):
@@ -1989,22 +2053,98 @@ class Gemma3nTextAttentionAdaKV(Gemma3nTextAttention):
         value_states = value_states.transpose(1, 2)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
+        num_kv_heads = self.config.num_key_value_heads
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
 
         # Initialize AdaKV cluster
         if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
             init_adakv(self)
 
+        is_prefill = q_len != 1
+
         if past_key_values is not None:
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
+            if is_prefill:
+                # Prefill phase: compress KV and store to cache
+                # Following Qwen's pattern: compress for cache, use original for attention
+                
+                # CRITICAL FIX: If budget is a ratio, dynamically adjust base_capacity before compression
+                kv_seq_len = key_states.shape[-2]
+                budget_ratio = getattr(self.config, 'budget_ratio', None)
+                if budget_ratio is not None and 0 < budget_ratio <= 1.0:
+                    # Compute dynamic budget based on actual sequence length
+                    dynamic_budget = max(64, int(kv_seq_len * budget_ratio))
+                    dynamic_base_capacity = dynamic_budget - self.kv_cluster.window_size
+                    if dynamic_base_capacity < 1:
+                        dynamic_base_capacity = 1
+                    # Update base_capacity for this sample
+                    old_base_capacity = self.kv_cluster.base_capacity
+                    self.kv_cluster.base_capacity = dynamic_base_capacity
+                    # Recompute floor_capacity and adaptive_capacity with new base_capacity
+                    self.kv_cluster.floor_capacity = int(dynamic_base_capacity * self.kv_cluster.floor_ratio)
+                    self.kv_cluster.adaptive_capacity = dynamic_base_capacity - self.kv_cluster.floor_capacity
+                    
+                    # Debug: Print dynamic budget adjustment (only once globally for first layer)
+                    if self.layer_idx == 0 and not getattr(Gemma3nTextAttentionAdaKV, '_global_debug_printed', False):
+                        print(f"[AdaKV DEBUG] Dynamic budget adjustment: kv_seq_len={kv_seq_len}, "
+                              f"budget_ratio={budget_ratio}, dynamic_budget={dynamic_budget}, "
+                              f"base_capacity: {old_base_capacity} -> {dynamic_base_capacity}")
+                        Gemma3nTextAttentionAdaKV._global_debug_printed = True
+                
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+                
+                # Use original (uncompressed) KV for attention computation during prefill
+                # This ensures prefill attention quality is not degraded
+                key_states_attn = key_states
+                value_states_attn = value_states
+            else:
+                # Decode phase: use variable-length flash attention with compressed KV
+                device = key_states.device
+                
+                # Initialize head metadata if needed
+                if self.kv_cluster.head_lens is None:
+                    self.kv_cluster.head_lens = torch.zeros(num_kv_heads, dtype=torch.int32, device=device)
+                    self.kv_cluster.klen_sum = 0
+                    self.kv_cluster.max_seqlen_k = 0
+                    self.kv_cluster.cu_klen = torch.zeros(num_kv_heads + 1, dtype=torch.int32, device=device)
+                    self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                    self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                key_states_updated, value_states_updated = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+                # Update metadata for next decode step
+                self.kv_cluster.klen_sum += num_kv_heads
+                self.kv_cluster.max_seqlen_k += 1
+                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+                self.kv_cluster.head_lens.add_(1)
+
+                # Use sparsemm_flash_attn_varlen_func for variable-length attention
+                # Reshape for varlen attention: query [num_kv_heads * num_groups, head_dim], kv [total_kv, head_dim]
+                num_key_value_groups = num_heads // num_kv_heads
+                query_states_varlen = query_states.view(-1, num_key_value_groups, head_dim)
+                key_states_varlen = key_states_updated.view(-1, 1, head_dim)
+                value_states_varlen = value_states_updated.view(-1, 1, head_dim)
+
+                # CRITICAL: Gemma uses scaling=1.0 because Q and K are already normalized
+                # by q_norm and k_norm. We must pass softmax_scale=1.0 to match this behavior.
+                attn_output = sparsemm_flash_attn_varlen_func(
+                    query_states_varlen, key_states_varlen, value_states_varlen,
+                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                    1, self.kv_cluster.max_seqlen_k, causal=True,
+                    softmax_scale=1.0
+                )
+                attn_output = attn_output.reshape(bsz, num_heads, q_len, head_dim)
+                attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
+                attn_output = self.o_proj(attn_output)
+                return attn_output, None
+        else:
+            # No cache - use original KV
+            key_states_attn = key_states
+            value_states_attn = value_states
+
+        # Standard attention for prefill (or no cache case)
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -2012,8 +2152,8 @@ class Gemma3nTextAttentionAdaKV(Gemma3nTextAttention):
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
-            key_states,
-            value_states,
+            key_states_attn,
+            value_states_attn,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=1.0,
@@ -2030,6 +2170,10 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
     """
     Gemma3n text attention module with PyramidKV integration.
     PyramidKV uses layer-wise pyramidal capacity allocation.
+    
+    Following Qwen's implementation pattern:
+    - Prefill: compress KV and store to cache, but use original KV for attention
+    - Decode: use variable-length flash attention with compressed KV from cache
     """
 
     def __init__(self, *args, **kwargs):
@@ -2065,22 +2209,72 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
         value_states = value_states.transpose(1, 2)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
+        num_kv_heads = self.config.num_key_value_heads
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
 
         # Initialize PyramidKV cluster
         if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
             init_pyramidkv(self)
 
+        is_prefill = q_len != 1
+
         if past_key_values is not None:
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
+            if is_prefill:
+                # Prefill phase: compress KV and store to cache
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+                
+                # Use original (uncompressed) KV for attention computation during prefill
+                key_states_attn = key_states
+                value_states_attn = value_states
+            else:
+                # Decode phase: use variable-length flash attention with compressed KV
+                device = key_states.device
+                
+                # Initialize head metadata if needed - get actual length from cache
+                if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                    cache_key = past_key_values.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]
+                    head_len = total_cache_len // num_kv_heads
+                    
+                    self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                    self.kv_cluster.klen_sum = total_cache_len
+                    self.kv_cluster.max_seqlen_k = head_len
+                    self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                    self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                    self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                key_states_updated, value_states_updated = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+                self.kv_cluster.klen_sum += num_kv_heads
+                self.kv_cluster.max_seqlen_k += 1
+                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+                self.kv_cluster.head_lens.add_(1)
+
+                num_key_value_groups = num_heads // num_kv_heads
+                query_states_varlen = query_states.view(-1, num_key_value_groups, head_dim)
+                key_states_varlen = key_states_updated.view(-1, 1, head_dim)
+                value_states_varlen = value_states_updated.view(-1, 1, head_dim)
+
+                # CRITICAL: Gemma uses scaling=1.0 because Q and K are already normalized
+                # by q_norm and k_norm. We must pass softmax_scale=1.0 to match this behavior.
+                attn_output = sparsemm_flash_attn_varlen_func(
+                    query_states_varlen, key_states_varlen, value_states_varlen,
+                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                    1, self.kv_cluster.max_seqlen_k, causal=True,
+                    softmax_scale=1.0
+                )
+                attn_output = attn_output.reshape(bsz, num_heads, q_len, head_dim)
+                attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
+                attn_output = self.o_proj(attn_output)
+                return attn_output, None
+        else:
+            key_states_attn = key_states
+            value_states_attn = value_states
+
+        # Standard attention for prefill (or no cache case)
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -2088,8 +2282,8 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
-            key_states,
-            value_states,
+            key_states_attn,
+            value_states_attn,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=1.0,
@@ -2106,6 +2300,10 @@ class Gemma3nTextAttentionMixKV(Gemma3nTextAttention):
     """
     Gemma3n text attention module with MixKV integration.
     MixKV uses mixed scoring strategies (attention, key similarity, value norm) for token selection.
+    
+    Following Qwen's implementation pattern:
+    - Prefill: compress KV and store to cache, but use original KV for attention
+    - Decode: use variable-length flash attention with compressed KV from cache
     """
 
     def __init__(self, *args, **kwargs):
@@ -2141,22 +2339,98 @@ class Gemma3nTextAttentionMixKV(Gemma3nTextAttention):
         value_states = value_states.transpose(1, 2)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
+        num_kv_heads = self.config.num_key_value_heads
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
 
         # Initialize MixKV cluster
         if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
             init_mixkv(self)
 
+        is_prefill = q_len != 1
+
         if past_key_values is not None:
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
+            if is_prefill:
+                # Prefill phase: compress KV and store to cache
+                # Following Qwen's pattern: compress for cache, use original for attention
+                
+                # CRITICAL FIX: If budget is a ratio, dynamically adjust max_capacity_prompt before compression
+                # This matches AdaKV's implementation to ensure budget_ratio is correctly applied
+                kv_seq_len = key_states.shape[-2]
+                budget_ratio = getattr(self.config, 'budget_ratio', None)
+                if budget_ratio is not None and 0 < budget_ratio <= 1.0:
+                    # Compute dynamic budget based on actual sequence length
+                    dynamic_budget = max(64, int(kv_seq_len * budget_ratio))
+                    dynamic_max_capacity = dynamic_budget
+                    if dynamic_max_capacity <= self.kv_cluster.window_size:
+                        dynamic_max_capacity = self.kv_cluster.window_size + 1
+                    # Update max_capacity_prompt for this sample
+                    old_max_capacity = self.kv_cluster.max_capacity_prompt
+                    self.kv_cluster.max_capacity_prompt = dynamic_max_capacity
+                    # Reset pyram_init to allow recalculation if pyram_mode is used
+                    if hasattr(self.kv_cluster, 'pyram_mode') and self.kv_cluster.pyram_mode:
+                        self.kv_cluster.pyram_init = False
+                    
+                    # Debug: Print dynamic budget adjustment (only once globally for first layer)
+                    if self.layer_idx == 0 and not getattr(Gemma3nTextAttentionMixKV, '_global_debug_printed', False):
+                        print(f"[MixKV DEBUG] Dynamic budget adjustment: kv_seq_len={kv_seq_len}, "
+                              f"budget_ratio={budget_ratio}, dynamic_budget={dynamic_budget}, "
+                              f"max_capacity_prompt: {old_max_capacity} -> {dynamic_max_capacity}")
+                        Gemma3nTextAttentionMixKV._global_debug_printed = True
+                
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+                
+                # Use original (uncompressed) KV for attention computation during prefill
+                key_states_attn = key_states
+                value_states_attn = value_states
+            else:
+                # Decode phase: use variable-length flash attention with compressed KV
+                device = key_states.device
+                
+                # Initialize head metadata if needed
+                if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                    cache_key = past_key_values.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]
+                    head_len = total_cache_len // num_kv_heads
+                    
+                    self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                    self.kv_cluster.klen_sum = total_cache_len
+                    self.kv_cluster.max_seqlen_k = head_len
+                    self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                    self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                    self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                key_states_updated, value_states_updated = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+                self.kv_cluster.klen_sum += num_kv_heads
+                self.kv_cluster.max_seqlen_k += 1
+                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+                self.kv_cluster.head_lens.add_(1)
+
+                num_key_value_groups = num_heads // num_kv_heads
+                query_states_varlen = query_states.view(-1, num_key_value_groups, head_dim)
+                key_states_varlen = key_states_updated.view(-1, 1, head_dim)
+                value_states_varlen = value_states_updated.view(-1, 1, head_dim)
+
+                # CRITICAL: Gemma uses scaling=1.0 because Q and K are already normalized
+                # by q_norm and k_norm. We must pass softmax_scale=1.0 to match this behavior.
+                attn_output = sparsemm_flash_attn_varlen_func(
+                    query_states_varlen, key_states_varlen, value_states_varlen,
+                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                    1, self.kv_cluster.max_seqlen_k, causal=True,
+                    softmax_scale=1.0
+                )
+                attn_output = attn_output.reshape(bsz, num_heads, q_len, head_dim)
+                attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
+                attn_output = self.o_proj(attn_output)
+                return attn_output, None
+        else:
+            key_states_attn = key_states
+            value_states_attn = value_states
+
+        # Standard attention for prefill (or no cache case)
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -2164,8 +2438,8 @@ class Gemma3nTextAttentionMixKV(Gemma3nTextAttention):
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
-            key_states,
-            value_states,
+            key_states_attn,
+            value_states_attn,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=1.0,
@@ -3309,6 +3583,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         Args:
             sparsemm_config: Dictionary containing configuration:
                 - 'budget': KV cache budget
+                - 'budget_ratio': Budget ratio for dynamic adjustment (optional)
                 - 'window_size': Window size
                 - 'kernel_size': Kernel size for pooling
                 - 'pooling': Pooling method
@@ -3324,6 +3599,12 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
         model_config.kernel_size = sparsemm_config.get('kernel_size', 7)
         model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
+        # CRITICAL: Store budget_ratio for dynamic adjustment
+        budget_ratio = sparsemm_config.get('budget_ratio', None)
+        model_config.budget_ratio = budget_ratio
+        
+        if budget_ratio is not None:
+            print(f"[SnapKV] budget_ratio={budget_ratio} enabled for dynamic budget adjustment")
         
         patched_count = 0
         for layer_idx, layer in enumerate(base_model.layers):
@@ -3359,6 +3640,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         Args:
             sparsemm_config: Dictionary containing configuration:
                 - 'budget': KV cache budget
+                - 'budget_ratio': Budget ratio for dynamic adjustment (optional)
                 - 'window_size': Window size
                 - 'kernel_size': Kernel size for pooling
                 - 'pooling': Pooling method
@@ -3374,6 +3656,12 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
         model_config.kernel_size = sparsemm_config.get('kernel_size', 7)
         model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
+        # CRITICAL: Store budget_ratio for dynamic adjustment in forward pass
+        budget_ratio = sparsemm_config.get('budget_ratio', None)
+        model_config.budget_ratio = budget_ratio
+        
+        if budget_ratio is not None:
+            print(f"[AdaKV] budget_ratio={budget_ratio} enabled for dynamic budget adjustment")
         
         patched_count = 0
         for layer_idx, layer in enumerate(base_model.layers):
@@ -3409,6 +3697,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         Args:
             sparsemm_config: Dictionary containing configuration:
                 - 'budget': KV cache budget
+                - 'budget_ratio': Budget ratio for dynamic adjustment (optional)
                 - 'window_size': Window size
                 - 'kernel_size': Kernel size for pooling
                 - 'pooling': Pooling method
@@ -3424,7 +3713,15 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
         model_config.kernel_size = sparsemm_config.get('kernel_size', 7)
         model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
+        # CRITICAL: Store budget_ratio for dynamic adjustment
+        budget_ratio = sparsemm_config.get('budget_ratio', None)
+        model_config.budget_ratio = budget_ratio
         
+        if budget_ratio is not None:
+            print(f"[PyramidKV] budget_ratio={budget_ratio} enabled for dynamic budget adjustment")
+        # add
+        if not hasattr(model_config, 'gqa_func'):
+            model_config.gqa_func = 'mean'
         patched_count = 0
         for layer_idx, layer in enumerate(base_model.layers):
             old_attn = layer.self_attn
@@ -3459,6 +3756,7 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         Args:
             sparsemm_config: Dictionary containing configuration:
                 - 'budget': KV cache budget
+                - 'budget_ratio': Budget ratio for dynamic adjustment (optional)
                 - 'window_size': Window size
                 - 'kernel_size': Kernel size for pooling
                 - 'pooling': Pooling method
@@ -3476,6 +3774,12 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         model_config.kernel_size = sparsemm_config.get('kernel_size', 7)
         model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
         model_config.select_method = sparsemm_config.get('select_method', 'mixkv')
+        # CRITICAL: Store budget_ratio for dynamic adjustment in forward pass
+        budget_ratio = sparsemm_config.get('budget_ratio', None)
+        model_config.budget_ratio = budget_ratio
+        
+        if budget_ratio is not None:
+            print(f"[MixKV] budget_ratio={budget_ratio} enabled for dynamic budget adjustment")
         
         patched_count = 0
         for layer_idx, layer in enumerate(base_model.layers):

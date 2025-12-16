@@ -49,8 +49,9 @@ def convert_numpy_types(obj):
         return obj
 
 
-# KV cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, none
+# KV cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, none, vanilla
 # Priority: KV_METHOD > USE_SPARSEKV (for backward compatibility)
+# "none" and "vanilla" both mean no KV cache compression (full cache)
 KV_METHOD = os.environ.get("KV_METHOD", None)
 if KV_METHOD is None:
     # Backward compatibility: check USE_SPARSEKV
@@ -62,7 +63,8 @@ if KV_METHOD is None:
 KV_METHOD = KV_METHOD.lower()
 
 # For backward compatibility, set USE_SPARSEKV based on KV_METHOD
-USE_SPARSEKV = KV_METHOD != "none"
+# Both "none" and "vanilla" mean no compression
+USE_SPARSEKV = KV_METHOD not in ["none", "vanilla"]
 
 print(f"[KV Cache] Using method: {KV_METHOD}, USE_SPARSEKV={USE_SPARSEKV}")
 
@@ -74,6 +76,7 @@ ENV_BUDGET_RAW = os.environ.get("BUDGET", "4096")
 try:
     ENV_BUDGET = float(ENV_BUDGET_RAW)
     ENV_BUDGET_IS_RATIO = (ENV_BUDGET < 1.0)
+    print(f"[DEBUG] BUDGET environment variable: '{ENV_BUDGET_RAW}' -> parsed as {ENV_BUDGET} (is_ratio={ENV_BUDGET_IS_RATIO})")
 except ValueError:
     ENV_BUDGET = 4096.0
     ENV_BUDGET_IS_RATIO = False
@@ -94,6 +97,15 @@ ENV_HEAD_SCORE_BETA = os.environ.get("HEAD_SCORE_BETA", None)
 ENV_HEAD_SCORE_GAMMA = os.environ.get("HEAD_SCORE_GAMMA", None)
 # Aggregation method for multiple scores in JSON (mean, first, second, max, min, sum)
 ENV_HEAD_SCORE_AGGREGATION = os.environ.get("HEAD_SCORE_AGGREGATION", "first")
+
+# MixKV specific parameters
+ENV_SELECT_METHOD = os.environ.get("SELECT_METHOD", "mixkv")  # attn, keydiff, mixkv, headwisemixkv, knorm, vnorm
+ENV_SIMILARITY_SCORE_PATH = os.environ.get("SIMILARITY_SCORE_PATH", None)
+
+# Base method parameter for combining base methods with mixkv scoring
+# METHOD specifies the base method (sparsemm, snapkv, adakv, pyramidkv)
+# When METHOD is set, it enables mixkv scoring on top of the base method
+ENV_METHOD = os.environ.get("METHOD", None)  # sparsemm, snapkv, adakv, pyramidkv, mixsparsemm
 
 # Audio-aware TopK selection parameters
 USE_AUDIO_AWARE_TOPK = os.environ.get("USE_AUDIO_AWARE_TOPK", "false").lower() == "true"
@@ -351,8 +363,11 @@ def update_sparsemm_budget(model, prefill_token_count):
         return int(ENV_BUDGET)
     
     # Calculate budget as ratio of prefill tokens
-    budget_ratio = ENV_BUDGET
+    budget_ratio = ENV_BUDGET  # Use the actual ENV_BUDGET value (should be 0.99 if set correctly)
     actual_budget = int(prefill_token_count * budget_ratio)
+    
+    # Debug: Print the actual budget ratio being used
+    print(f"[DEBUG] update_sparsemm_budget: ENV_BUDGET={ENV_BUDGET}, budget_ratio={budget_ratio}, prefill_token_count={prefill_token_count}")
     
     # Ensure budget is at least window_size to avoid errors
     min_budget = ENV_WINDOW_SIZE + 1
@@ -369,11 +384,20 @@ def update_sparsemm_budget(model, prefill_token_count):
                 # Use the new update_budget method to properly recalculate head_adaptive_capacity
                 if hasattr(kv_cluster, 'update_budget'):
                     kv_cluster.update_budget(actual_budget)
+                elif hasattr(kv_cluster, 'max_capacity_prompt'):
+                    # For SnapKVCluster (used by pyramidkv, snapkv, and mixkv)
+                    kv_cluster.max_capacity_prompt = actual_budget
+                    # Reset pyram_init so pyramid mode recalculates with new budget
+                    if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
+                        kv_cluster.pyram_init = False
                 elif hasattr(kv_cluster, 'base_capacity'):
-                    # Fallback for older versions without update_budget method
+                    # For AdaKVCluster and SparseMM (they use base_capacity)
                     kv_cluster.base_capacity = actual_budget - kv_cluster.window_size
                     if kv_cluster.base_capacity <= 0:
                         kv_cluster.base_capacity = 1
+                    # For SparseMM, recompute head_adaptive_capacity if method exists
+                    if hasattr(kv_cluster, '_compute_head_adaptive_capacity'):
+                        kv_cluster._compute_head_adaptive_capacity()
         # Also update model config for consistency
         if hasattr(base_model, 'config'):
             base_model.config.max_capacity_prompt = actual_budget
@@ -1129,79 +1153,26 @@ def main():
             model.thinker.model.config.frame = False
     print(f"Initializing thinker.model.config pruning configuration parameters")
     
-    # Enable SparseMM if USE_SPARSEKV is true
+    # Enable KV compression based on KV_METHOD
     sparsemm_enabled = False
-    if USE_SPARSEKV and hasattr(model, 'enable_sparsemm_attention'):
+    if USE_SPARSEKV and KV_METHOD not in ['none', 'vanilla']:
         # Get model config for head score loading
         if hasattr(model, 'thinker') and hasattr(model.thinker, 'model'):
             base_model = model.thinker.model
             num_hidden_layers = base_model.config.num_hidden_layers
             num_attention_heads = base_model.config.num_attention_heads
             
-            # Load head score file
-            # Priority 1: Use direct path if provided
-            if ENV_HEAD_SCORE_PATH:
-                head_score_path = ENV_HEAD_SCORE_PATH
-                print(f"[SparseMM] Using direct head score path: {head_score_path}")
-            # Priority 2: Check if using uniform distribution
-            elif ENV_HEAD_SCORE_FILE == "uniform":
-                head_score_path = "uniform"
-                print(f"[SparseMM] Using uniform head score distribution")
-            else:
-                # Priority 3: Construct path from file type and parameters
-                head_score_type = ENV_HEAD_SCORE_FILE
-                head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
-                
-                # Parse alpha, beta, gamma if provided
-                head_score_alpha = None
-                head_score_beta = None
-                head_score_gamma = None
-                if ENV_HEAD_SCORE_ALPHA is not None:
-                    try:
-                        head_score_alpha = float(ENV_HEAD_SCORE_ALPHA)
-                    except ValueError:
-                        print(f"[SparseMM] Warning: Invalid HEAD_SCORE_ALPHA value '{ENV_HEAD_SCORE_ALPHA}', ignoring")
-                if ENV_HEAD_SCORE_BETA is not None:
-                    try:
-                        head_score_beta = float(ENV_HEAD_SCORE_BETA)
-                    except ValueError:
-                        print(f"[SparseMM] Warning: Invalid HEAD_SCORE_BETA value '{ENV_HEAD_SCORE_BETA}', ignoring")
-                if ENV_HEAD_SCORE_GAMMA is not None:
-                    try:
-                        head_score_gamma = float(ENV_HEAD_SCORE_GAMMA)
-                    except ValueError:
-                        print(f"[SparseMM] Warning: Invalid HEAD_SCORE_GAMMA value '{ENV_HEAD_SCORE_GAMMA}', ignoring")
-                
-                # Use the correct base directory for qwen2.5_omni head scores
-                head_score_base_dir = "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score"
-                head_score_path = get_audio_head_score_path(
-                    base_dir=head_score_base_dir,
-                    score_type=head_score_type,
-                    batch=head_score_batch,
-                    alpha=head_score_alpha,
-                    beta=head_score_beta,
-                    gamma=head_score_gamma
-                )
-                print(f"[SparseMM] Constructed head score path: {head_score_path}")
-            
-            print(f"[SparseMM] Loading audio head scores from: {head_score_path}")
-            print(f"[SparseMM] Using aggregation method: {ENV_HEAD_SCORE_AGGREGATION}")
-            head_score_data = load_audio_head_scores_for_sparsemm(
-                head_score_path,
-                num_hidden_layers,
-                num_attention_heads,
-                aggregation=ENV_HEAD_SCORE_AGGREGATION
-            )
-            
-            # Configure SparseMM
+            # Configure KV compression budget
+            # If budget is a ratio, use a placeholder value for initialization
+            # The actual budget will be calculated dynamically based on prefill token count
             if ENV_BUDGET_IS_RATIO:
                 init_budget = 4096  # Default initialization budget
-                print(f"[SparseMM] Budget is a ratio ({ENV_BUDGET:.2%}), using placeholder {init_budget} for initialization")
+                print(f"[KV Compression] Budget is a ratio ({ENV_BUDGET:.2%}), using placeholder {init_budget} for initialization")
             else:
                 init_budget = int(ENV_BUDGET)
-                print(f"[SparseMM] Budget is absolute value: {init_budget}")
+                print(f"[KV Compression] Budget is absolute value: {init_budget}")
             
-            sparsemm_config = {
+            kv_config = {
                 'budget': init_budget,
                 'ratio': ENV_RATIO,
                 'window_size': ENV_WINDOW_SIZE,
@@ -1209,12 +1180,79 @@ def main():
                 'pooling': ENV_POOLING
             }
             
-            print(f"[SparseMM] Enabling SparseMM with config: {sparsemm_config}")
-            model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+            # Load head score for sparsekv method
+            head_score_data = None
+            if KV_METHOD == 'sparsekv':
+                # Load head score file
+                # Priority 1: Use direct path if provided
+                if ENV_HEAD_SCORE_PATH:
+                    head_score_path = ENV_HEAD_SCORE_PATH
+                    print(f"[SparseKV] Using direct head score path: {head_score_path}")
+                # Priority 2: Check if using uniform distribution
+                elif ENV_HEAD_SCORE_FILE == "uniform":
+                    head_score_path = "uniform"
+                    print(f"[SparseKV] Using uniform head score distribution")
+                else:
+                    # Priority 3: Construct path from file type and parameters
+                    head_score_type = ENV_HEAD_SCORE_FILE
+                    head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
+                    
+                    # Parse alpha, beta, gamma if provided
+                    head_score_alpha = None
+                    head_score_beta = None
+                    head_score_gamma = None
+                    if ENV_HEAD_SCORE_ALPHA is not None:
+                        try:
+                            head_score_alpha = float(ENV_HEAD_SCORE_ALPHA)
+                        except ValueError:
+                            print(f"[SparseKV] Warning: Invalid HEAD_SCORE_ALPHA value '{ENV_HEAD_SCORE_ALPHA}', ignoring")
+                    if ENV_HEAD_SCORE_BETA is not None:
+                        try:
+                            head_score_beta = float(ENV_HEAD_SCORE_BETA)
+                        except ValueError:
+                            print(f"[SparseKV] Warning: Invalid HEAD_SCORE_BETA value '{ENV_HEAD_SCORE_BETA}', ignoring")
+                    if ENV_HEAD_SCORE_GAMMA is not None:
+                        try:
+                            head_score_gamma = float(ENV_HEAD_SCORE_GAMMA)
+                        except ValueError:
+                            print(f"[SparseKV] Warning: Invalid HEAD_SCORE_GAMMA value '{ENV_HEAD_SCORE_GAMMA}', ignoring")
+                    
+                    # Use the correct base directory for qwen2.5_omni head scores
+                    head_score_base_dir = "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score"
+                    head_score_path = get_audio_head_score_path(
+                        base_dir=head_score_base_dir,
+                        score_type=head_score_type,
+                        batch=head_score_batch,
+                        alpha=head_score_alpha,
+                        beta=head_score_beta,
+                        gamma=head_score_gamma
+                    )
+                    print(f"[SparseKV] Constructed head score path: {head_score_path}")
+                
+                print(f"[SparseKV] Loading audio head scores from: {head_score_path}")
+                print(f"[SparseKV] Using aggregation method: {ENV_HEAD_SCORE_AGGREGATION}")
+                head_score_data = load_audio_head_scores_for_sparsemm(
+                    head_score_path,
+                    num_hidden_layers,
+                    num_attention_heads,
+                    aggregation=ENV_HEAD_SCORE_AGGREGATION
+                )
+            
+            print(f"[KV Compression] Enabling {KV_METHOD} with config: {kv_config}")
+            
+            # Use the unified enable_kv_compression method if available
+            if hasattr(model, 'enable_kv_compression'):
+                model.enable_kv_compression(KV_METHOD, kv_config, head_score_data)
+            elif KV_METHOD == 'sparsekv' and hasattr(model, 'enable_sparsemm_attention'):
+                # Fallback to legacy method
+                model.enable_sparsemm_attention(head_score_data, kv_config)
+            else:
+                print(f"[KV Compression] Warning: Model does not support {KV_METHOD} method")
+            
             sparsemm_enabled = True
-            print(f"[SparseMM] SparseMM enabled successfully")
+            print(f"[KV Compression] {KV_METHOD} enabled successfully")
         else:
-            print("[SparseMM] Warning: Cannot find thinker model, skipping SparseMM initialization")
+            print("[KV Compression] Warning: Cannot find thinker model, skipping initialization")
 
     if torch.cuda.is_available():
         torch.cuda.synchronize()

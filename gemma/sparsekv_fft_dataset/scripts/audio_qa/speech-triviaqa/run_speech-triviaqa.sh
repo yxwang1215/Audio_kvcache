@@ -21,7 +21,11 @@ export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
+# HEAD_SCORE_FILE: for sparsemm method, options: "uniform", "aggregated", or path to head score file
 export HEAD_SCORE_FILE="aggregated"
+# HEAD_SCORE_PATH: path to head score JSON file (for sparsemm method)
+# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/head_score/audio_head_scores_aggregated.json"
+export HEAD_SCORE_AGGREGATION="first"
 # export HEAD_SCORE_BATCH=None  # 可选
 
 # FFT 滤波配置（可选）

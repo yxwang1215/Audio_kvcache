@@ -591,7 +591,7 @@ class DynamicCacheSplitHeadFlatten(Cache):
 
 class SnapKVCluster():
     def __init__(self, window_size = 64, max_capacity_prompt = 256 + 64, kernel_size = 5, pooling = 'avgpool', layer_idx = None, num_hidden_layers = None, 
-                 pyram_mode = False, pyram_beta = 20,num_key_value_groups = 1, gqa_func='mean'):
+                 pyram_mode = False, pyram_beta = 20,num_key_value_groups = 1, gqa_func='mean', select_method=None, config=None):
         self.window_size = window_size
         self.max_capacity_prompt = max_capacity_prompt
         assert self.max_capacity_prompt - self.window_size > 0
@@ -606,6 +606,26 @@ class SnapKVCluster():
 
         self.num_key_value_groups = num_key_value_groups
         self.gqa_func = gqa_func
+        self.method = select_method
+        self.config = config
+        
+        # Initialize head metadata attributes (used for variable-length attention)
+        self.head_lens = None
+        self.klen_sum = None
+        self.max_seqlen_k = None
+        self.cu_klen = None
+        self.cu_qlen = None
+        self.cu_offset = None
+        
+        # Load similarity scores for head-wise mixing if select_method is used
+        if self.method is not None:
+            use_online_score = os.environ.get("USE_ONLINE_SCORE", "false").lower() == "true"
+            if use_online_score:
+                self.key_score = None  # Will use online_score calculated in update_kv
+            else:
+                self.key_score = load_similarity_score()
+        else:
+            self.key_score = None
 
     def reset(self, window_size = 64, max_capacity_prompt = 256 + 64, kernel_size = 5, pooling = 'avgpool'):
         self.window_size = window_size
@@ -614,29 +634,97 @@ class SnapKVCluster():
         self.kernel_size = kernel_size
         self.pooling = pooling
 
+    def update_budget(self, new_budget):
+        """
+        Update max_capacity_prompt based on actual sequence length.
+        
+        Args:
+            new_budget: New total budget (max_capacity_prompt = new_budget)
+        """
+        self.max_capacity_prompt = new_budget
+        if self.max_capacity_prompt <= self.window_size:
+            self.max_capacity_prompt = self.window_size + 1
+        # Reset pyram_init to allow recomputation if pyram_mode is used
+        # This is critical: when budget is updated, we need to recompute pyramidal capacity
+        if self.pyram_mode:
+            self.pyram_init = False
+
     def update_kv(self, origin_key_states, query_states, origin_value_states):   
         # support gqa
         key_states = repeat_kv(origin_key_states, self.num_key_value_groups)
         value_states = repeat_kv(origin_value_states, self.num_key_value_groups)
         assert key_states.shape[-2] == query_states.shape[-2]
         bsz, num_heads, q_len, head_dim = query_states.shape
-        # compute pyramidal capacity
-        if self.pyram_mode and not self.pyram_init:
+        
+        # DEBUG: Print budget info for layer 0
+        if self.layer_idx == 0:
+            print(f"[SnapKV DEBUG] Layer 0 update_kv: q_len={q_len}, max_capacity_prompt={self.max_capacity_prompt}, window_size={self.window_size}, pyram_mode={self.pyram_mode}, pyram_init={self.pyram_init}", flush=True)
+        
+        # CRITICAL FIX: Compute pyramidal capacity BEFORE checking q_len < max_capacity_prompt
+        # This ensures that when update_budget() is called and pyram_init is reset to False,
+        # the pyramidal capacity will be recalculated even if q_len < max_capacity_prompt
+        # NOTE: Only compute pyramidal capacity if q_len is large enough (prefill phase)
+        # In decode phase (q_len=1), we skip this calculation and use the prefill-computed capacity
+        if self.pyram_mode and not self.pyram_init and q_len > self.window_size:
+            # NOTE: (max_num + min_num) / 2 == base_capacity to restrict the total capacity
             base_capacity = self.max_capacity_prompt - self.window_size
+            if base_capacity <= 0:
+                base_capacity = 1
+            
             min_num = base_capacity // self.pyram_beta
             max_num = base_capacity * 2 - min_num
                 
+            # If the max_num is larger than the query length, we need to adjust the max_num
+            # This ensures we don't try to keep more tokens than available
             if max_num >= q_len - self.window_size:
                 max_num = q_len - self.window_size
+                # Recalculate min_num to maintain the constraint: (max_num + min_num) / 2 == base_capacity
                 min_num = base_capacity * 2 - max_num
-        
-            steps = (max_num - min_num) // (self.num_hidden_layers - 1)
+            
+            # Ensure min_num is at least 1
+            if min_num < 1:
+                min_num = 1
+                # Recalculate max_num if min_num was adjusted
+                max_num = base_capacity * 2 - min_num
+                # But still respect the q_len limit
+                if max_num >= q_len - self.window_size:
+                    max_num = q_len - self.window_size
+                    min_num = base_capacity * 2 - max_num
+            
+            # Ensure max_num >= min_num
+            if max_num < min_num:
+                max_num = min_num
+            
+            # Compute interval for pyramidal distribution across layers
+            # Layer 0 gets max_num, layer (num_hidden_layers-1) gets min_num
+            if self.num_hidden_layers > 1:
+                steps = (max_num - min_num) // (self.num_hidden_layers - 1)
+            else:
+                steps = 0
 
             self.max_capacity_prompt = max_num - self.layer_idx * steps + self.window_size
+            # Ensure max_capacity_prompt is at least window_size + 1
+            if self.max_capacity_prompt <= self.window_size:
+                self.max_capacity_prompt = self.window_size + 1
             self.pyram_init = True
-            print(f"Pyram mode adaptive capacity, layer: {self.layer_idx}, max_capacity_prompt: {self.max_capacity_prompt}, base_capacity: {self.max_capacity_prompt - self.window_size}", flush=True)
+            print(f"[SnapKV] Pyram mode adaptive capacity, layer: {self.layer_idx}, "
+                  f"max_capacity_prompt: {self.max_capacity_prompt}, "
+                  f"base_capacity: {self.max_capacity_prompt - self.window_size}, "
+                  f"q_len: {q_len}, original_base: {base_capacity}, min_num: {min_num}, max_num: {max_num}", flush=True)
 
-        if q_len < self.max_capacity_prompt:
+        # CRITICAL FIX: Check if compression is needed
+        # In pyramidal mode, we need to check compression based on the actual
+        # compressible length (q_len - window_size) vs the layer's capacity (max_capacity_prompt - window_size)
+        compressible_len = q_len - self.window_size
+        layer_capacity = self.max_capacity_prompt - self.window_size
+        
+        # Skip compression only if compressible_len <= layer_capacity
+        # This applies to both normal and pyramidal modes
+        if compressible_len <= layer_capacity:
+            if self.layer_idx == 0 and self.pyram_mode:
+                print(f"[SnapKV] Layer {self.layer_idx} skipping compression: "
+                      f"compressible_len={compressible_len} <= layer_capacity={layer_capacity}, "
+                      f"q_len={q_len}, max_capacity_prompt={self.max_capacity_prompt}", flush=True)
             return origin_key_states, origin_value_states
         else:
             attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(head_dim)
@@ -680,12 +768,13 @@ class SnapKVCluster():
 
 class AdaKVCluster():
     def __init__(self, window_size = 32, kernel_size = 7, pooling = 'maxpool',base_capacity=None,floor_alpha = None,skip = None,normalize=None, 
-                 layer_idx = None, num_hidden_layers = None, pyram_mode = False, pyram_beta = 20, num_key_value_groups=1, gqa_func='mean', config=None):
+                 layer_idx = None, num_hidden_layers = None, pyram_mode = False, pyram_beta = 20, num_key_value_groups=1, gqa_func='mean', config=None, select_method=None):
         self.window_size = window_size
         self.kernel_size = kernel_size
         self.pooling = pooling
         self.base_capacity = base_capacity - window_size
         self.floor_ratio = floor_alpha
+        self._original_floor_ratio = floor_alpha  # Store original for update_budget
         self.floor_capacity = int(self.base_capacity * self.floor_ratio)
         self.adaptive_capacity = self.base_capacity - self.floor_capacity
         self.skip = skip
@@ -711,6 +800,31 @@ class AdaKVCluster():
 
         self.num_key_value_groups = num_key_value_groups
         self.gqa_func = gqa_func
+        self.method = select_method
+        
+        # Load similarity scores for head-wise mixing if select_method is used
+        if self.method is not None:
+            use_online_score = os.environ.get("USE_ONLINE_SCORE", "false").lower() == "true"
+            if use_online_score:
+                self.key_score = None  # Will use online_score calculated in update_kv
+            else:
+                self.key_score = load_similarity_score()
+        else:
+            self.key_score = None
+
+    def update_budget(self, new_budget):
+        """
+        Update base_capacity and recompute floor_capacity/adaptive_capacity.
+        
+        Args:
+            new_budget: New total budget (base_capacity = new_budget - window_size)
+        """
+        self.base_capacity = new_budget - self.window_size
+        if self.base_capacity <= 0:
+            self.base_capacity = 1
+        # Recompute floor_capacity and adaptive_capacity
+        self.floor_capacity = int(self.base_capacity * self._original_floor_ratio)
+        self.adaptive_capacity = self.base_capacity - self.floor_capacity
 
     def calcul_attn_sore(self, key_states, query_states):
         bsz, num_heads, q_len, head_dim = query_states.shape
@@ -898,11 +1012,13 @@ class AdaKVCluster():
             if self.head_lens is None:
                 num_kv_heads = num_heads // self.num_key_value_groups
                 init_metadata(num_heads, [q_len] * num_kv_heads, q_len * num_kv_heads, q_len)
-            return origin_key_states.reshape(-1, head_dim), origin_value_states.reshape(-1, head_dim)
+            # Return 4D tensor for compatibility with standard attention interface
+            return origin_key_states, origin_value_states
         
         if self.base_capacity > attn_score.size(-1):
             init_metadata(num_heads, [q_len] * (num_heads//self.num_key_value_groups), q_len * (num_heads//self.num_key_value_groups), q_len)
-            return origin_key_states.reshape(-1, head_dim), origin_value_states.reshape(-1, head_dim)
+            # Return 4D tensor for compatibility with standard attention interface
+            return origin_key_states, origin_value_states
 
         sorted_attn_score,sorted_attn_score_indices = attn_score.sort(dim=-1,descending=True)
         if self.layer_idx >= self.skip:
@@ -1419,7 +1535,18 @@ def init_pyramidkv(self):
         if not hasattr(self.config, 'window_size'):
             self.config.window_size = 32
         if not hasattr(self.config, 'max_capacity_prompt'):
-            self.config.max_capacity_prompt = int(os.getenv('BUDGET'))
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
         if not hasattr(self.config, 'kernel_size'):
             self.config.kernel_size = 5
         if not hasattr(self.config, 'pooling'):
@@ -1428,7 +1555,8 @@ def init_pyramidkv(self):
             raise ValueError('num_hidden_layers should be set')
         if not hasattr(self.config,'gqa_func'):
             if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
-                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type or \
+                'gemma' in self.config.model_type:
                 self.config.gqa_func = 'mean'
 
     if not hasattr(self, "kv_cluster"):
@@ -1450,7 +1578,18 @@ def init_snapkv(self):
         if not hasattr(self.config, 'window_size'):
             self.config.window_size = 32
         if not hasattr(self.config, 'max_capacity_prompt'):
-            self.config.max_capacity_prompt = int(os.getenv('BUDGET'))
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
         if not hasattr(self.config, 'kernel_size'):
             self.config.kernel_size = 5
         if not hasattr(self.config, 'pooling'):
@@ -1459,8 +1598,12 @@ def init_snapkv(self):
             raise ValueError('num_hidden_layers should be set')
         if not hasattr(self.config,'gqa_func'):
             if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
-                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type or \
+                'gemma' in self.config.model_type:
                 self.config.gqa_func = 'mean'
+        # Support select_method for mixkv scoring on SnapKV base
+        if not hasattr(self.config, 'select_method'):
+            self.config.select_method = os.getenv('SELECT_METHOD', None)  # None means use original SnapKV
 
     if not hasattr(self, "kv_cluster"):
         self.kv_cluster = SnapKVCluster(
@@ -1468,8 +1611,12 @@ def init_snapkv(self):
             max_capacity_prompt = self.config.max_capacity_prompt,
             kernel_size = self.config.kernel_size,
             pooling = self.config.pooling,
+            layer_idx = self.layer_idx,
+            num_hidden_layers = self.config.num_hidden_layers,
             num_key_value_groups = self.config.num_attention_heads // self.config.num_key_value_heads,
-            gqa_func=self.config.gqa_func
+            gqa_func=self.config.gqa_func,
+            select_method=self.config.select_method,
+            config=self.config
         )
 
 def init_adakv(self):
@@ -1477,7 +1624,18 @@ def init_adakv(self):
         if not hasattr(self.config, 'window_size'):
             self.config.window_size = 32
         if not hasattr(self.config, 'max_capacity_prompt'):
-            self.config.max_capacity_prompt = int(os.getenv('BUDGET'))
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
         if not hasattr(self.config, 'kernel_size'):
             self.config.kernel_size = 5
         if not hasattr(self.config, 'pooling'):
@@ -1492,8 +1650,12 @@ def init_adakv(self):
             self.config.skip = 0
         if not hasattr(self.config,'gqa_func'):
             if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
-                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type or \
+                'gemma' in self.config.model_type:
                 self.config.gqa_func = 'mean'
+        # Support select_method for mixkv scoring on AdaKV base
+        if not hasattr(self.config, 'select_method'):
+            self.config.select_method = os.getenv('SELECT_METHOD', None)  # None means use original AdaKV
 
     if not hasattr(self, "kv_cluster"):
         self.kv_cluster = AdaKVCluster(
@@ -1508,6 +1670,7 @@ def init_adakv(self):
             num_hidden_layers = self.config.num_hidden_layers,
             num_key_value_groups = self.config.num_attention_heads // self.config.num_key_value_heads,
             gqa_func = self.config.gqa_func,
+            select_method=self.config.select_method,
             config = self.config  # Pass config for audio-aware selection
         )
 
@@ -1525,7 +1688,8 @@ def init_sparsemm(self):
             self.config.ratio = float(os.getenv('RATIO', 0.2))
         if not hasattr(self.config,'gqa_func'):
             if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
-                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type or \
+                'gemma' in self.config.model_type:
                 self.config.gqa_func = 'mean'
         
         self.kv_cluster = SparseMM(
@@ -1749,6 +1913,21 @@ class MixKVCluster():
         self.kernel_size = kernel_size
         self.pooling = pooling
 
+    def update_budget(self, new_budget):
+        """
+        Update max_capacity_prompt based on actual sequence length.
+        Similar to SnapKVCluster.update_budget().
+        
+        Args:
+            new_budget: New total budget (max_capacity_prompt = new_budget)
+        """
+        self.max_capacity_prompt = new_budget
+        if self.max_capacity_prompt <= self.window_size:
+            self.max_capacity_prompt = self.window_size + 1
+        # Reset pyram_init to allow recomputation if pyram_mode is used
+        if self.pyram_mode:
+            self.pyram_init = False
+
     def update_kv(self, origin_key_states, query_states, origin_value_states):
         B, H, N, D = origin_key_states.shape
         # Support GQA
@@ -1761,9 +1940,15 @@ class MixKVCluster():
         origin_heads_key_states = torch.split(origin_key_states, 1, dim=1)
         origin_heads_value_states = torch.split(origin_value_states, 1, dim=1)
         
-        # Compute pyramidal capacity
-        if self.pyram_mode and not self.pyram_init:
+        # CRITICAL FIX: Compute pyramidal capacity BEFORE checking q_len < max_capacity_prompt
+        # This ensures that when update_budget() is called and pyram_init is reset to False,
+        # the pyramidal capacity will be recalculated even if q_len < max_capacity_prompt
+        # NOTE: Only compute pyramidal capacity if q_len is large enough (prefill phase)
+        # In decode phase (q_len=1), we skip this calculation and use the prefill-computed capacity
+        if self.pyram_mode and not self.pyram_init and q_len > self.window_size:
             base_capacity = self.max_capacity_prompt - self.window_size
+            if base_capacity <= 0:
+                base_capacity = 1
             min_num = base_capacity // self.pyram_beta
             max_num = base_capacity * 2 - min_num
             
@@ -1771,8 +1956,17 @@ class MixKVCluster():
                 max_num = q_len - self.window_size
                 min_num = base_capacity * 2 - max_num
             
-            steps = (max_num - min_num) // (self.num_hidden_layers - 1)
+            # Ensure min_num is at least 1
+            if min_num < 1:
+                min_num = 1
+            if max_num < min_num:
+                max_num = min_num
+            
+            steps = (max_num - min_num) // max(1, self.num_hidden_layers - 1)
             self.max_capacity_prompt = max_num - self.layer_idx * steps + self.window_size
+            # Ensure max_capacity_prompt is at least window_size + 1
+            if self.max_capacity_prompt <= self.window_size:
+                self.max_capacity_prompt = self.window_size + 1
             self.pyram_init = True
             print(f"[MixKV] Pyram mode adaptive capacity, layer: {self.layer_idx}, "
                   f"max_capacity_prompt: {self.max_capacity_prompt}, "
@@ -1913,7 +2107,18 @@ def init_mixkv(self):
         if not hasattr(self.config, 'window_size'):
             self.config.window_size = int(os.getenv('WINDOW_SIZE', 32))
         if not hasattr(self.config, 'max_capacity_prompt'):
-            self.config.max_capacity_prompt = int(os.getenv('BUDGET', 256))
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
         if not hasattr(self.config, 'kernel_size'):
             self.config.kernel_size = int(os.getenv('KERNEL_SIZE', 5))
         if not hasattr(self.config, 'pooling'):

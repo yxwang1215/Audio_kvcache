@@ -210,6 +210,63 @@ class WordAttentionAnalyzer:
             print(f"Error loading audio {audio_path}: {e}")
             return None
     
+    def count_audio_tokens(self, audio_np):
+        """统计音频 tokenize 后的音频 tokens 数量（不分片）"""
+        try:
+            # 准备输入 - 使用 Gemma3n 的 conversation 格式
+            messages = [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "You are an automatic speech recognizer. Transcribe the English speech only."}]
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "audio", "audio": audio_np},
+                        {"type": "text", "text": "Please transcribe the audio."}
+                    ],
+                },
+            ]
+            
+            # 使用 Gemma3n processor
+            text = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+            
+            # 准备模型输入
+            inputs = self.processor(
+                text=[text],
+                audio=[audio_np],
+                sampling_rate=16000,
+                return_tensors="pt",
+                padding=False
+            )
+            
+            # 获取 input_ids
+            input_ids = inputs.input_ids[0]
+            
+            # Get audio_token_id from model config
+            global _AUDIO_TOKEN_ID
+            if _AUDIO_TOKEN_ID is None:
+                if hasattr(self.model, 'config') and hasattr(self.model.config, 'audio_token_id'):
+                    _AUDIO_TOKEN_ID = self.model.config.audio_token_id
+                else:
+                    _AUDIO_TOKEN_ID = 262273  # Default Gemma3n audio_token_id
+            
+            # 统计音频 tokens
+            audio_positions = (input_ids == _AUDIO_TOKEN_ID).nonzero(as_tuple=True)[0].tolist()
+            
+            if not audio_positions:
+                # Try to find audio tokens by checking tokenizer
+                if hasattr(self.processor, 'audio_token_id'):
+                    audio_token_id = self.processor.audio_token_id
+                    audio_positions = (input_ids == audio_token_id).nonzero(as_tuple=True)[0].tolist()
+            
+            num_audio_tokens = len(audio_positions) if audio_positions else 0
+            
+            return num_audio_tokens, input_ids.shape[0]  # 返回音频 tokens 数量和总序列长度
+        except Exception as e:
+            print(f"Error counting audio tokens: {e}")
+            return 0, 0
+    
     def register_attention_hooks(self):
         """注册 hooks 捕获生成过程中的注意力
         
@@ -1230,9 +1287,11 @@ class WordAttentionAnalyzer:
 
 def main():
     parser = argparse.ArgumentParser(description='Word-Level Attention Analysis')
-    parser.add_argument('--model_path', type=str,
-                       default="/mnt/users/wangyuxuan-20250915/Models/gemma-3n-E2B-it",
-                       help='Path to model')
+    parser.add_argument('--model_path', type=str, default=None,
+                       help='Path to model (if not specified, will use default based on --model_type)')
+    parser.add_argument('--model_type', type=str, default='auto',
+                       choices=['E2B', 'E4B', 'auto'],
+                       help='Gemma model type: E2B (30 layers) or E4B (35 layers). If "auto", will detect from model config or path. Default: auto')
     parser.add_argument('--audio_dir', type=str,
                        default="/mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/librispeech/output_audio",
                        help='Directory containing audio files')
@@ -1264,6 +1323,23 @@ def main():
                        help='Device to use')
     
     args = parser.parse_args()
+    
+    # 根据 model_type 设置默认 model_path（如果未指定）
+    if args.model_path is None:
+        if args.model_type == 'E2B':
+            args.model_path = "/mnt/petrelfs/wenzichen/hf_models/google/gemma-3n-E2B-it"
+        elif args.model_type == 'E4B':
+            args.model_path = "/mnt/petrelfs/wenzichen/hf_models/google/gemma-3n-E4B-it"
+        else:  # auto
+            # 尝试从路径推断，或使用 E2B 作为默认值
+            args.model_path = "/mnt/petrelfs/wenzichen/hf_models/google/gemma-3n-E2B-it"
+    
+    # 如果指定了 model_type 但路径中包含另一个类型，给出警告
+    if args.model_type != 'auto':
+        if args.model_type == 'E2B' and 'E4B' in args.model_path:
+            print(f"Warning: --model_type is E2B but model_path contains 'E4B': {args.model_path}")
+        elif args.model_type == 'E4B' and 'E2B' in args.model_path:
+            print(f"Warning: --model_type is E4B but model_path contains 'E2B': {args.model_path}")
     
     # 设置设备
     if args.device == 'cuda':
@@ -1342,6 +1418,42 @@ def main():
     
     model = model.eval()
     
+    # 检测模型类型（E2B 或 E4B）
+    detected_model_type = args.model_type
+    if args.model_type == 'auto' or args.model_type is None:
+        # 从模型配置中检测层数
+        num_layers = None
+        if hasattr(model, 'config') and hasattr(model.config, 'text_config'):
+            num_layers = model.config.text_config.num_hidden_layers
+        elif hasattr(model, 'model') and hasattr(model.model, 'language_model'):
+            num_layers = model.model.language_model.config.num_hidden_layers
+        
+        if num_layers is not None:
+            if num_layers == 30:
+                detected_model_type = 'E2B'
+            elif num_layers == 35:
+                detected_model_type = 'E4B'
+            else:
+                # 尝试从路径推断
+                if 'E2B' in args.model_path:
+                    detected_model_type = 'E2B'
+                elif 'E4B' in args.model_path:
+                    detected_model_type = 'E4B'
+                else:
+                    detected_model_type = 'E2B'  # 默认
+                    print(f"Warning: Could not determine model type from num_layers={num_layers}, defaulting to E2B")
+        else:
+            # 从路径推断
+            if 'E2B' in args.model_path:
+                detected_model_type = 'E2B'
+            elif 'E4B' in args.model_path:
+                detected_model_type = 'E4B'
+            else:
+                detected_model_type = 'E2B'  # 默认
+                print(f"Warning: Could not determine model type, defaulting to E2B")
+    
+    print(f"Detected model type: {detected_model_type}")
+    
     # 创建分析器
     analyzer = WordAttentionAnalyzer(
         model, processor, args.output_dir, 
@@ -1351,6 +1463,79 @@ def main():
         gamma=args.gamma,
         save_detailed_analysis=not args.skip_detailed_analysis
     )
+    
+    # 设置模型大小
+    analyzer.current_model_size = detected_model_type
+    
+    # ========== 统计所有完整音频（不分片）的音频 tokens 总数 ==========
+    print(f"\n{'='*80}")
+    print(f"Tokenizing all complete audio samples (no chunking) to count total audio tokens...")
+    print(f"{'='*80}")
+    print(f"Note: Each audio file is processed as a complete unit (no splitting/chunking)")
+    print(f"{'='*80}\n")
+    
+    audio_token_stats = []
+    for idx, sample in enumerate(samples, 1):
+        try:
+            sample_id = sample['sample_id']
+            audio_path = sample['audio_path']
+            
+            # 加载完整音频（不分片）
+            audio_np = analyzer.load_audio(audio_path)
+            if audio_np is None:
+                continue
+            
+            # 统计完整音频 tokenize 后的音频 tokens 数量（从头到尾）
+            num_audio_tokens, total_seq_len = analyzer.count_audio_tokens(audio_np)
+            audio_duration = len(audio_np) / 16000
+            
+            audio_token_stats.append({
+                'sample_id': sample_id,
+                'num_audio_tokens': num_audio_tokens,
+                'total_seq_len': total_seq_len,
+                'audio_duration': audio_duration,
+                'tokens_per_second': num_audio_tokens / audio_duration if audio_duration > 0 else 0
+            })
+            
+            if audio_duration > 0:
+                print(f"[{idx}/{len(samples)}] {sample_id}: {num_audio_tokens} audio tokens "
+                      f"(complete audio, duration: {audio_duration:.2f}s, total seq_len: {total_seq_len}, "
+                      f"tokens/s: {num_audio_tokens/audio_duration:.2f})")
+            else:
+                print(f"[{idx}/{len(samples)}] {sample_id}: {num_audio_tokens} audio tokens "
+                      f"(complete audio, duration: {audio_duration:.2f}s, total seq_len: {total_seq_len})")
+            
+        except Exception as e:
+            print(f"Error processing {sample.get('sample_id', 'unknown')}: {e}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    # 输出统计摘要 - 强调所有音频从头到尾的总 tokens 数
+    if audio_token_stats:
+        total_audio_tokens = sum(s['num_audio_tokens'] for s in audio_token_stats)
+        avg_audio_tokens = total_audio_tokens / len(audio_token_stats)
+        min_audio_tokens = min(s['num_audio_tokens'] for s in audio_token_stats)
+        max_audio_tokens = max(s['num_audio_tokens'] for s in audio_token_stats)
+        total_duration = sum(s['audio_duration'] for s in audio_token_stats)
+        avg_tokens_per_second = np.mean([s['tokens_per_second'] for s in audio_token_stats if s['tokens_per_second'] > 0])
+        
+        print(f"\n{'='*80}")
+        print(f"Complete Audio Token Statistics (No Chunking):")
+        print(f"{'='*80}")
+        print(f"Total samples processed: {len(audio_token_stats)}")
+        print(f"\n>>> TOTAL AUDIO TOKENS (all complete audios from start to end): {total_audio_tokens} <<<")
+        print(f"    (This is the sum of all audio tokens from all complete audio files)")
+        print(f"\nPer-sample statistics:")
+        print(f"  - Average audio tokens per sample: {avg_audio_tokens:.2f}")
+        print(f"  - Min audio tokens in a sample: {min_audio_tokens}")
+        print(f"  - Max audio tokens in a sample: {max_audio_tokens}")
+        print(f"\nAudio duration statistics:")
+        print(f"  - Total audio duration: {total_duration:.2f}s ({total_duration/60:.2f} minutes)")
+        print(f"  - Average tokens per second: {avg_tokens_per_second:.2f}")
+        print(f"{'='*80}\n")
+    else:
+        print("Warning: No audio token statistics collected!")
     
     # 注册 hooks
     analyzer.register_attention_hooks()
@@ -1410,28 +1595,101 @@ if __name__ == "__main__":
 '''
 使用示例：
 
-# 1. 处理前10个样本
-python word_attention_analysis.py --num_samples 10
+# ========== Gemma E2B 模型 ==========
+# 1. 使用 E2B 模型（自动检测，默认路径）
+CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py \
+    --model_type E2B \
+    --num_samples 10
 
-# 2. 处理所有样本
-CUDA_VISIBLE_DEVICES=7 python word_attention_analysis.py --num_samples 0 --alpha 1.0 --beta 1.0 --gamma 1.0
+# 2. 使用 E2B 模型（指定路径）
+CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py \
+    --model_type E2B \
+    --model_path /mnt/public/models/gemma-3n-E2B-it \
+    --num_samples 10
 
-# 3. 处理第100-200个样本（索引从0开始，左闭右开）
-CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py --start_idx 100 --end_idx 200
+# 3. 使用 E2B 模型处理所有样本
+CUDA_VISIBLE_DEVICES=7 python word_attention_analysis.py \
+    --model_type E2B \
+    --num_samples 0 \
+    --alpha 1.0 --beta 1.0 --gamma 1.0
 
-# 4. 处理从第500个开始的所有样本
-python word_attention_analysis.py --start_idx 500
+# ========== Gemma E4B 模型 ==========
+# 4. 使用 E4B 模型（自动检测，默认路径）
+CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py \
+    --model_type E4B \
+    --num_samples 10
 
-# 5. 处理第1000-1100个样本
-CUDA_VISIBLE_DEVICES=5 python /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/audio_head/word_attention_analysis.py \
+# 5. 使用 E4B 模型（指定路径）
+CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py \
+    --model_type E4B \
+    --model_path /mnt/public/models/gemma-3n-E4B-it \
+    --num_samples 10
+
+# 6. 使用 E4B 模型处理所有样本
+CUDA_VISIBLE_DEVICES=7 python word_attention_analysis.py \
+    --model_type E4B \
+    --num_samples 0 \
+    --alpha 1.0 --beta 1.0 --gamma 1.0
+
+# ========== 自动检测模型类型 ==========
+# 7. 自动检测模型类型（从路径或配置）
+CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py \
+    --model_type auto \
+    --model_path /mnt/petrelfs/wenzichen/hf_models/google/gemma-3n-E2B-it \
+    --num_samples 10
+
+# ========== 其他参数示例 ==========
+# 8. 处理第100-200个样本（索引从0开始，左闭右开）
+CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py \
+    --model_type E2B \
+    --start_idx 100 --end_idx 200
+
+# 9. 处理从第500个开始的所有样本
+python word_attention_analysis.py \
+    --model_type E2B \
+    --start_idx 500
+
+# 10. 处理指定范围的样本（E4B模型）
+CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py \
+    --model_type E4B \
     --start_idx 1 \
     --end_idx 500 \
     --topk 32 \
-    --output_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/audio_head/word_attention_results_batch1
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/audio_head/word_attention_results_E4B_batch1
+
+# 11. 完整参数示例（E2B）
+CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py \
+    --model_type E2B \
+    --model_path /mnt/petrelfs/wenzichen/hf_models/google/gemma-3n-E2B-it \
+    --audio_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/librispeech/output_audio \
+    --whisperx_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/librispeech/whisperx_parquet_output \
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/word_attention_results_E2B \
+    --num_samples 10 \
+    --score_threshold 0.95 \
+    --topk 32 \
+    --alpha 1.0 --beta 1.0 --gamma 1.0
+
+# 12. 完整参数示例（E4B）
+CUDA_VISIBLE_DEVICES=5 python word_attention_analysis.py \
+    --model_type E4B \
+    --model_path /mnt/petrelfs/wenzichen/hf_models/google/gemma-3n-E4B-it \
+    --audio_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/librispeech/output_audio \
+    --whisperx_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/librispeech/whisperx_parquet_output \
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/word_attention_results_E4B \
+    --num_samples 10 \
+    --score_threshold 0.95 \
+    --topk 32 \
+    --alpha 1.0 --beta 1.0 --gamma 1.0
 
 注意：
+- --model_type: 指定模型类型 (E2B/E4B/auto)，默认 auto
+  - E2B: 30层模型，默认路径 /mnt/petrelfs/wenzichen/hf_models/google/gemma-3n-E2B-it
+  - E4B: 35层模型，默认路径 /mnt/petrelfs/wenzichen/hf_models/google/gemma-3n-E4B-it
+  - auto: 自动从模型配置或路径检测
+- --model_path: 如果未指定，会根据 --model_type 自动设置默认路径
 - 样本按文件名排序
 - start_idx 是从0开始的索引（包含）
 - end_idx 是结束索引（不包含），类似Python切片
 - 如果同时指定start_idx/end_idx和num_samples，优先使用start_idx/end_idx
+- E2B 和 E4B 模型使用不同的 max_skip_threshold（E2B: 15, E4B: 30）
 '''

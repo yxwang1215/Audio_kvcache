@@ -490,6 +490,22 @@ class SnapKVCluster():
         self.kernel_size = kernel_size
         self.pooling = pooling
 
+    def update_budget(self, new_budget):
+        """
+        Update max_capacity_prompt based on actual sequence length.
+        This is critical for ratio-based budget (e.g., budget=0.99).
+        
+        Args:
+            new_budget: New total budget (max_capacity_prompt = new_budget)
+        """
+        self.max_capacity_prompt = new_budget
+        if self.max_capacity_prompt <= self.window_size:
+            self.max_capacity_prompt = self.window_size + 1
+        # CRITICAL: Reset pyram_init to force recomputation of pyramidal capacity
+        # Without this, PyramidKV will use stale capacity values from initialization
+        if self.pyram_mode:
+            self.pyram_init = False
+
     def update_kv(self, origin_key_states, query_states, origin_value_states):   
         # support gqa
         key_states = repeat_kv(origin_key_states, self.num_key_value_groups)

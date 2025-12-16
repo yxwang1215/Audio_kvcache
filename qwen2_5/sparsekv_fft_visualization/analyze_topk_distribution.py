@@ -6,7 +6,13 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
-import seaborn as sns
+try:
+    import seaborn as sns
+    sns.set_style("whitegrid")
+    sns.set_palette("husl")
+    HAS_SEABORN = True
+except ImportError:
+    HAS_SEABORN = False
 from collections import defaultdict, Counter
 from pathlib import Path
 import argparse
@@ -26,8 +32,11 @@ rcParams['savefig.dpi'] = 300
 rcParams['savefig.bbox'] = 'tight'
 rcParams['savefig.pad_inches'] = 0.1
 
-sns.set_style("whitegrid")
-sns.set_palette("husl")
+# Use matplotlib style if seaborn is not available
+if not HAS_SEABORN:
+    plt.style.use('default')
+    rcParams['axes.grid'] = True
+    rcParams['grid.alpha'] = 0.3
 
 def load_stats(filepath):
     """Load statistics from JSON file"""
@@ -230,27 +239,55 @@ def plot_selection_heatmap(analysis, output_dir, max_samples=10):
         for pos in after_sel:
             after_matrix[i, int(pos)] = 1
     
-    # 创建图形
+    # 创建图形 - 保持原尺寸
     fig, axes = plt.subplots(2, 1, figsize=(16, 8))
     
     # Before FFT
     im1 = axes[0].imshow(before_matrix, aspect='auto', cmap='Blues', interpolation='nearest')
-    axes[0].set_xlabel('Token Position', fontsize=10)
-    axes[0].set_ylabel('Sample Index', fontsize=10)
-    axes[0].set_title('TopK Selection Before FFT (Blue = Selected)', fontsize=11)
-    plt.colorbar(im1, ax=axes[0])
+    axes[0].set_xlabel('Token Position', fontsize=28)  # 进一步增大
+    axes[0].set_ylabel('Sample Index', fontsize=28)  # 进一步增大
+    axes[0].set_title('TopK Selection Before FFT (Blue = Selected)', fontsize=24)
+    # 增大刻度标签字体
+    axes[0].tick_params(axis='x', labelsize=24)  # Token Position的数字 (1000, 3000等)
+    axes[0].tick_params(axis='y', labelsize=24)  # Sample Index的数字
+    # 增大colorbar字体
+    cbar1 = plt.colorbar(im1, ax=axes[0])
+    cbar1.set_label('', fontsize=24)  # colorbar标签
+    cbar1.ax.tick_params(labelsize=24)  # colorbar刻度 (0.0 - 1.0)
     
     # After FFT
     im2 = axes[1].imshow(after_matrix, aspect='auto', cmap='Reds', interpolation='nearest')
-    axes[1].set_xlabel('Token Position', fontsize=10)
-    axes[1].set_ylabel('Sample Index', fontsize=10)
-    axes[1].set_title('TopK Selection After FFT (Red = Selected)', fontsize=11)
-    plt.colorbar(im2, ax=axes[1])
+    axes[1].set_xlabel('Token Position', fontsize=28)  # 进一步增大
+    axes[1].set_ylabel('Sample Index', fontsize=28)  # 进一步增大
+    axes[1].set_title('TopK Selection After FFT (Red = Selected)', fontsize=24)
+    # 增大刻度标签字体
+    axes[1].tick_params(axis='x', labelsize=24)  # Token Position的数字 (1000, 3000等)
+    axes[1].tick_params(axis='y', labelsize=24)  # Sample Index的数字
+    # 增大colorbar字体
+    cbar2 = plt.colorbar(im2, ax=axes[1])
+    cbar2.set_label('', fontsize=24)  # colorbar标签
+    cbar2.ax.tick_params(labelsize=24)  # colorbar刻度 (0.0 - 1.0)
     
     plt.tight_layout()
-    output_path = output_dir / 'topk_selection_heatmap.png'
-    plt.savefig(output_path)
-    print(f"Saved selection heatmap to {output_path}")
+    
+    # 保存为PNG, PDF, SVG
+    base_path = output_dir / 'topk_selection_heatmap'
+    
+    # PNG
+    output_path_png = base_path.with_suffix('.png')
+    plt.savefig(output_path_png, dpi=300, bbox_inches='tight')
+    print(f"Saved selection heatmap to {output_path_png}")
+    
+    # PDF
+    output_path_pdf = base_path.with_suffix('.pdf')
+    plt.savefig(output_path_pdf, bbox_inches='tight')
+    print(f"Saved selection heatmap to {output_path_pdf}")
+    
+    # SVG
+    output_path_svg = base_path.with_suffix('.svg')
+    plt.savefig(output_path_svg, bbox_inches='tight')
+    print(f"Saved selection heatmap to {output_path_svg}")
+    
     plt.close()
 
 def plot_distribution_statistics(analysis, output_dir):
@@ -415,8 +452,8 @@ if __name__ == '__main__':
     
     
 '''
-python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_fft_visualization/analyze_topk_distribution.py \
-    --stats-file /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_fft_visualization/results/LibriSpeech_budget0.5_fft_saliency_cutoff0.15_alpha0.6/fft_topk_stats.json \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_fft_visualization/results/LibriSpeech_budget0.5_fft_saliency_cutoff0.15_alpha0.6 \
+python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_visualization/analyze_topk_distribution.py \
+    --stats-file /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_visualization/results/LibriSpeech_budget0.5_fft_saliency_cutoff0.15_alpha0.6/fft_topk_stats.json \
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_visualization/results/LibriSpeech_budget0.5_fft_saliency_cutoff0.15_alpha0.6 \
     --max-samples 5
 '''

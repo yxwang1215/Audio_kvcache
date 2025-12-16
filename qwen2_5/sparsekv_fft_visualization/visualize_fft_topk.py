@@ -8,29 +8,39 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib import rcParams
-import seaborn as sns
+try:
+    import seaborn as sns
+    sns.set_style("whitegrid")
+    sns.set_palette("husl")
+    HAS_SEABORN = True
+except ImportError:
+    HAS_SEABORN = False
 from pathlib import Path
 from collections import defaultdict
 import argparse
 
-# Set ACL-style plotting parameters
+# Set ACL2025-style plotting parameters (single column)
 rcParams['font.family'] = 'serif'
 rcParams['font.serif'] = ['Times New Roman']
-rcParams['font.size'] = 10
-rcParams['axes.labelsize'] = 10
-rcParams['axes.titlesize'] = 11
-rcParams['xtick.labelsize'] = 9
-rcParams['ytick.labelsize'] = 9
-rcParams['legend.fontsize'] = 9
-rcParams['figure.titlesize'] = 12
+rcParams['font.size'] = 12  # Increased from 10
+rcParams['axes.labelsize'] = 12  # Increased from 10
+rcParams['axes.titlesize'] = 13  # Increased from 11
+rcParams['xtick.labelsize'] = 11  # Increased from 9
+rcParams['ytick.labelsize'] = 11  # Increased from 9
+rcParams['legend.fontsize'] = 11  # Increased from 9
+rcParams['figure.titlesize'] = 14  # Increased from 12
 rcParams['figure.dpi'] = 300
 rcParams['savefig.dpi'] = 300
 rcParams['savefig.bbox'] = 'tight'
 rcParams['savefig.pad_inches'] = 0.1
+# Single column width for ACL2025 (3.5 inches)
+SINGLE_COLUMN_WIDTH = 3.5
 
-# Use seaborn style for cleaner plots
-sns.set_style("whitegrid")
-sns.set_palette("husl")
+# Use matplotlib style if seaborn is not available
+if not HAS_SEABORN:
+    plt.style.use('default')
+    rcParams['axes.grid'] = True
+    rcParams['grid.alpha'] = 0.3
 
 def load_stats(filepath):
     """Load statistics from JSON file"""
@@ -100,8 +110,8 @@ def plot_layer_head_comparison(stats, output_dir):
         print("No data to plot")
         return
     
-    # Create subplots: one per layer
-    fig, axes = plt.subplots(num_layers, 1, figsize=(12, 4 * num_layers))
+    # Create subplots: one per layer (single column width, keep original aspect ratio)
+    fig, axes = plt.subplots(num_layers, 1, figsize=(SINGLE_COLUMN_WIDTH, 1.2 * num_layers))
     if num_layers == 1:
         axes = [axes]
     
@@ -153,10 +163,10 @@ def plot_layer_head_comparison(stats, output_dir):
         line2 = ax2.plot(x, unique_after_means, 's-', color='red', 
                         label='Unique After FFT', linewidth=2, markersize=6)
         
-        ax.set_xlabel('Head Index', fontsize=10)
-        ax.set_ylabel('Similarity / Overlap Ratio', fontsize=10, color='black')
-        ax2.set_ylabel('Unique Token Count', fontsize=10, color='black')
-        ax.set_title(f'Layer {layer_idx}: TopK Selection Comparison (Before vs After FFT)', fontsize=11)
+        ax.set_xlabel('Head Index', fontsize=12)
+        ax.set_ylabel('Similarity / Overlap Ratio', fontsize=12, color='black')
+        ax2.set_ylabel('Unique Token Count', fontsize=12, color='black')
+        ax.set_title(f'Layer {layer_idx}: TopK Selection Comparison (Before vs After FFT)', fontsize=13)
         ax.set_xticks(x)
         ax.set_xticklabels(head_indices)
         ax.set_ylim([0, 1.1])
@@ -165,7 +175,7 @@ def plot_layer_head_comparison(stats, output_dir):
         # Combine legends
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        ax.legend(lines1 + lines2, labels1 + labels2, loc='upper right', fontsize=8)
+        ax.legend(lines1 + lines2, labels1 + labels2, loc='upper right', fontsize=11)
     
     plt.tight_layout()
     output_path = output_dir / 'layer_head_comparison.png'
@@ -193,7 +203,7 @@ def plot_attention_score_comparison(stats, output_dir, max_samples=5):
         before_topk = np.array(data['before_fft_topk_indices'][0])
         after_topk = np.array(data['after_fft_topk_indices'][0])
         
-        fig, axes = plt.subplots(2, 1, figsize=(14, 8))
+        fig, axes = plt.subplots(2, 1, figsize=(SINGLE_COLUMN_WIDTH, 2.3))
         
         # Plot 1: Attention scores over sequence
         seq_len = len(before_scores)
@@ -210,11 +220,11 @@ def plot_attention_score_comparison(stats, output_dir, max_samples=5):
                        color='red', marker='s', s=50, alpha=0.6, 
                        label='TopK After FFT', zorder=5)
         
-        axes[0].set_xlabel('Token Position', fontsize=10)
-        axes[0].set_ylabel('Attention Score', fontsize=10)
+        axes[0].set_xlabel('Token Position', fontsize=12)
+        axes[0].set_ylabel('Attention Score', fontsize=12)
         axes[0].set_title(f'Layer {layer_idx}, Head {head_idx}: Attention Scores Before/After FFT', 
-                         fontsize=11)
-        axes[0].legend(loc='best', fontsize=9)
+                         fontsize=13)
+        axes[0].legend(loc='best', fontsize=11)
         axes[0].grid(True, alpha=0.3)
         
         # Plot 2: TopK selection comparison
@@ -234,10 +244,10 @@ def plot_attention_score_comparison(stats, output_dir, max_samples=5):
         scatter = axes[1].scatter(x, y_pos, c=colors, cmap='RdYlGn', 
                                  s=30, alpha=0.6, edgecolors='black', linewidths=0.5)
         
-        axes[1].set_xlabel('Token Position', fontsize=10)
-        axes[1].set_ylabel('Token Index', fontsize=10)
+        axes[1].set_xlabel('Token Position', fontsize=12)
+        axes[1].set_ylabel('Token Index', fontsize=12)
         axes[1].set_title(f'TopK Selection Comparison: Common (Green), Only Before (Blue), Only After (Red)', 
-                         fontsize=11)
+                         fontsize=13)
         axes[1].grid(True, alpha=0.3)
         
         # Add legend
@@ -247,7 +257,7 @@ def plot_attention_score_comparison(stats, output_dir, max_samples=5):
             Patch(facecolor='blue', alpha=0.6, label=f'Only Before ({len(only_before)})'),
             Patch(facecolor='red', alpha=0.6, label=f'Only After ({len(only_after)})'),
         ]
-        axes[1].legend(handles=legend_elements, loc='upper right', fontsize=9)
+        axes[1].legend(handles=legend_elements, loc='upper right', fontsize=11)
         
         plt.tight_layout()
         output_path = output_dir / f'attention_comparison_layer{layer_idx}_head{head_idx}.png'
@@ -286,46 +296,47 @@ def plot_statistics_summary(stats, output_dir):
             all_budgets.append(budget)
             layer_head_labels.append(f"L{layer_idx}H{head_idx}")
     
-    # Create summary plots
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    # Create summary plots (single column, stacked vertically, keep original aspect ratio)
+    fig, axes = plt.subplots(4, 1, figsize=(SINGLE_COLUMN_WIDTH, 4.5))
+    axes = axes.flatten()
     
     # Plot 1: Jaccard similarity distribution
-    axes[0, 0].hist(all_jaccards, bins=30, color='steelblue', alpha=0.7, edgecolor='black')
-    axes[0, 0].axvline(np.mean(all_jaccards), color='red', linestyle='--', 
+    axes[0].hist(all_jaccards, bins=30, color='steelblue', alpha=0.7, edgecolor='black')
+    axes[0].axvline(np.mean(all_jaccards), color='red', linestyle='--', 
                       linewidth=2, label=f'Mean: {np.mean(all_jaccards):.3f}')
-    axes[0, 0].set_xlabel('Jaccard Similarity', fontsize=10)
-    axes[0, 0].set_ylabel('Frequency', fontsize=10)
-    axes[0, 0].set_title('Distribution of Jaccard Similarity', fontsize=11)
-    axes[0, 0].legend(fontsize=9)
-    axes[0, 0].grid(True, alpha=0.3)
+    axes[0].set_xlabel('Jaccard Similarity', fontsize=12)
+    axes[0].set_ylabel('Frequency', fontsize=12)
+    axes[0].set_title('Distribution of Jaccard Similarity', fontsize=13)
+    axes[0].legend(fontsize=11)
+    axes[0].grid(True, alpha=0.3)
     
     # Plot 2: Overlap ratio distribution
-    axes[0, 1].hist(all_overlaps, bins=30, color='coral', alpha=0.7, edgecolor='black')
-    axes[0, 1].axvline(np.mean(all_overlaps), color='red', linestyle='--', 
+    axes[1].hist(all_overlaps, bins=30, color='coral', alpha=0.7, edgecolor='black')
+    axes[1].axvline(np.mean(all_overlaps), color='red', linestyle='--', 
                       linewidth=2, label=f'Mean: {np.mean(all_overlaps):.3f}')
-    axes[0, 1].set_xlabel('Overlap Ratio', fontsize=10)
-    axes[0, 1].set_ylabel('Frequency', fontsize=10)
-    axes[0, 1].set_title('Distribution of Overlap Ratio', fontsize=11)
-    axes[0, 1].legend(fontsize=9)
-    axes[0, 1].grid(True, alpha=0.3)
+    axes[1].set_xlabel('Overlap Ratio', fontsize=12)
+    axes[1].set_ylabel('Frequency', fontsize=12)
+    axes[1].set_title('Distribution of Overlap Ratio', fontsize=13)
+    axes[1].legend(fontsize=11)
+    axes[1].grid(True, alpha=0.3)
     
     # Plot 3: Unique tokens comparison
-    axes[1, 0].scatter(all_unique_before, all_unique_after, alpha=0.5, s=30, edgecolors='black', linewidths=0.5)
-    axes[1, 0].plot([0, max(max(all_unique_before), max(all_unique_after))], 
+    axes[2].scatter(all_unique_before, all_unique_after, alpha=0.5, s=30, edgecolors='black', linewidths=0.5)
+    axes[2].plot([0, max(max(all_unique_before), max(all_unique_after))], 
                    [0, max(max(all_unique_before), max(all_unique_after))], 
                    'r--', linewidth=2, label='y=x')
-    axes[1, 0].set_xlabel('Unique Tokens Before FFT', fontsize=10)
-    axes[1, 0].set_ylabel('Unique Tokens After FFT', fontsize=10)
-    axes[1, 0].set_title('Unique Token Count Comparison', fontsize=11)
-    axes[1, 0].legend(fontsize=9)
-    axes[1, 0].grid(True, alpha=0.3)
+    axes[2].set_xlabel('Unique Tokens Before FFT', fontsize=12)
+    axes[2].set_ylabel('Unique Tokens After FFT', fontsize=12)
+    axes[2].set_title('Unique Token Count Comparison', fontsize=13)
+    axes[2].legend(fontsize=11)
+    axes[2].grid(True, alpha=0.3)
     
     # Plot 4: Budget vs Jaccard similarity
-    axes[1, 1].scatter(all_budgets, all_jaccards, alpha=0.5, s=30, edgecolors='black', linewidths=0.5)
-    axes[1, 1].set_xlabel('Head Budget (K)', fontsize=10)
-    axes[1, 1].set_ylabel('Jaccard Similarity', fontsize=10)
-    axes[1, 1].set_title('Budget vs TopK Similarity', fontsize=11)
-    axes[1, 1].grid(True, alpha=0.3)
+    axes[3].scatter(all_budgets, all_jaccards, alpha=0.5, s=30, edgecolors='black', linewidths=0.5)
+    axes[3].set_xlabel('Head Budget (K)', fontsize=12)
+    axes[3].set_ylabel('Jaccard Similarity', fontsize=12)
+    axes[3].set_title('Budget vs TopK Similarity', fontsize=13)
+    axes[3].grid(True, alpha=0.3)
     
     plt.tight_layout()
     output_path = output_dir / 'statistics_summary.png'

@@ -1,13 +1,13 @@
 #!/bin/bash
 # CoVoST2 Chinese-to-English Speech Translation Evaluation with Qwen2.5-Omni
 
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=1
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 
 # KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
 export KV_METHOD="sparsekv"
-export BUDGET=0.4
+export BUDGET=0.6
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -29,5 +29,5 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset
 python code/qwen3_covost2.py \
     --direction zh_en \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/SparseKV/budget0.4 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/SparseKV/budget0.4/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/SparseKV/budget0.6_1215 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/ZH_EN/SparseKV/budget0.6_1215/timing_stats.json

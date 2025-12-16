@@ -272,17 +272,30 @@ def update_sparsemm_budget(model, prefill_token_count):
     # Update budget in all layers
     base_model = model
     if hasattr(base_model, 'layers'):
+        updated_count = 0
         for layer in base_model.layers:
             if hasattr(layer, 'self_attn') and hasattr(layer.self_attn, 'kv_cluster'):
                 kv_cluster = layer.self_attn.kv_cluster
-                # Use the new update_budget method to properly recalculate head_adaptive_capacity
+                # CRITICAL: Always use update_budget() if available to properly reset pyram_init
+                # This is essential for PyramidKV and MixKV to recalculate pyramidal capacity
                 if hasattr(kv_cluster, 'update_budget'):
                     kv_cluster.update_budget(actual_budget)
+                    updated_count += 1
                 elif hasattr(kv_cluster, 'base_capacity'):
                     # Fallback for older versions without update_budget method
                     kv_cluster.base_capacity = actual_budget - kv_cluster.window_size
                     if kv_cluster.base_capacity <= 0:
                         kv_cluster.base_capacity = 1
+                    updated_count += 1
+                elif hasattr(kv_cluster, 'max_capacity_prompt'):
+                    # Fallback: Direct assignment (should not happen if update_budget exists)
+                    # For PyramidKV/MixKV, this won't reset pyram_init, so it's not ideal
+                    # But we still update the budget value
+                    kv_cluster.max_capacity_prompt = actual_budget
+                    # Try to reset pyram_init if pyram_mode is enabled
+                    if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
+                        kv_cluster.pyram_init = False
+                    updated_count += 1
         # Also update model config for consistency
         if hasattr(base_model, 'config'):
             base_model.config.max_capacity_prompt = actual_budget
@@ -2069,6 +2082,7 @@ def main():
             # The first generate call pollutes the cache state, so we MUST reset before the actual generation
             if USE_SPARSEKV and sparsemm_enabled:
                 reset_sparsemm_state(model)
+                clear_model_cache(model)  # Clear model cache to prevent state leakage
                 past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
             # Measure decode time: generate full output
             decode_start_event = torch.cuda.Event(enable_timing=True)

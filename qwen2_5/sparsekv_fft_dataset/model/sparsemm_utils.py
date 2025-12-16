@@ -512,7 +512,7 @@ class DynamicCacheSplitHeadFlatten(Cache):
 
 class SnapKVCluster():
     def __init__(self, window_size = 64, max_capacity_prompt = 256 + 64, kernel_size = 5, pooling = 'avgpool', layer_idx = None, num_hidden_layers = None, 
-                 pyram_mode = False, pyram_beta = 20,num_key_value_groups = 1, gqa_func='mean'):
+                 pyram_mode = False, pyram_beta = 20,num_key_value_groups = 1, gqa_func='mean', select_method=None, config=None):
         self.window_size = window_size
         self.max_capacity_prompt = max_capacity_prompt
         assert self.max_capacity_prompt - self.window_size > 0
@@ -527,6 +527,18 @@ class SnapKVCluster():
 
         self.num_key_value_groups = num_key_value_groups
         self.gqa_func = gqa_func
+        self.method = select_method
+        self.config = config
+        
+        # Load similarity scores for head-wise mixing if select_method is used
+        if self.method is not None:
+            use_online_score = os.environ.get("USE_ONLINE_SCORE", "false").lower() == "true"
+            if use_online_score:
+                self.key_score = None  # Will use online_score calculated in update_kv
+            else:
+                self.key_score = load_similarity_score()
+        else:
+            self.key_score = None
 
     def reset(self, window_size = 64, max_capacity_prompt = 256 + 64, kernel_size = 5, pooling = 'avgpool'):
         self.window_size = window_size
@@ -534,6 +546,35 @@ class SnapKVCluster():
         assert self.max_capacity_prompt - self.window_size > 0
         self.kernel_size = kernel_size
         self.pooling = pooling
+    
+    @torch.compile
+    def calcul_similarity_score(self, key_states):
+        """Calculate key similarity scores for token selection."""
+        device = key_states.device
+        bsz, num_heads, seq_len, head_dim = key_states.shape
+        
+        # Normalize vectors
+        key_norm = F.normalize(key_states, dim=-1)
+        # Only consider tokens before the last `window_size`
+        valid_len = seq_len - self.window_size
+        key_valid = key_norm[:, :, :valid_len, :]  # (B, H, valid_len, D)
+
+        # Compute mean of valid tokens
+        key_mean = key_norm.sum(dim=2, keepdim=True) / seq_len  # (B, H, 1, D)
+        # Compute similarity of all tokens to the valid mean
+        
+        key_sim = torch.matmul(key_valid, key_mean.transpose(-2, -1)).squeeze(-1)  # (B, H, N-W)
+        key_mean_norm_sq = torch.sum(key_mean ** 2, dim=-1)
+        avg_similarity = (seq_len * key_mean_norm_sq - 1) / (seq_len - 1)
+        return key_sim, avg_similarity
+    
+    def update_budget(self, new_budget):
+        """Update max_capacity_prompt budget for dynamic budget adjustment."""
+        self.max_capacity_prompt = new_budget
+        assert self.max_capacity_prompt - self.window_size > 0
+        # Reset pyram_init so that pyramid mode recalculates with new budget
+        if self.pyram_mode:
+            self.pyram_init = False
 
     def update_kv(self, origin_key_states, query_states, origin_value_states):   
         # support gqa
@@ -541,6 +582,7 @@ class SnapKVCluster():
         value_states = repeat_kv(origin_value_states, self.num_key_value_groups)
         assert key_states.shape[-2] == query_states.shape[-2]
         bsz, num_heads, q_len, head_dim = query_states.shape
+        B, H, N, D = origin_key_states.shape
         # compute pyramidal capacity
         if self.pyram_mode and not self.pyram_init:
             base_capacity = self.max_capacity_prompt - self.window_size
@@ -587,21 +629,131 @@ class SnapKVCluster():
             else:
                 raise ValueError('Pooling method not supported')
 
-            indices = attn_cache.topk(self.max_capacity_prompt - self.window_size, dim=-1).indices
-            indices = indices.unsqueeze(-1).expand(-1, -1, -1, head_dim)
+            capacity = self.max_capacity_prompt - self.window_size
+            attn_score = attn_cache
             
-            k_past_compress = origin_key_states[:, :, :-self.window_size, :].gather(dim = 2, index = indices)
-            v_past_compress = origin_value_states[:, :, :-self.window_size, :].gather(dim = 2, index = indices)
-            k_cur = origin_key_states[:, :, -self.window_size:, :]
-            v_cur = origin_value_states[:, :, -self.window_size:, :]
+            # If select_method is specified, use mixkv scoring; otherwise use original topk
+            if self.method is not None:
+                # Calculate similarity score
+                similarity_score, online_score = self.calcul_similarity_score(origin_key_states)
+                neg_sim = -similarity_score
+                sim_min = neg_sim.amin(dim=-1, keepdim=True)
+                sim_max = neg_sim.amax(dim=-1, keepdim=True)
+                sim_norm = (neg_sim - sim_min) / (sim_max - sim_min + 1e-8)
+                sim_mean = sim_norm.mean(dim=-1, keepdim=True)
+                att_mean = attn_score.mean(dim=-1, keepdim=True)
+                scale = att_mean / (sim_mean + 1e-8)
+                sim_scaled = sim_norm * scale
+                
+                _device = key_states.device
+                valid_len = origin_key_states.shape[-2] - self.window_size
+                
+                # Calculate value/key norm scores if needed
+                vnorm_score_head = None
+                knorm_score_head = None
+                
+                if self.method in ['vnorm', 'headwisemixkv', 'mixkv']:
+                    origin_value_states_valid = origin_value_states[:, :, :valid_len, :]
+                    vnorm_score = torch.norm(origin_value_states_valid, p=2, dim=-1)
+                    vnorm_min = vnorm_score.amin(dim=-1, keepdim=True)
+                    vnorm_max = vnorm_score.amax(dim=-1, keepdim=True)
+                    vnorm_score = (vnorm_score - vnorm_min) / (vnorm_max - vnorm_min + 1e-8)
+                    vnorm_mean = vnorm_score.mean(dim=-1, keepdim=True)
+                    scale = att_mean / (vnorm_mean + 1e-8)
+                    vnorm_score = vnorm_score * scale
+                    vnorm_score_head = vnorm_score.split(1, dim=1)
+                    
+                if self.method == 'knorm':
+                    origin_key_states_valid = origin_key_states[:, :, :valid_len, :]
+                    knorm_score = -torch.norm(origin_key_states_valid, p=2, dim=-1)
+                    knorm_min = knorm_score.amin(dim=-1, keepdim=True)
+                    knorm_max = knorm_score.amax(dim=-1, keepdim=True)
+                    knorm_score = (knorm_score - knorm_min) / (knorm_max - knorm_min + 1e-8)
+                    knorm_mean = knorm_score.mean(dim=-1, keepdim=True)
+                    scale = att_mean / (knorm_mean + 1e-8)
+                    knorm_score = knorm_score * scale
+                    knorm_score_head = knorm_score.split(1, dim=1)
 
-            key_states = torch.cat([k_past_compress, k_cur], dim = 2)
-            value_states = torch.cat([v_past_compress, v_cur], dim = 2)
-            return key_states, value_states
+                head_attn_score = torch.split(attn_score, 1, dim=1)
+                head_sim_score = torch.split(sim_scaled, 1, dim=1)
+                
+                # Process online_score for head-wise mixing if needed
+                online_score_head_list = None
+                if self.method == 'headwisemixkv' and self.key_score is None:
+                    online_score_min = online_score.amin(dim=1, keepdim=True)
+                    online_score_max = online_score.amax(dim=1, keepdim=True)
+                    online_score_normalized = (online_score - online_score_min) / (online_score_max - online_score_min + 1e-8)
+                    online_score_head_list = online_score_normalized.split(1, dim=1)
+                
+                origin_heads_key_states = torch.split(origin_key_states, 1, dim=1)
+                origin_heads_value_states = torch.split(origin_value_states, 1, dim=1)
+                heads_key_states = []
+                heads_value_states = []
+                
+                for head_idx in range(num_heads//self.num_key_value_groups):
+                    # Get head-wise scores
+                    if self.method == 'headwisemixkv' and online_score_head_list is not None:
+                        head_score = online_score_head_list[head_idx].squeeze().item()
+                    elif self.key_score is not None and self.layer_idx < self.key_score.shape[0] and head_idx < self.key_score.shape[1]:
+                        head_score = self.key_score[self.layer_idx][head_idx].item()
+                    else:
+                        head_score = 0.5
+                    
+                    attn_score_head = head_attn_score[head_idx]
+                    sim_score_head = head_sim_score[head_idx]
+                    
+                    if self.method == 'attn':
+                        combined_score_head = attn_score_head
+                    elif self.method == 'keydiff':
+                        combined_score_head = sim_score_head
+                    elif self.method == 'mixkv':
+                        vnorm_score = vnorm_score_head[head_idx]
+                        combined_score_head = 0.33 * sim_score_head + 0.33 * attn_score_head + 0.33 * vnorm_score
+                    elif self.method == 'headwisemixkv':
+                        vnorm_score = vnorm_score_head[head_idx]
+                        importance_score = attn_score_head + vnorm_score
+                        combined_score_head = head_score * sim_score_head + (1 - head_score) * importance_score
+                    elif self.method == 'knorm':
+                        knorm_score = knorm_score_head[head_idx]
+                        combined_score_head = attn_score_head + knorm_score
+                    elif self.method == 'vnorm':
+                        vnorm_score = vnorm_score_head[head_idx]
+                        combined_score_head = attn_score_head + vnorm_score
+                    else:
+                        combined_score_head = attn_score_head  # Default to attention
+                    
+                    _, indices_head = combined_score_head.sort(dim=-1, descending=True)
+                    cache_index = indices_head.squeeze()[..., :capacity]
+                    cache_index = cache_index.view(1, 1, -1, 1).expand(-1, -1, -1, head_dim)
+                    k_past_compress = origin_heads_key_states[head_idx][:, :, :-self.window_size, :].gather(dim=2, index=cache_index)
+                    v_past_compress = origin_heads_value_states[head_idx][:, :, :-self.window_size, :].gather(dim=2, index=cache_index)
+                    k_cur = origin_heads_key_states[head_idx][:, :, -self.window_size:, :]
+                    v_cur = origin_heads_value_states[head_idx][:, :, -self.window_size:, :]
+                    key_states_head = torch.cat([k_past_compress, k_cur], dim=2)
+                    value_states_head = torch.cat([v_past_compress, v_cur], dim=2)
+                    heads_key_states.append(key_states_head)
+                    heads_value_states.append(value_states_head)
+
+                heads_key_states = torch.cat(heads_key_states, dim=1)
+                heads_value_states = torch.cat(heads_value_states, dim=1)
+                return heads_key_states, heads_value_states
+            else:
+                # Original SnapKV behavior: use topk on attention score
+                indices = attn_cache.topk(self.max_capacity_prompt - self.window_size, dim=-1).indices
+                indices = indices.unsqueeze(-1).expand(-1, -1, -1, head_dim)
+                
+                k_past_compress = origin_key_states[:, :, :-self.window_size, :].gather(dim = 2, index = indices)
+                v_past_compress = origin_value_states[:, :, :-self.window_size, :].gather(dim = 2, index = indices)
+                k_cur = origin_key_states[:, :, -self.window_size:, :]
+                v_cur = origin_value_states[:, :, -self.window_size:, :]
+
+                key_states = torch.cat([k_past_compress, k_cur], dim = 2)
+                value_states = torch.cat([v_past_compress, v_cur], dim = 2)
+                return key_states, value_states
 
 class AdaKVCluster():
     def __init__(self, window_size = 32, kernel_size = 7, pooling = 'maxpool',base_capacity=None,floor_alpha = None,skip = None,normalize=None, 
-                 layer_idx = None, num_hidden_layers = None, pyram_mode = False, pyram_beta = 20, num_key_value_groups=1, gqa_func='mean', config=None):
+                 layer_idx = None, num_hidden_layers = None, pyram_mode = False, pyram_beta = 20, num_key_value_groups=1, gqa_func='mean', config=None, select_method=None):
         self.window_size = window_size
         self.kernel_size = kernel_size
         self.pooling = pooling
@@ -632,6 +784,17 @@ class AdaKVCluster():
 
         self.num_key_value_groups = num_key_value_groups
         self.gqa_func = gqa_func
+        self.method = select_method
+        
+        # Load similarity scores for head-wise mixing if select_method is used
+        if self.method is not None:
+            use_online_score = os.environ.get("USE_ONLINE_SCORE", "false").lower() == "true"
+            if use_online_score:
+                self.key_score = None  # Will use online_score calculated in update_kv
+            else:
+                self.key_score = load_similarity_score()
+        else:
+            self.key_score = None
 
     def calcul_attn_sore(self, key_states, query_states):
         bsz, num_heads, q_len, head_dim = query_states.shape
@@ -1252,7 +1415,18 @@ def init_pyramidkv(self):
         if not hasattr(self.config, 'window_size'):
             self.config.window_size = 32
         if not hasattr(self.config, 'max_capacity_prompt'):
-            self.config.max_capacity_prompt = int(os.getenv('BUDGET'))
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
         if not hasattr(self.config, 'kernel_size'):
             self.config.kernel_size = 5
         if not hasattr(self.config, 'pooling'):
@@ -1283,7 +1457,18 @@ def init_snapkv(self):
         if not hasattr(self.config, 'window_size'):
             self.config.window_size = 32
         if not hasattr(self.config, 'max_capacity_prompt'):
-            self.config.max_capacity_prompt = int(os.getenv('BUDGET'))
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
         if not hasattr(self.config, 'kernel_size'):
             self.config.kernel_size = 5
         if not hasattr(self.config, 'pooling'):
@@ -1294,6 +1479,9 @@ def init_snapkv(self):
             if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
                 'llava' in self.config.model_type or 'qwen' in self.config.model_type:
                 self.config.gqa_func = 'mean'
+        # Support select_method for mixkv scoring on SnapKV base
+        if not hasattr(self.config, 'select_method'):
+            self.config.select_method = os.getenv('SELECT_METHOD', None)  # None means use original SnapKV
 
     if not hasattr(self, "kv_cluster"):
         self.kv_cluster = SnapKVCluster(
@@ -1301,8 +1489,12 @@ def init_snapkv(self):
             max_capacity_prompt = self.config.max_capacity_prompt,
             kernel_size = self.config.kernel_size,
             pooling = self.config.pooling,
+            layer_idx = self.layer_idx,
+            num_hidden_layers = self.config.num_hidden_layers,
             num_key_value_groups = self.config.num_attention_heads // self.config.num_key_value_heads,
-            gqa_func=self.config.gqa_func
+            gqa_func=self.config.gqa_func,
+            select_method=self.config.select_method,
+            config=self.config
         )
 
 def init_adakv(self):
@@ -1310,7 +1502,18 @@ def init_adakv(self):
         if not hasattr(self.config, 'window_size'):
             self.config.window_size = 32
         if not hasattr(self.config, 'max_capacity_prompt'):
-            self.config.max_capacity_prompt = int(os.getenv('BUDGET'))
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
         if not hasattr(self.config, 'kernel_size'):
             self.config.kernel_size = 5
         if not hasattr(self.config, 'pooling'):
@@ -1327,6 +1530,9 @@ def init_adakv(self):
             if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
                 'llava' in self.config.model_type or 'qwen' in self.config.model_type:
                 self.config.gqa_func = 'mean'
+        # Support select_method for mixkv scoring on AdaKV base
+        if not hasattr(self.config, 'select_method'):
+            self.config.select_method = os.getenv('SELECT_METHOD', None)  # None means use original AdaKV
 
     if not hasattr(self, "kv_cluster"):
         self.kv_cluster = AdaKVCluster(
@@ -1341,6 +1547,7 @@ def init_adakv(self):
             num_hidden_layers = self.config.num_hidden_layers,
             num_key_value_groups = self.config.num_attention_heads // self.config.num_key_value_heads,
             gqa_func = self.config.gqa_func,
+            select_method=self.config.select_method,
             config = self.config  # Pass config for audio-aware selection
         )
 
@@ -1349,7 +1556,18 @@ def init_sparsemm(self):
         if not hasattr(self.config, 'window_size') or self.config.window_size is None:
             self.config.window_size = int(os.getenv('WINDOW_SIZE', 32))
         if not hasattr(self.config, 'max_capacity_prompt') or self.config.max_capacity_prompt is None:
-            self.config.max_capacity_prompt = int(os.getenv('BUDGET', 64))
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
         if not hasattr(self.config, 'kernel_size') or self.config.kernel_size is None:
             self.config.kernel_size = int(os.getenv('KERNEL_SIZE', 7))
         if not hasattr(self.config, 'pooling') or self.config.pooling is None:
@@ -1409,6 +1627,276 @@ def init_mask(self):
                     self.head_list.append((l, h))
 
 
+class MixedSparseMM():
+    """
+    MixedSparseMM: SparseMM base method with MixKV scoring strategies.
+    Combines SparseMM's head_adaptive_capacity with MixKV's select_method scoring.
+    """
+    def __init__(self, window_size = 32, kernel_size = 7, pooling = 'maxpool', base_capacity=None, ratio=None, normalize=None, 
+                 layer_idx = None, num_hidden_layers = None, head_score=None, num_attention_heads=32, num_key_value_groups=1, gqa_func='mean', model_type=None,
+                 select_method=None, config=None):
+        self.window_size = window_size
+        self.kernel_size = kernel_size
+        self.pooling = pooling
+        self.base_capacity = base_capacity - window_size
+        self.ratio = ratio
+
+        self.normalize = normalize
+        self.layer_idx = layer_idx
+        self.num_attention_heads = num_attention_heads  
+        self.num_hidden_layers = num_hidden_layers
+        self.config = config
+
+        # NOTE: layer-wise meta-data
+        self.head_lens = None
+        self.max_seqlen_k = 0
+        self.klen_sum = 0
+        self.cu_klen = 0
+        self.cu_offset = None
+        self.cu_headlens = None
+
+        self.num_key_value_groups = num_key_value_groups
+        self.gqa_func = gqa_func
+        self.method = select_method
+        
+        # Load similarity scores for head-wise mixing
+        use_online_score = os.environ.get("USE_ONLINE_SCORE", "false").lower() == "true"
+        if use_online_score:
+            self.key_score = None  # Will use online_score calculated in update_kv
+        else:
+            self.key_score = load_similarity_score()
+
+        if head_score == 'random':
+            head_score_list = np.array([random.random() for _ in range(self.num_hidden_layers * self.num_attention_heads)])
+        elif head_score == 'visual':
+            head_score = load_head_score(model_type)
+            head_score_list = [np.mean(l[1]) for l in head_score.items()]
+        elif head_score == 'audio':
+            head_score = load_head_score(model_type)
+            head_score_list = [np.mean(l[1]) for l in head_score.items()]
+        else:
+            raise ValueError('head_score type not supported')
+            
+        head_score_list = torch.tensor(head_score_list / sum(head_score_list))
+        # GQA support
+        num_kv_heads = self.num_attention_heads // self.num_key_value_groups
+        self.score = head_score_list.view(self.num_hidden_layers, num_kv_heads, self.num_key_value_groups)
+        self.score = self.score.sum(dim=-1)
+        
+        # Re-normalize after aggregation
+        score_sum = self.score.sum()
+        if score_sum > 0:
+            self.score = self.score / score_sum
+        else:
+            self.score = torch.ones_like(self.score) / self.score.numel()
+        
+        min_cache = int(self.base_capacity * self.ratio)
+        total_kv_heads = self.num_hidden_layers * num_kv_heads
+        total_variable_capacity = (self.base_capacity - min_cache) * total_kv_heads
+        self.head_adaptive_capacity = torch.round(self.score * total_variable_capacity + min_cache).int()
+
+    def calcul_attn_sore(self, key_states, query_states):
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(
+            head_dim)
+        mask = torch.full((self.window_size, self.window_size), torch.finfo(attn_weights.dtype).min,
+                          device=attn_weights.device)
+        mask_cond = torch.arange(mask.size(-1), device=attn_weights.device)
+        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+        mask = mask.to(attn_weights.device)
+        attention_mask = mask[None, None, :, :]
+
+        attn_weights[:, :, -self.window_size:, -self.window_size:] += attention_mask
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights_mean = attn_weights[:, :, -self.window_size:, : -self.window_size].mean(dim=-2)
+
+        attn_weights_mean = attn_weights_mean.view(attn_weights_mean.shape[0],num_heads//self.num_key_value_groups,self.num_key_value_groups,-1)
+        if self.gqa_func == 'max':
+            attn_weights_mean = attn_weights_mean.max(dim=-2).values
+        elif self.gqa_func == 'mean':
+            attn_weights_mean = attn_weights_mean.mean(dim=-2)
+        else:
+            raise ValueError('gqa_func not supported')
+
+        if self.pooling == 'avgpool':
+            attn_weights_mean_pooling = F.avg_pool1d(attn_weights_mean, kernel_size=self.kernel_size,
+                                                     padding=self.kernel_size // 2,
+                                                     stride=1)
+        elif self.pooling == 'maxpool':
+            attn_weights_mean_pooling = F.max_pool1d(attn_weights_mean, kernel_size=self.kernel_size,
+                                                     padding=self.kernel_size // 2,
+                                                     stride=1)
+        else:
+            raise ValueError('Pooling method not supported')
+        return attn_weights_mean_pooling
+
+    @torch.compile
+    def calcul_similarity_score(self, key_states):
+        device = key_states.device
+        bsz, num_heads, seq_len, head_dim = key_states.shape
+        
+        # Normalize vectors
+        key_norm = F.normalize(key_states, dim=-1)
+        # Only consider tokens before the last `window_size`
+        valid_len = seq_len - self.window_size
+        key_valid = key_norm[:, :, :valid_len, :]  # (B, H, valid_len, D)
+
+        # Compute mean of valid tokens
+        key_mean = key_norm.sum(dim=2, keepdim=True) / seq_len  # (B, H, 1, D)
+        # Compute similarity of all tokens to the valid mean
+        
+        key_sim = torch.matmul(key_valid, key_mean.transpose(-2, -1)).squeeze(-1)  # (B, H, N-W)
+        key_mean_norm_sq = torch.sum(key_mean ** 2, dim=-1)
+        avg_similarity = (seq_len * key_mean_norm_sq - 1) / (seq_len - 1)
+        return key_sim, avg_similarity
+
+    def update_kv(self, origin_key_states, query_states, origin_value_states):
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        B, H, N, D = origin_key_states.shape
+        key_states = repeat_kv(origin_key_states, self.num_key_value_groups)
+        _device = key_states.device
+        valid_len = N - self.window_size
+        
+        def init_metadata(num_heads, k_lens, klen_sum, max_seqlen_k):
+            # init metadata
+            self.head_lens = torch.tensor(k_lens, dtype=torch.int32, device=_device)
+            self.klen_sum = klen_sum
+            self.max_seqlen_k = max_seqlen_k
+            self.cu_headlens = torch.cumsum(self.head_lens, dim=0, dtype=torch.int32)
+            # init varlen flash attention metadata
+            self.cu_klen = self.cu_headlens - self.head_lens
+            self.cu_klen = torch.cat(
+                [self.cu_klen, torch.tensor([self.klen_sum], dtype=torch.int32, device=_device)], dim=0)
+            # check bug
+            self.layer_qlens = torch.ones(num_heads//self.num_key_value_groups, dtype=torch.int32,device=_device)
+            self.qlen_sum = num_heads//self.num_key_value_groups
+            self.cu_qlen = torch.cumsum(self.layer_qlens, dim=0, dtype=torch.int32) - self.layer_qlens
+            self.cu_qlen = torch.cat(
+                [self.cu_qlen, torch.tensor([self.qlen_sum], dtype=torch.int32, device=_device)], dim=0)
+            self.cu_offset = torch.arange(0, num_heads//self.num_key_value_groups + 1, dtype=torch.int32, device=_device)
+            self.cu_head_offset = torch.arange(1, num_heads//self.num_key_value_groups +1, dtype=torch.int32, device=_device)
+        
+        similarity_score, online_score = self.calcul_similarity_score(origin_key_states)
+        neg_sim = -similarity_score
+        attn_score = self.calcul_attn_sore(key_states, query_states)
+        sim_min = neg_sim.amin(dim=-1, keepdim=True)
+        sim_max = neg_sim.amax(dim=-1, keepdim=True)
+        sim_norm = (neg_sim - sim_min) / (sim_max - sim_min + 1e-8)
+        sim_mean = sim_norm.mean(dim=-1, keepdim=True)
+        att_mean = attn_score.mean(dim=-1, keepdim=True)
+        scale = att_mean / (sim_mean + 1e-8)
+        sim_scaled = sim_norm * scale
+        
+        # Process online_score for head-wise mixing if needed
+        # online_score shape: (bsz, num_kv_heads, 1) - calculated from origin_key_states
+        online_score_head_list = None
+        if self.method == 'headwisemixkv' and self.key_score is None:
+            # Use online_score calculated from current key states
+            online_score_min = online_score.amin(dim=1, keepdim=True)
+            online_score_max = online_score.amax(dim=1, keepdim=True)
+            online_score_normalized = (online_score - online_score_min) / (online_score_max - online_score_min + 1e-8)
+            online_score_head_list = online_score_normalized.split(1, dim=1)
+        
+        # Calculate value/key norm scores if needed
+        vnorm_score_head = None
+        knorm_score_head = None
+        
+        if self.method in ['vnorm', 'headwisemixkv', 'mixkv']:
+            origin_value_states_valid = origin_value_states[:, :, :valid_len, :]
+            vnorm_score = torch.norm(origin_value_states_valid, p=2, dim=-1)
+            vnorm_min = vnorm_score.amin(dim=-1, keepdim=True)
+            vnorm_max = vnorm_score.amax(dim=-1, keepdim=True)
+            vnorm_score = (vnorm_score - vnorm_min) / (vnorm_max - vnorm_min + 1e-8)
+            vnorm_mean = vnorm_score.mean(dim=-1, keepdim=True)
+            scale = att_mean / (vnorm_mean + 1e-8)
+            vnorm_score = vnorm_score * scale
+            vnorm_score_head = vnorm_score.split(1, dim=1)
+            
+        if self.method == 'knorm':
+            origin_key_states_valid = origin_key_states[:, :, :valid_len, :]
+            knorm_score = -torch.norm(origin_key_states_valid, p=2, dim=-1)
+            knorm_min = knorm_score.amin(dim=-1, keepdim=True)
+            knorm_max = knorm_score.amax(dim=-1, keepdim=True)
+            knorm_score = (knorm_score - knorm_min) / (knorm_max - knorm_min + 1e-8)
+            knorm_mean = knorm_score.mean(dim=-1, keepdim=True)
+            scale = att_mean / (knorm_mean + 1e-8)
+            knorm_score = knorm_score * scale
+            knorm_score_head = knorm_score.split(1, dim=1)
+
+        head_attn_score = torch.split(attn_score, 1, dim=1)
+        head_sim_score = torch.split(sim_scaled, 1, dim=1)
+        
+        if (self.base_capacity > attn_score.shape[-1]) or q_len < self.window_size:
+            init_metadata(num_heads, [q_len] * (num_heads//self.num_key_value_groups), q_len * (num_heads//self.num_key_value_groups), q_len)
+            return origin_key_states.reshape(-1, head_dim), origin_value_states.reshape(-1, head_dim)
+
+        origin_heads_key_states = torch.split(origin_key_states, 1, dim=1)
+        origin_heads_value_states = torch.split(origin_value_states, 1, dim=1)
+        heads_key_states = []
+        heads_value_states = []
+        k_lens = []
+        klen_sum = 0
+        max_seqlen_k = 0
+        self.cu_klen = 0
+        
+        for head_idx in range(num_heads//self.num_key_value_groups):
+            capacity = self.head_adaptive_capacity[self.layer_idx][head_idx]
+            
+            # Get head-wise scores
+            if self.method == 'headwisemixkv' and online_score_head_list is not None:
+                head_score = online_score_head_list[head_idx].squeeze().item()
+            elif self.key_score is not None and self.layer_idx < self.key_score.shape[0] and head_idx < self.key_score.shape[1]:
+                head_score = self.key_score[self.layer_idx][head_idx].item()
+            else:
+                head_score = 0.5
+            
+            attn_score_head = head_attn_score[head_idx]
+            sim_score_head = head_sim_score[head_idx]
+           
+            if self.method == 'attn':
+                combined_score_head = attn_score_head
+            elif self.method == 'keydiff':
+                combined_score_head = sim_score_head
+            elif self.method == 'mixkv':
+                vnorm_score = vnorm_score_head[head_idx]
+                combined_score_head = 0.33 * sim_score_head + 0.33 * attn_score_head + 0.33 * vnorm_score
+            elif self.method == 'headwisemixkv':
+                vnorm_score = vnorm_score_head[head_idx]
+                importance_score = attn_score_head + vnorm_score
+                combined_score_head = head_score * sim_score_head + (1 - head_score) * importance_score
+            elif self.method == 'knorm':
+                knorm_score = knorm_score_head[head_idx]
+                combined_score_head = attn_score_head + knorm_score
+            elif self.method == 'vnorm':
+                vnorm_score = vnorm_score_head[head_idx]
+                combined_score_head = attn_score_head + vnorm_score
+            else:
+                combined_score_head = attn_score_head  # Default to attention
+
+            _, indices_head = combined_score_head.sort(dim=-1, descending=True)
+            cache_index = indices_head.squeeze()[..., :capacity]
+            l = cache_index.shape[-1] + self.window_size
+            k_lens.append(l)
+            max_seqlen_k = max(max_seqlen_k, l)
+            klen_sum += l
+            cache_index = cache_index.view(1, 1, -1, 1).expand(-1, -1, -1, head_dim)
+            top_Kcache = origin_heads_key_states[head_idx].gather(dim=2, index=cache_index)
+            top_Vcache = origin_heads_value_states[head_idx].gather(dim=2, index=cache_index)
+            selected_k = torch.cat([top_Kcache, origin_heads_key_states[head_idx][:, :, -self.window_size:, :]], dim=2)
+            selected_v = torch.cat([top_Vcache, origin_heads_value_states[head_idx][:, :, -self.window_size:, :]], dim=2)
+
+            # NOTE: flatten view
+            heads_key_states.append(selected_k.view(-1, head_dim))
+            heads_value_states.append(selected_v.view(-1, head_dim))
+
+        init_metadata(num_heads, k_lens, klen_sum, max_seqlen_k)
+        heads_key_states = torch.cat(heads_key_states, dim=0)
+        heads_value_states = torch.cat(heads_value_states, dim=0)
+
+        return heads_key_states, heads_value_states
+
+
 class MixKVCluster():
     """
     MixKV: Mixed strategy for KV cache compression combining multiple scoring methods.
@@ -1435,7 +1923,12 @@ class MixKVCluster():
         self.config = config
         
         # Load similarity scores for head-wise mixing
-        self.key_score = load_similarity_score()
+        # Can be disabled to use online_score instead
+        use_online_score = os.environ.get("USE_ONLINE_SCORE", "false").lower() == "true"
+        if use_online_score:
+            self.key_score = None  # Will use online_score calculated in update_kv
+        else:
+            self.key_score = load_similarity_score()
         
         # Debug flag
         self._debug_printed_info = False
@@ -1467,6 +1960,14 @@ class MixKVCluster():
         assert self.max_capacity_prompt - self.window_size > 0
         self.kernel_size = kernel_size
         self.pooling = pooling
+    
+    def update_budget(self, new_budget):
+        """Update max_capacity_prompt budget for dynamic budget adjustment."""
+        self.max_capacity_prompt = new_budget
+        assert self.max_capacity_prompt - self.window_size > 0
+        # Reset pyram_init so that pyramid mode recalculates with new budget
+        if self.pyram_mode:
+            self.pyram_init = False
 
     def update_kv(self, origin_key_states, query_states, origin_value_states):
         B, H, N, D = origin_key_states.shape
@@ -1540,6 +2041,19 @@ class MixKVCluster():
         scale = att_mean / (sim_mean + 1e-8)
         sim_scaled = sim_norm * scale
         
+        # Process online_score for head-wise mixing if needed
+        # online_score shape: (bsz, num_kv_heads, 1) - calculated from origin_key_states
+        if self.method == 'headwisemixkv' and self.key_score is None:
+            # online_score is already per-KV-head: (bsz, num_kv_heads, 1)
+            # Normalize online_score to [0, 1] range for use as head_score weight
+            online_score_min = online_score.amin(dim=1, keepdim=True)  # (bsz, 1, 1)
+            online_score_max = online_score.amax(dim=1, keepdim=True)  # (bsz, 1, 1)
+            online_score_normalized = (online_score - online_score_min) / (online_score_max - online_score_min + 1e-8)
+            # Split by head for per-head access
+            online_score_head_list = online_score_normalized.split(1, dim=1)  # List of (bsz, 1, 1)
+        else:
+            online_score_head_list = None
+        
         _device = key_states.device
         valid_len = N - self.window_size
         
@@ -1577,10 +2091,15 @@ class MixKVCluster():
         
         for head_idx in range(num_heads // self.num_key_value_groups):
             # Get head-wise scores
-            if self.key_score is not None and self.layer_idx < self.key_score.shape[0] and head_idx < self.key_score.shape[1]:
+            if self.method == 'headwisemixkv' and online_score_head_list is not None:
+                # Use online_score calculated from current key states
+                head_score = online_score_head_list[head_idx].squeeze().item()  # Extract scalar value
+            elif self.key_score is not None and self.layer_idx < self.key_score.shape[0] and head_idx < self.key_score.shape[1]:
+                # Use pre-loaded key_score
                 head_score = self.key_score[self.layer_idx][head_idx].item()
             else:
-                head_score = 0.5  # Default uniform weight
+                # Default uniform weight
+                head_score = 0.5
             
             attn_score_head = head_attn_score[head_idx]
             sim_score_head = head_sim_score[head_idx]
@@ -1626,13 +2145,86 @@ class MixKVCluster():
         return heads_key_states, heads_value_states
 
 
+def init_mixsparsemm(self):
+    """Initialize MixedSparseMM cluster for SparseMM base with MixKV scoring strategies."""
+    if not hasattr(self, "kv_cluster"):
+        if not hasattr(self.config, 'window_size') or self.config.window_size is None:
+            self.config.window_size = int(os.getenv('WINDOW_SIZE', 32))
+        if not hasattr(self.config, 'max_capacity_prompt') or self.config.max_capacity_prompt is None:
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
+        if not hasattr(self.config, 'kernel_size') or self.config.kernel_size is None:
+            self.config.kernel_size = int(os.getenv('KERNEL_SIZE', 7))
+        if not hasattr(self.config, 'pooling') or self.config.pooling is None:
+            self.config.pooling = os.getenv('POOLING', 'maxpool')
+        if not hasattr(self.config, 'ratio') or self.config.ratio is None:
+            self.config.ratio = float(os.getenv('RATIO', 0.2))
+        if not hasattr(self.config, 'head_score'):
+            method = os.getenv('METHOD', None)
+            if method == 'mixsparsemm':
+                # Try to use audio head score if available, fallback to visual
+                if hasattr(self.config, 'head_score') and self.config.head_score == 'audio':
+                    self.config.head_score = 'audio'
+                else:
+                    self.config.head_score = 'visual'
+            else:
+                # Default to audio if available, otherwise visual
+                if hasattr(self.config, 'head_score'):
+                    pass  # Use existing
+                else:
+                    self.config.head_score = 'audio'  # Try audio first
+        if not hasattr(self.config,'gqa_func'):
+            if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                self.config.gqa_func = 'mean'
+        if not hasattr(self.config, 'select_method'):
+            self.config.select_method = os.getenv('SELECT_METHOD', 'mixkv')
+
+    if not hasattr(self, "kv_cluster"):
+        self.kv_cluster = MixedSparseMM(
+            window_size = self.config.window_size,
+            base_capacity=self.config.max_capacity_prompt,
+            head_score=self.config.head_score,
+            ratio=self.config.ratio,
+            kernel_size = self.config.kernel_size,
+            pooling = self.config.pooling,
+            layer_idx = self.layer_idx,
+            num_hidden_layers = self.config.num_hidden_layers,
+            num_attention_heads=self.config.num_attention_heads,
+            num_key_value_groups = self.config.num_attention_heads // self.config.num_key_value_heads,
+            gqa_func = self.config.gqa_func,
+            model_type=self.config.model_type,
+            select_method=self.config.select_method,
+            config=self.config
+        )
+
+
 def init_mixkv(self):
     """Initialize MixKV cluster for head-wise mixed scoring KV cache compression."""
     if not hasattr(self, "kv_cluster"):
         if not hasattr(self.config, 'window_size'):
             self.config.window_size = int(os.getenv('WINDOW_SIZE', 32))
         if not hasattr(self.config, 'max_capacity_prompt'):
-            self.config.max_capacity_prompt = int(os.getenv('BUDGET', 256))
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
         if not hasattr(self.config, 'kernel_size'):
             self.config.kernel_size = int(os.getenv('KERNEL_SIZE', 5))
         if not hasattr(self.config, 'pooling'):

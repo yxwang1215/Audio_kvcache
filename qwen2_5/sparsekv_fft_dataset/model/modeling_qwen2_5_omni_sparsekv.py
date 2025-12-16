@@ -72,7 +72,8 @@ else:
         init_adakv, 
         init_pyramidkv, 
         init_snapkv,
-        init_mixkv, 
+        init_mixkv,
+        init_mixsparsemm,
         DynamicCacheSplitHeadFlatten
     )
     print("[modeling] Using standard SparseMM implementation")
@@ -1610,6 +1611,20 @@ class Qwen2_5OmniFlashAttention2(Qwen2_5OmniAttention):
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            
+            # Check if key_states/value_states are flattened (2D) from compressed cache
+            # This happens when using SparseMM/MixKV compression methods with DynamicCacheSplitHeadFlatten
+            if len(key_states.shape) == 2:
+                # Flattened format: cannot use repeat_kv, need to use varlen attention
+                # This should not happen in standard FlashAttention2, but can occur if
+                # cache was compressed. In this case, we need to handle it differently.
+                raise ValueError(
+                    f"Flattened key/value states detected in Qwen2_5OmniFlashAttention2.forward (Layer {self.layer_idx}). "
+                    f"This indicates compressed cache is being used, but the attention module "
+                    f"was not properly replaced with a compression-aware version (e.g., Qwen2_5OmniFlashAttention2MixKV). "
+                    f"Expected 4D tensor [batch, num_kv_heads, seq_len, head_dim], got shape: {key_states.shape}. "
+                    f"Please ensure KV_METHOD is correctly set and enable_kv_compression was called successfully."
+                )
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -2008,6 +2023,7 @@ class Qwen2_5OmniFlashAttention2SnapKV(Qwen2_5OmniAttention):
         init_snapkv(self)
         
         bsz, q_len, _ = hidden_states.size()
+        is_prefill = q_len != 1
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -2038,48 +2054,90 @@ class Qwen2_5OmniFlashAttention2SnapKV(Qwen2_5OmniAttention):
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
+
+        if is_prefill:
+            # Prefill phase: compress and store, use original for attention
+            if past_key_value is not None:
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_value.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            # Use original KV for attention computation
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
 
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
             else:
-                target_dtype = self.q_proj.weight.dtype
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
+                sliding_window = None
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        if (
-            self.config.use_sliding_window
-            and getattr(self.config, "sliding_window", None) is not None
-            and self.layer_idx >= self.config.max_window_layers
-        ):
-            sliding_window = self.config.sliding_window
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         else:
-            sliding_window = None
+            # Decode phase: use flattened cache with varlen attention
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            # Initialize head metadata if needed - get actual length from cache
+            if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                # Get actual KV length from cache (prefill already stored compressed KV)
+                cache_key = past_key_value.key_cache[self.layer_idx]
+                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                head_len = total_cache_len // num_kv_heads  # Each head has same length for SnapKV
+                
+                self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                self.kv_cluster.klen_sum = total_cache_len
+                self.kv_cluster.max_seqlen_k = head_len
+                self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        attn_output = _flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len,
-            dropout=dropout_rate, sliding_window=sliding_window,
-            is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
-        )
+            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+            self.kv_cluster.klen_sum += num_kv_heads
+            self.kv_cluster.max_seqlen_k += 1
+            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+            self.kv_cluster.head_lens.add_(1)
+
+            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+            key_states = key_states.view(-1, 1, self.head_dim)
+            value_states = value_states.view(-1, 1, self.head_dim)
+
+            attn_output = sparsemm_flash_attn_varlen_func(
+                query_states, key_states, value_states,
+                self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                1, self.kv_cluster.max_seqlen_k, causal=True
+            )
+            attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+            attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, self.hidden_size).contiguous()
+
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -2265,6 +2323,7 @@ class Qwen2_5OmniFlashAttention2PyramidKV(Qwen2_5OmniAttention):
         init_pyramidkv(self)
         
         bsz, q_len, _ = hidden_states.size()
+        is_prefill = q_len != 1
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -2295,48 +2354,90 @@ class Qwen2_5OmniFlashAttention2PyramidKV(Qwen2_5OmniAttention):
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
+
+        if is_prefill:
+            # Prefill phase: compress and store, use original for attention
+            if past_key_value is not None:
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_value.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            # Use original KV for attention computation
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
 
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
             else:
-                target_dtype = self.q_proj.weight.dtype
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
+                sliding_window = None
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        if (
-            self.config.use_sliding_window
-            and getattr(self.config, "sliding_window", None) is not None
-            and self.layer_idx >= self.config.max_window_layers
-        ):
-            sliding_window = self.config.sliding_window
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         else:
-            sliding_window = None
+            # Decode phase: use flattened cache with varlen attention
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            # Initialize head metadata if needed - get actual length from cache
+            if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                # Get actual KV length from cache (prefill already stored compressed KV)
+                cache_key = past_key_value.key_cache[self.layer_idx]
+                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                head_len = total_cache_len // num_kv_heads  # Each head has same length for PyramidKV
+                
+                self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                self.kv_cluster.klen_sum = total_cache_len
+                self.kv_cluster.max_seqlen_k = head_len
+                self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        attn_output = _flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len,
-            dropout=dropout_rate, sliding_window=sliding_window,
-            is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
-        )
+            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+            self.kv_cluster.klen_sum += num_kv_heads
+            self.kv_cluster.max_seqlen_k += 1
+            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+            self.kv_cluster.head_lens.add_(1)
+
+            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+            key_states = key_states.view(-1, 1, self.head_dim)
+            value_states = value_states.view(-1, 1, self.head_dim)
+
+            attn_output = sparsemm_flash_attn_varlen_func(
+                query_states, key_states, value_states,
+                self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                1, self.kv_cluster.max_seqlen_k, causal=True
+            )
+            attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+            attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, self.hidden_size).contiguous()
+
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -2370,6 +2471,7 @@ class Qwen2_5OmniFlashAttention2MixKV(Qwen2_5OmniAttention):
         init_mixkv(self)
         
         bsz, q_len, _ = hidden_states.size()
+        is_prefill = q_len != 1
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -2400,48 +2502,90 @@ class Qwen2_5OmniFlashAttention2MixKV(Qwen2_5OmniAttention):
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
+
+        if is_prefill:
+            # Prefill phase: compress and store, use original for attention
+            if past_key_value is not None:
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_value.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            # Use original KV for attention computation
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
 
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
             else:
-                target_dtype = self.q_proj.weight.dtype
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
+                sliding_window = None
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        if (
-            self.config.use_sliding_window
-            and getattr(self.config, "sliding_window", None) is not None
-            and self.layer_idx >= self.config.max_window_layers
-        ):
-            sliding_window = self.config.sliding_window
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         else:
-            sliding_window = None
+            # Decode phase: use flattened cache with varlen attention
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            # Initialize head metadata if needed - get actual length from cache
+            if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                # Get actual KV length from cache (prefill already stored compressed KV)
+                cache_key = past_key_value.key_cache[self.layer_idx]
+                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                head_len = total_cache_len // num_kv_heads  # Each head has same length for MixKV
+                
+                self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                self.kv_cluster.klen_sum = total_cache_len
+                self.kv_cluster.max_seqlen_k = head_len
+                self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        attn_output = _flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len,
-            dropout=dropout_rate, sliding_window=sliding_window,
-            is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
-        )
+            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+            self.kv_cluster.klen_sum += num_kv_heads
+            self.kv_cluster.max_seqlen_k += 1
+            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+            self.kv_cluster.head_lens.add_(1)
+
+            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+            key_states = key_states.view(-1, 1, self.head_dim)
+            value_states = value_states.view(-1, 1, self.head_dim)
+
+            attn_output = sparsemm_flash_attn_varlen_func(
+                query_states, key_states, value_states,
+                self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                1, self.kv_cluster.max_seqlen_k, causal=True
+            )
+            attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+            attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, self.hidden_size).contiguous()
+
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -5314,6 +5458,17 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         if not hasattr(model_config, 'gqa_func'):
             model_config.gqa_func = 'mean'
         
+        # Check if METHOD=mixsparsemm to use MixedSparseMM
+        env_method = os.environ.get("METHOD", None)
+        use_mixsparsemm = (env_method is not None and env_method.lower() == 'mixsparsemm')
+        if use_mixsparsemm:
+            # Set select_method from config or environment
+            if 'select_method' in sparsemm_config:
+                model_config.select_method = sparsemm_config['select_method']
+            else:
+                model_config.select_method = os.environ.get("SELECT_METHOD", "mixkv")
+            print(f"[SparseMM DEBUG] Using MixedSparseMM with select_method={model_config.select_method}")
+        
         patched_count = 0
         for layer_idx, layer in enumerate(base_model.layers):
             # Get the current attention module
@@ -5340,7 +5495,10 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
             new_attn.rotary_emb.load_state_dict(old_attn.rotary_emb.state_dict())
             
-            init_sparsemm(new_attn)
+            if use_mixsparsemm:
+                init_mixsparsemm(new_attn)
+            else:
+                init_sparsemm(new_attn)
             
             if hasattr(new_attn, 'kv_cluster') and hasattr(new_attn.kv_cluster, 'head_adaptive_capacity'):
                 new_attn.head_adaptive_capacity = new_attn.kv_cluster.head_adaptive_capacity
@@ -5376,9 +5534,43 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         """
         method = method.lower()
         
+        # Check for METHOD environment variable to support base method + mixkv combinations
+        env_method = os.environ.get("METHOD", None)
+        env_select_method = os.environ.get("SELECT_METHOD", None)
+        
         if method == 'none':
             print(f"[KV Compression] Disabled - using full KV cache")
             return True
+        
+        # Handle METHOD parameter: base method + mixkv scoring
+        # Note: METHOD is only used when KV_METHOD is the base method (sparsekv, snapkv, etc.)
+        # If KV_METHOD is already 'mixkv', we should use Qwen2_5OmniFlashAttention2MixKV directly
+        if env_method is not None and method != 'mixkv':
+            env_method = env_method.lower()
+            if env_method == 'mixsparsemm':
+                # Use MixedSparseMM: SparseMM base + mixkv scoring
+                if head_score_data is None:
+                    print(f"[KV Compression] Warning: head_score_data is required for mixsparsemm method")
+                    return False
+                # Set select_method in config
+                if env_select_method:
+                    kv_config['select_method'] = env_select_method
+                else:
+                    kv_config['select_method'] = 'mixkv'  # Default
+                # Set METHOD to mixsparsemm for init_mixsparsemm
+                os.environ["METHOD"] = "mixsparsemm"
+                result = self.enable_sparsemm_attention(head_score_data, kv_config)
+                return result
+            elif env_method in ['sparsemm', 'snapkv', 'adakv', 'pyramidkv']:
+                # Use base method with optional mixkv scoring via select_method
+                if env_method == 'sparsemm':
+                    method = 'sparsekv'  # Map to sparsekv
+                else:
+                    method = env_method
+                # Set select_method in config if provided
+                if env_select_method:
+                    kv_config['select_method'] = env_select_method
+                    print(f"[KV Compression] Using {method} base method with {env_select_method} scoring")
         
         if method == 'sparsekv':
             if head_score_data is None:
@@ -5405,6 +5597,13 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         model_config.ratio = kv_config.get('ratio', 0.2)
         if not hasattr(model_config, 'gqa_func'):
             model_config.gqa_func = 'mean'
+        
+        # Set select_method in config if provided (for mixkv scoring on base methods)
+        if 'select_method' in kv_config:
+            model_config.select_method = kv_config['select_method']
+        elif method == 'mixkv' and env_select_method:
+            # For mixkv method, set select_method from environment if not in config
+            model_config.select_method = env_select_method
         
         # Select attention class based on method
         attention_class_map = {

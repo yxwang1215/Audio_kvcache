@@ -56,6 +56,11 @@ KV_METHOD = os.environ.get("KV_METHOD", "sparsekv").lower()
 # USE_SPARSEKV is derived from KV_METHOD for backward compatibility
 USE_SPARSEKV = KV_METHOD != "vanilla"
 
+# METHOD specifies the base method (sparsemm, snapkv, adakv, pyramidkv)
+# When METHOD is set, it enables mixkv scoring on top of the base method
+# METHOD=mixsparsemm means use MixedSparseMM (SparseMM base + mixkv scoring)
+ENV_METHOD = os.environ.get("METHOD", None)  # sparsemm, snapkv, adakv, pyramidkv, mixsparsemm
+
 
 _AUDIO_TOKEN_ID = 151646        
 _AUDIO_BOS_TOKEN_ID = 151647      
@@ -165,20 +170,31 @@ try:
 except ImportError:
     from model.processing_qwen3_omni_moe import Qwen3OmniMoeProcessor
 from qwen_omni_utils import process_mm_info
-# Import SparseMM utilities from model directory
-from model.sparsemm_utils import (
-    SparseMM,
-    DynamicCacheSplitHeadFlatten,
-    init_sparsemm
-)
 from transformers.cache_utils import DynamicCache
 
-# Import audio head utilities for SparseMM
-from model.audio_head_utils import (
-    load_audio_head_scores,
-    process_audio_head_scores,
-    get_audio_head_score_path
-)
+# Import SparseMM utilities only when KV compression is enabled
+if USE_SPARSEKV:
+    # Import SparseMM utilities from model directory
+    from model.sparsemm_utils import (
+        SparseMM,
+        DynamicCacheSplitHeadFlatten,
+        init_sparsemm
+    )
+    
+    # Import audio head utilities for SparseMM
+    from model.audio_head_utils import (
+        load_audio_head_scores,
+        process_audio_head_scores,
+        get_audio_head_score_path
+    )
+else:
+    # Placeholders when not using SparseMM
+    SparseMM = None
+    DynamicCacheSplitHeadFlatten = None
+    init_sparsemm = None
+    load_audio_head_scores = None
+    process_audio_head_scores = None
+    get_audio_head_score_path = None
 
 # Import MultilingualLibriSpeechLoader
 multilingual_librispeech_path = "/mnt/users/wangyuxuan-20250915/Audio/Datasets/multilingual_librispeech"
@@ -1196,6 +1212,14 @@ def main():
             
             # Enable based on KV_METHOD
             if KV_METHOD in ("sparsekv", "sparsemm"):
+                # Check if METHOD=mixsparsemm to use MixedSparseMM
+                if ENV_METHOD is not None and ENV_METHOD.lower() == 'mixsparsemm':
+                    # Set select_method in config
+                    select_method = os.environ.get("SELECT_METHOD", "mixkv")
+                    sparsemm_config['select_method'] = select_method
+                    print(f"[MixedSparseMM] Using MixedSparseMM with select_method={select_method}")
+                    # Set METHOD environment variable for init_mixsparsemm
+                    os.environ["METHOD"] = "mixsparsemm"
                 model.enable_sparsemm_attention(head_score_data, sparsemm_config)
                 print("[SparseMM] SparseMM attention enabled successfully")
             elif KV_METHOD == "snapkv":

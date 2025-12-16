@@ -226,7 +226,7 @@ export KERNEL_SIZE=5
 export POOLING="maxpool"
 
 # MixKV 特有配置
-export SELECT_METHOD="mixkv"               # attn/keydiff/mixkv/headwisemixkv/knorm/vnorm
+export SELECT_METHOD="headwisemixkv"               # attn/keydiff/mixkv/headwisemixkv/knorm/vnorm
 export SIMILARITY_SCORE_PATH="/path/to/similarity_scores.json"  # 可选
 export USE_OPTIMIZED_SPARSEMM="false"
 ```

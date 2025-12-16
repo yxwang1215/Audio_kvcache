@@ -1,16 +1,15 @@
 #!/bin/bash
 # speech-triviaqa 推理脚本
-# 用于生成模型答案
 
 set -e
-export GPU_ID="1"
+export GPU_ID="3"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_triviaqa_Results/SparseKV/budget0.8}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_triviaqa_Results/SparseKV/budget0.2_topk16_alpha1_beta1_gamma1_1216}"
 export SAMPLE_LIMIT=0
 
 # KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
 export KV_METHOD="sparsekv"
-export BUDGET=0.8
+export BUDGET=0.2
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -19,7 +18,6 @@ export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio
 # export HEAD_SCORE_AGGREGATION="first" 
 # export HEAD_SCORE_FILE="uniform"
 
-# FFT 滤波配置（可选）
 # export USE_FFT_FILTER="true"
 # export FFT_FILTER_TYPE="lowpass"
 # export FFT_CUTOFF_RATIO="0.3"

@@ -5,7 +5,7 @@
 set -e
 
 # =================== 用户配置区 ===================
-export GPU_ID="1"
+export GPU_ID="2"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct}"
 export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_chatbot_alpaca_eval_Results/SparseKV/budget0.8}"
 
@@ -13,7 +13,7 @@ export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qw
 export SAMPLE_LIMIT=0
 # KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
 export KV_METHOD="sparsekv"
-export BUDGET=0.8
+export BUDGET=0.4
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5

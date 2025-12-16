@@ -1,12 +1,12 @@
 #!/bin/bash
 # KeSpeech ASR Evaluation with Qwen2.5-Omni
 
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=7
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-7B"
 export SAMPLE_LIMIT=0
 
 export KV_METHOD="sparsekv"
-export BUDGET=0.4
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -27,5 +27,5 @@ conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
 python code/qwen2.5_kespeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/KeSpeech_Results/SparseKV_FFT/budget0.4_win32_ratio0.5_kernel5_poolmax_ketopk24_alpha1_beta1_gamma1_1214 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/KeSpeech_Results/SparseKV_FFT/budget0.4_win32_ratio0.5_kernel5_poolmax_ketopk24_alpha1_beta1_gamma1_1214/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/KeSpeech_Results/SparseKV_FFT/budget0.8_win32_ratio0.5_kernel5_poolmax_ketopk24_alpha1_beta1_gamma1_1215 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/KeSpeech_Results/SparseKV_FFT/budget0.8_win32_ratio0.5_kernel5_poolmax_ketopk24_alpha1_beta1_gamma1_1215/timing_stats.json

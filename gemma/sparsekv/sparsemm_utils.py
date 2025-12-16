@@ -1021,7 +1021,9 @@ class SparseMM():
         else:
             raise ValueError('head_score type not supported')
             
-        head_score_list = torch.tensor(head_score_list / sum(head_score_list))
+        # Convert to tensor first, then normalize
+        head_score_list = torch.tensor(head_score_list, dtype=torch.float32)
+        head_score_list = head_score_list / head_score_list.sum()
         # GQA support
         self.score = head_score_list.view(self.num_hidden_layers, self.num_attention_heads//self.num_key_value_groups, self.num_key_value_groups)
         self.score = self.score.sum(dim=-1)
