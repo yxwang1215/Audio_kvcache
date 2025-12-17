@@ -1,16 +1,16 @@
 #!/bin/bash
 # LibriSpeech-long ASR Evaluation with Gemma-3n-E2B-it
 
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=2
 export MODEL_PATH="/mnt/public/models/gemma-3n-E2B-it"
 export SAMPLE_LIMIT=0
 
-# export KV_METHOD="adakv"
+# export KV_METHOD="pyramidkv"
 export KV_METHOD="mixkv"
 export SELECT_METHOD="headwisemixkv"
 export METHOD="mixsparsemm"
 export USE_SPARSEKV="true"
-export BUDGET=0.99
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -30,6 +30,6 @@ conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/gemma/sparsekv_fft_dataset && \
 python code/gemma_librispeech_long.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/LibriSpeech_long/PyramidKV/budget0.8 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/LibriSpeech_long/PyramidKV/budget0.8/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/LibriSpeech_long/SnapKV/budget0.8 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/LibriSpeech_long/SnapKV/budget0.8/timing_stats.json
 

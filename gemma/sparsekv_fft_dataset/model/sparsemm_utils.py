@@ -727,7 +727,21 @@ class SnapKVCluster():
                       f"q_len={q_len}, max_capacity_prompt={self.max_capacity_prompt}", flush=True)
             return origin_key_states, origin_value_states
         else:
-            attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(head_dim)
+            # CRITICAL FIX for Gemma3n: Use scaling=1.0 instead of 1/sqrt(head_dim)
+            # Gemma3n already normalizes Q and K via q_norm and k_norm (RMSNorm),
+            # so the attention computation uses scaling=1.0 (see modeling_gemma3n.py)
+            # Using 1/sqrt(head_dim) here would cause attention scores to be too small,
+            # resulting in nearly uniform attention weights and incorrect token selection.
+            # CRITICAL FIX: Default to True for Gemma3n models (consistent with AdaKVCluster)
+            # Gemma3n uses scaling=1.0 because Q and K are already normalized via q_norm and k_norm
+            use_gemma_scaling = getattr(self.config, 'use_gemma_scaling', True) if self.config is not None else True
+            
+            if use_gemma_scaling:
+                # Gemma3n uses scaling=1.0 because Q and K are already normalized
+                attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3))
+            else:
+                # Standard scaling for other models
+                attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(head_dim)
             mask = torch.full((self.window_size, self.window_size), torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
             mask_cond = torch.arange(mask.size(-1), device=attn_weights.device)
             mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
@@ -828,8 +842,22 @@ class AdaKVCluster():
 
     def calcul_attn_sore(self, key_states, query_states):
         bsz, num_heads, q_len, head_dim = query_states.shape
-        attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(
-            head_dim)
+        # CRITICAL FIX for Gemma3n: Use scaling=1.0 instead of 1/sqrt(head_dim)
+        # Gemma3n already normalizes Q and K via q_norm and k_norm (RMSNorm),
+        # so the attention computation uses scaling=1.0 (see modeling_gemma3n.py line 1402, 1868, etc.)
+        # Using 1/sqrt(head_dim) here would cause attention scores to be too small,
+        # resulting in nearly uniform attention weights and incorrect token selection.
+        # 
+        # CRITICAL FIX: Default to True for Gemma3n models (consistent with SnapKVCluster)
+        # Gemma3n uses scaling=1.0 because Q and K are already normalized via q_norm and k_norm
+        use_gemma_scaling = getattr(self.config, 'use_gemma_scaling', True) if self.config is not None else True
+        
+        if use_gemma_scaling:
+            # Gemma3n uses scaling=1.0 because Q and K are already normalized
+            attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3))
+        else:
+            # Standard scaling for other models
+            attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(head_dim)
         mask = torch.full((self.window_size, self.window_size), torch.finfo(attn_weights.dtype).min,
                           device=attn_weights.device)
         mask_cond = torch.arange(mask.size(-1), device=attn_weights.device)
@@ -1604,6 +1632,15 @@ def init_snapkv(self):
         # Support select_method for mixkv scoring on SnapKV base
         if not hasattr(self.config, 'select_method'):
             self.config.select_method = os.getenv('SELECT_METHOD', None)  # None means use original SnapKV
+        # CRITICAL: Set use_gemma_scaling for Gemma3n models
+        # Gemma3n uses scaling=1.0 in attention because Q and K are already normalized via q_norm and k_norm
+        # This flag tells SnapKVCluster.update_kv() to use the correct scaling
+        if not hasattr(self.config, 'use_gemma_scaling'):
+            # Auto-detect Gemma models by model_type
+            if hasattr(self.config, 'model_type') and 'gemma' in self.config.model_type.lower():
+                self.config.use_gemma_scaling = True
+            else:
+                self.config.use_gemma_scaling = False
 
     if not hasattr(self, "kv_cluster"):
         self.kv_cluster = SnapKVCluster(
@@ -1656,6 +1693,15 @@ def init_adakv(self):
         # Support select_method for mixkv scoring on AdaKV base
         if not hasattr(self.config, 'select_method'):
             self.config.select_method = os.getenv('SELECT_METHOD', None)  # None means use original AdaKV
+        # CRITICAL: Set use_gemma_scaling for Gemma3n models
+        # Gemma3n uses scaling=1.0 in attention because Q and K are already normalized via q_norm and k_norm
+        # This flag tells AdaKVCluster.calcul_attn_sore() to use the correct scaling
+        if not hasattr(self.config, 'use_gemma_scaling'):
+            # Auto-detect Gemma models by model_type
+            if hasattr(self.config, 'model_type') and 'gemma' in self.config.model_type.lower():
+                self.config.use_gemma_scaling = True
+            else:
+                self.config.use_gemma_scaling = False
 
     if not hasattr(self, "kv_cluster"):
         self.kv_cluster = AdaKVCluster(

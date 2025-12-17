@@ -1880,9 +1880,17 @@ class Gemma3nTextAttentionSnapKV(Gemma3nTextAttention):
     Gemma3n text attention module with SnapKV integration.
     SnapKV selects important tokens based on attention patterns with pooling.
     
-    Following Qwen's implementation pattern:
-    - Prefill: compress KV and store to cache, but use original KV for attention
-    - Decode: use variable-length flash attention with compressed KV from cache
+    Unlike AdaKV/SparseMM, SnapKV uses uniform compression across all heads,
+    so we can use standard DynamicCache with 4D tensors instead of 
+    DynamicCacheSplitHeadFlatten with variable-length attention.
+    
+    IMPORTANT: This class properly handles Gemma3n's KV sharing mechanism:
+    - is_kv_shared_layer: Some layers reuse KV from previous layers
+    - store_full_length_kv: Some layers store full KV for later sharing
+    
+    Implementation pattern:
+    - Prefill: compress KV and store to cache, use original KV for attention
+    - Decode: use standard attention with compressed KV from cache (all heads same length)
     """
 
     def __init__(self, *args, **kwargs):
@@ -1908,87 +1916,88 @@ class Gemma3nTextAttentionSnapKV(Gemma3nTextAttention):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_norm(key_states)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-        key_states = key_states.transpose(1, 2)
+        # CRITICAL: Handle KV shared layers (Gemma3n specific)
+        # For layers with shared KV, reuse KV from previous non-shared layer
+        if self.is_kv_shared_layer and past_key_values is not None:
+            if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                key_states = key_states.to(query_states.device)
+                value_states = value_states.to(query_states.device)
+            else:
+                # Fallback: compute KV normally if shared layer data not available
+                key_states = self.k_proj(hidden_states).view(hidden_shape)
+                key_states = self.k_norm(key_states)
+                key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+                key_states = key_states.transpose(1, 2)
 
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_norm(value_states)
-        value_states = value_states.transpose(1, 2)
+                value_states = self.v_proj(hidden_states).view(hidden_shape)
+                value_states = self.v_norm(value_states)
+                value_states = value_states.transpose(1, 2)
+        else:
+            key_states = self.k_proj(hidden_states).view(hidden_shape)
+            key_states = self.k_norm(key_states)
+            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+            key_states = key_states.transpose(1, 2)
+
+            value_states = self.v_proj(hidden_states).view(hidden_shape)
+            value_states = self.v_norm(value_states)
+            value_states = value_states.transpose(1, 2)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
         num_kv_heads = self.config.num_key_value_heads
-        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
-
-        # Initialize SnapKV cluster
-        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
-            init_snapkv(self)
+        
+        # Initialize SnapKV cluster (only for non-shared layers)
+        if not self.is_kv_shared_layer:
+            if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+                init_snapkv(self)
 
         is_prefill = q_len != 1
 
+        # Save original KV for attention computation (before any compression)
+        key_states_for_attn = key_states
+        value_states_for_attn = value_states
+
         if past_key_values is not None:
-            if is_prefill:
-                # Prefill phase: compress KV and store to cache
-                # Following Qwen's pattern: compress for cache, use original for attention
-                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
-                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
-                
-                # Use original (uncompressed) KV for attention computation during prefill
-                key_states_attn = key_states
-                value_states_attn = value_states
-            else:
-                # Decode phase: use variable-length flash attention with compressed KV
-                device = key_states.device
-                
-                # Initialize head metadata if needed - get actual length from cache
-                if getattr(self.kv_cluster, 'head_lens', None) is None:
-                    # Get actual KV length from cache (prefill already stored compressed KV)
-                    cache_key = past_key_values.key_cache[self.layer_idx]
-                    total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
-                    head_len = total_cache_len // num_kv_heads  # Each head has same length for SnapKV
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "cache_position": cache_position,
+                "sliding_window": self.sliding_window,
+            }
+            
+            # IMPORTANT: For layers that provide KV for sharing, store full-length KV BEFORE compression
+            # This must be done before compression so shared layers get the full uncompressed KV
+            if self.store_full_length_kv and is_prefill:
+                if not hasattr(past_key_values, "shared_layers"):
+                    past_key_values.shared_layers = {}
+                # Store full-length KV for sharing before any compression
+                past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+            
+            # Only update cache for non-shared layers
+            if not self.is_kv_shared_layer:
+                if is_prefill:
+                    # Prefill phase: compress KV and store to cache
+                    # CRITICAL: Store compressed KV to cache, but use ORIGINAL KV for attention
+                    key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                     
-                    self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
-                    self.kv_cluster.klen_sum = total_cache_len
-                    self.kv_cluster.max_seqlen_k = head_len
-                    self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
-                    self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
-                    self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                    # Store compressed KV to cache (for future decode steps)
+                    past_key_values.update(
+                        key_states_compress, value_states_compress, self.layer_idx, cache_kwargs
+                    )
+                    # key_states_for_attn and value_states_for_attn remain as original (uncompressed)
+                else:
+                    # Decode phase: update cache with new token and use cached KV for attention
+                    key_states_for_attn, value_states_for_attn = past_key_values.update(
+                        key_states, value_states, self.layer_idx, cache_kwargs
+                    )
+            
+            # For decode phase, update shared_layers with cached KV (includes new tokens)
+            if self.store_full_length_kv and not is_prefill:
+                if not hasattr(past_key_values, "shared_layers"):
+                    past_key_values.shared_layers = {}
+                past_key_values.shared_layers[self.layer_idx] = key_states_for_attn, value_states_for_attn
 
-                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
-                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
-                key_states_updated, value_states_updated = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-                # Update metadata for next decode step
-                self.kv_cluster.klen_sum += num_kv_heads
-                self.kv_cluster.max_seqlen_k += 1
-                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
-                self.kv_cluster.head_lens.add_(1)
-
-                # Use sparsemm_flash_attn_varlen_func for variable-length attention
-                num_key_value_groups = num_heads // num_kv_heads
-                query_states_varlen = query_states.view(-1, num_key_value_groups, head_dim)
-                key_states_varlen = key_states_updated.view(-1, 1, head_dim)
-                value_states_varlen = value_states_updated.view(-1, 1, head_dim)
-
-                # CRITICAL: Gemma uses scaling=1.0 because Q and K are already normalized
-                # by q_norm and k_norm. We must pass softmax_scale=1.0 to match this behavior.
-                attn_output = sparsemm_flash_attn_varlen_func(
-                    query_states_varlen, key_states_varlen, value_states_varlen,
-                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
-                    1, self.kv_cluster.max_seqlen_k, causal=True,
-                    softmax_scale=1.0
-                )
-                attn_output = attn_output.reshape(bsz, num_heads, q_len, head_dim)
-                attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
-                attn_output = self.o_proj(attn_output)
-                return attn_output, None
-        else:
-            # No cache - use original KV
-            key_states_attn = key_states
-            value_states_attn = value_states
-
-        # Standard attention for prefill (or no cache case)
+        # Standard attention - use key_states_for_attn and value_states_for_attn
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
@@ -1996,8 +2005,8 @@ class Gemma3nTextAttentionSnapKV(Gemma3nTextAttention):
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
-            key_states_attn,
-            value_states_attn,
+            key_states_for_attn,
+            value_states_for_attn,
             attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=1.0,
@@ -2043,28 +2052,84 @@ class Gemma3nTextAttentionAdaKV(Gemma3nTextAttention):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_norm(key_states)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-        key_states = key_states.transpose(1, 2)
+        # CRITICAL: Handle KV shared layers (Gemma3n specific)
+        # For layers with shared KV, reuse KV from previous non-shared layer
+        if self.is_kv_shared_layer and past_key_values is not None:
+            if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                key_states = key_states.to(query_states.device)
+                value_states = value_states.to(query_states.device)
+            else:
+                # Fallback: compute KV normally if shared layer data not available
+                key_states = self.k_proj(hidden_states).view(hidden_shape)
+                key_states = self.k_norm(key_states)
+                key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+                key_states = key_states.transpose(1, 2)
 
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_norm(value_states)
-        value_states = value_states.transpose(1, 2)
+                value_states = self.v_proj(hidden_states).view(hidden_shape)
+                value_states = self.v_norm(value_states)
+                value_states = value_states.transpose(1, 2)
+        else:
+            key_states = self.k_proj(hidden_states).view(hidden_shape)
+            key_states = self.k_norm(key_states)
+            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+            key_states = key_states.transpose(1, 2)
+
+            value_states = self.v_proj(hidden_states).view(hidden_shape)
+            value_states = self.v_norm(value_states)
+            value_states = value_states.transpose(1, 2)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
         num_kv_heads = self.config.num_key_value_heads
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
 
-        # Initialize AdaKV cluster
-        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
-            init_adakv(self)
+        # Initialize AdaKV cluster (only for non-shared layers)
+        if not self.is_kv_shared_layer:
+            if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+                init_adakv(self)
 
         is_prefill = q_len != 1
 
-        if past_key_values is not None:
-            if is_prefill:
-                # Prefill phase: compress KV and store to cache
+        # Check for DynamicCacheSplitHeadFlatten - use both isinstance and class name check
+        # to handle cases where the class is imported from different modules
+        is_split_head_flatten_cache = (
+            past_key_values is not None and (
+                isinstance(past_key_values, DynamicCacheSplitHeadFlatten) or
+                type(past_key_values).__name__ == "DynamicCacheSplitHeadFlatten"
+            )
+        )
+
+        if is_split_head_flatten_cache:
+            # IMPORTANT: Handle KV shared layers properly with AdaKV
+            # KV shared layers reuse KV from previous layers (store_full_length_kv layers)
+            if self.is_kv_shared_layer:
+                # For KV shared layers:
+                # - Prefill: use shared_layers KV (already set above)
+                # - Decode: need to get updated shared_layers KV which includes new tokens
+                
+                if not is_prefill:
+                    # DECODE PHASE for KV shared layers
+                    if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                        key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                        key_states = key_states.to(query_states.device)
+                        value_states = value_states.to(query_states.device)
+                
+                # Repeat KV for GQA and set key_states_attn/value_states_attn for attention computation
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                # Skip AdaKV processing - use standard attention below
+            elif is_prefill:
+                # PREFILL PHASE for non-shared layers
+                
+                # IMPORTANT: For layers that provide KV for sharing, store full-length KV BEFORE compression
+                # This must be done before compression so shared layers get the full uncompressed KV
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    # Store full-length KV for sharing before any compression
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                # Compress KV and store to cache
                 # Following Qwen's pattern: compress for cache, use original for attention
                 
                 # CRITICAL FIX: If budget is a ratio, dynamically adjust base_capacity before compression
@@ -2101,18 +2166,78 @@ class Gemma3nTextAttentionAdaKV(Gemma3nTextAttention):
                 # Decode phase: use variable-length flash attention with compressed KV
                 device = key_states.device
                 
-                # Initialize head metadata if needed
-                if self.kv_cluster.head_lens is None:
-                    self.kv_cluster.head_lens = torch.zeros(num_kv_heads, dtype=torch.int32, device=device)
-                    self.kv_cluster.klen_sum = 0
-                    self.kv_cluster.max_seqlen_k = 0
-                    self.kv_cluster.cu_klen = torch.zeros(num_kv_heads + 1, dtype=torch.int32, device=device)
-                    self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
-                    self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
-
-                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
-                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                # CRITICAL FIX: head_lens should have been initialized during prefill phase.
+                # If it's None here, something went wrong. We should not initialize to zeros
+                # as that would break attention computation (all heads would have length 0).
+                is_first_init = (self.kv_cluster.head_lens is None)
+                if is_first_init:
+                    # This should not happen if prefill phase worked correctly.
+                    # As a safety measure, we'll raise an error to catch the issue early.
+                    raise RuntimeError(
+                        f"[AdaKV ERROR] head_lens is None in decode phase for layer {self.layer_idx}. "
+                        "This indicates prefill phase did not properly initialize AdaKV state. "
+                        "Please check that prefill phase completed successfully."
+                    )
+                else:
+                    # Ensure tensors are on the correct device
+                    if self.kv_cluster.head_lens.device != device:
+                        self.kv_cluster.head_lens = self.kv_cluster.head_lens.to(device)
+                    if isinstance(self.kv_cluster.cu_qlen, torch.Tensor) and self.kv_cluster.cu_qlen.device != device:
+                        self.kv_cluster.cu_qlen = self.kv_cluster.cu_qlen.to(device)
+                    elif self.kv_cluster.cu_qlen is None:
+                        self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                    if self.kv_cluster.cu_offset is None:
+                        self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                    elif isinstance(self.kv_cluster.cu_offset, torch.Tensor) and self.kv_cluster.cu_offset.device != device:
+                        self.kv_cluster.cu_offset = self.kv_cluster.cu_offset.to(device)
+                    if not isinstance(self.kv_cluster.cu_klen, torch.Tensor):
+                        if self.kv_cluster.head_lens is not None:
+                            self.kv_cluster.cu_headlens = torch.cumsum(
+                                self.kv_cluster.head_lens, dim=0, dtype=torch.int32
+                            )
+                            self.kv_cluster.cu_klen = self.kv_cluster.cu_headlens - self.kv_cluster.head_lens
+                            self.kv_cluster.cu_klen = torch.cat(
+                                [
+                                    self.kv_cluster.cu_klen,
+                                    torch.tensor([self.kv_cluster.klen_sum], dtype=torch.int32, device=device),
+                                ],
+                                dim=0,
+                            )
+                        else:
+                            self.kv_cluster.cu_klen = torch.zeros(num_kv_heads + 1, dtype=torch.int32, device=device)
+                    elif self.kv_cluster.cu_klen.device != device:
+                        self.kv_cluster.cu_klen = self.kv_cluster.cu_klen.to(device)
+                
+                # Set cache_kwargs if head_lens and cu_klen are valid tensors
+                if (self.kv_cluster.head_lens is not None and 
+                    self.kv_cluster.cu_klen is not None and
+                    isinstance(self.kv_cluster.head_lens, torch.Tensor) and
+                    isinstance(self.kv_cluster.cu_klen, torch.Tensor)):
+                    cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                    cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                
                 key_states_updated, value_states_updated = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+                # CRITICAL FIX: Update shared_layers in decode phase for store_full_length_kv layers
+                # This ensures KV shared layers can see newly generated tokens
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    
+                    # Get existing KV from shared_layers (from prefill phase)
+                    if self.layer_idx in past_key_values.shared_layers:
+                        prev_key, prev_value = past_key_values.shared_layers[self.layer_idx]
+                        prev_key = prev_key.to(key_states.device)
+                        prev_value = prev_value.to(value_states.device)
+                        # Append new token's KV to existing KV
+                        # key_states shape: [bsz, num_kv_heads, 1, head_dim]
+                        # prev_key shape: [bsz, num_kv_heads, prev_seq_len, head_dim]
+                        updated_key = torch.cat([prev_key, key_states], dim=2)
+                        updated_value = torch.cat([prev_value, value_states], dim=2)
+                        past_key_values.shared_layers[self.layer_idx] = (updated_key, updated_value)
+                    else:
+                        # First time in decode phase (shouldn't happen if prefill ran correctly)
+                        past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
 
                 # Update metadata for next decode step
                 self.kv_cluster.klen_sum += num_kv_heads
@@ -2139,8 +2264,28 @@ class Gemma3nTextAttentionAdaKV(Gemma3nTextAttention):
                 attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
                 attn_output = self.o_proj(attn_output)
                 return attn_output, None
+        elif past_key_values is not None and not is_split_head_flatten_cache:
+            # Fallback: use standard DynamicCache with standard attention
+            # NOTE: This branch is ONLY for standard DynamicCache, NOT for DynamicCacheSplitHeadFlatten
+            # DynamicCacheSplitHeadFlatten returns 2D tensors which are incompatible with repeat_kv
+            # Update cache with current KV states
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+            # Some custom cache implementations (e.g. AdaKV / SplitHeadFlatten variants)
+            # may still return flattened 2D tensors here. In that case, repeat_kv (which
+            # expects [batch, num_kv_heads, seqlen, head_dim]) will crash with a shape
+            # unpack error. To be robust, only apply repeat_kv when we indeed receive 4D
+            # tensors, otherwise fall back to using the cache output directly.
+            if key_states.dim() == 4 and value_states.dim() == 4:
+                # Repeat KV for GQA
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            else:
+                # Already flattened / incompatible with repeat_kv; use as-is
+                key_states_attn = key_states
+                value_states_attn = value_states
         else:
-            # No cache - use original KV
+            # No cache or DynamicCacheSplitHeadFlatten that wasn't handled above - use original KV
             key_states_attn = key_states
             value_states_attn = value_states
 
@@ -2199,28 +2344,78 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_norm(key_states)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-        key_states = key_states.transpose(1, 2)
+        # CRITICAL: Handle KV shared layers (Gemma3n specific)
+        # For layers with shared KV, reuse KV from previous non-shared layer
+        if self.is_kv_shared_layer and past_key_values is not None:
+            if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                key_states = key_states.to(query_states.device)
+                value_states = value_states.to(query_states.device)
+            else:
+                # Fallback: compute KV normally if shared layer data not available
+                key_states = self.k_proj(hidden_states).view(hidden_shape)
+                key_states = self.k_norm(key_states)
+                key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+                key_states = key_states.transpose(1, 2)
 
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_norm(value_states)
-        value_states = value_states.transpose(1, 2)
+                value_states = self.v_proj(hidden_states).view(hidden_shape)
+                value_states = self.v_norm(value_states)
+                value_states = value_states.transpose(1, 2)
+        else:
+            key_states = self.k_proj(hidden_states).view(hidden_shape)
+            key_states = self.k_norm(key_states)
+            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+            key_states = key_states.transpose(1, 2)
+
+            value_states = self.v_proj(hidden_states).view(hidden_shape)
+            value_states = self.v_norm(value_states)
+            value_states = value_states.transpose(1, 2)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
         num_kv_heads = self.config.num_key_value_heads
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
 
-        # Initialize PyramidKV cluster
-        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
-            init_pyramidkv(self)
+        # Initialize PyramidKV cluster (only for non-shared layers)
+        if not self.is_kv_shared_layer:
+            if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+                init_pyramidkv(self)
 
         is_prefill = q_len != 1
 
-        if past_key_values is not None:
-            if is_prefill:
-                # Prefill phase: compress KV and store to cache
+        # Check for DynamicCacheSplitHeadFlatten - use both isinstance and class name check
+        # to handle cases where the class is imported from different modules
+        is_split_head_flatten_cache = (
+            past_key_values is not None and (
+                isinstance(past_key_values, DynamicCacheSplitHeadFlatten) or
+                type(past_key_values).__name__ == "DynamicCacheSplitHeadFlatten"
+            )
+        )
+
+        if is_split_head_flatten_cache:
+            # IMPORTANT: Handle KV shared layers properly with PyramidKV
+            if self.is_kv_shared_layer:
+                # For KV shared layers: use shared_layers KV directly
+                if not is_prefill:
+                    # DECODE PHASE for KV shared layers
+                    if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                        key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                        key_states = key_states.to(query_states.device)
+                        value_states = value_states.to(query_states.device)
+                
+                # Repeat KV for GQA and set key_states_attn/value_states_attn for attention computation
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                # Skip PyramidKV processing - use standard attention below
+            elif is_prefill:
+                # PREFILL PHASE for non-shared layers
+                
+                # IMPORTANT: For layers that provide KV for sharing, store full-length KV BEFORE compression
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                # Compress KV and store to cache
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
                 
@@ -2228,7 +2423,7 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
                 key_states_attn = key_states
                 value_states_attn = value_states
             else:
-                # Decode phase: use variable-length flash attention with compressed KV
+                # DECODE PHASE for non-shared layers
                 device = key_states.device
                 
                 # Initialize head metadata if needed - get actual length from cache
@@ -2247,6 +2442,20 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
                 cache_kwargs["head_lens"] = self.kv_cluster.head_lens
                 cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
                 key_states_updated, value_states_updated = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+                # CRITICAL FIX: Update shared_layers in decode phase for store_full_length_kv layers
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    if self.layer_idx in past_key_values.shared_layers:
+                        prev_key, prev_value = past_key_values.shared_layers[self.layer_idx]
+                        prev_key = prev_key.to(key_states.device)
+                        prev_value = prev_value.to(value_states.device)
+                        updated_key = torch.cat([prev_key, key_states], dim=2)
+                        updated_value = torch.cat([prev_value, value_states], dim=2)
+                        past_key_values.shared_layers[self.layer_idx] = (updated_key, updated_value)
+                    else:
+                        past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
 
                 self.kv_cluster.klen_sum += num_kv_heads
                 self.kv_cluster.max_seqlen_k += 1
@@ -2270,7 +2479,15 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
                 attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
                 attn_output = self.o_proj(attn_output)
                 return attn_output, None
+        elif past_key_values is not None and not is_split_head_flatten_cache:
+            # Fallback: use standard DynamicCache with standard attention
+            # NOTE: This branch is ONLY for standard DynamicCache, NOT for DynamicCacheSplitHeadFlatten
+            # DynamicCacheSplitHeadFlatten returns 2D tensors which are incompatible with repeat_kv
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
         else:
+            # No cache or DynamicCacheSplitHeadFlatten that wasn't handled above - use original KV
             key_states_attn = key_states
             value_states_attn = value_states
 
@@ -2329,29 +2546,76 @@ class Gemma3nTextAttentionMixKV(Gemma3nTextAttention):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_norm(key_states)
-        key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
-        key_states = key_states.transpose(1, 2)
+        # CRITICAL: Handle KV shared layers (Gemma3n specific)
+        # For layers with shared KV, reuse KV from previous non-shared layer
+        if self.is_kv_shared_layer and past_key_values is not None:
+            if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                key_states = key_states.to(query_states.device)
+                value_states = value_states.to(query_states.device)
+            else:
+                # Fallback: compute KV normally if shared layer data not available
+                key_states = self.k_proj(hidden_states).view(hidden_shape)
+                key_states = self.k_norm(key_states)
+                key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+                key_states = key_states.transpose(1, 2)
 
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_norm(value_states)
-        value_states = value_states.transpose(1, 2)
+                value_states = self.v_proj(hidden_states).view(hidden_shape)
+                value_states = self.v_norm(value_states)
+                value_states = value_states.transpose(1, 2)
+        else:
+            key_states = self.k_proj(hidden_states).view(hidden_shape)
+            key_states = self.k_norm(key_states)
+            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+            key_states = key_states.transpose(1, 2)
+
+            value_states = self.v_proj(hidden_states).view(hidden_shape)
+            value_states = self.v_norm(value_states)
+            value_states = value_states.transpose(1, 2)
 
         bsz, num_heads, q_len, head_dim = query_states.shape
         num_kv_heads = self.config.num_key_value_heads
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
 
-        # Initialize MixKV cluster
-        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
-            init_mixkv(self)
+        # Initialize MixKV cluster (only for non-shared layers)
+        if not self.is_kv_shared_layer:
+            if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+                init_mixkv(self)
 
         is_prefill = q_len != 1
 
-        if past_key_values is not None:
-            if is_prefill:
-                # Prefill phase: compress KV and store to cache
-                # Following Qwen's pattern: compress for cache, use original for attention
+        # Check for DynamicCacheSplitHeadFlatten - use both isinstance and class name check
+        # to handle cases where the class is imported from different modules
+        is_split_head_flatten_cache = (
+            past_key_values is not None and (
+                isinstance(past_key_values, DynamicCacheSplitHeadFlatten) or
+                type(past_key_values).__name__ == "DynamicCacheSplitHeadFlatten"
+            )
+        )
+
+        if is_split_head_flatten_cache:
+            # IMPORTANT: Handle KV shared layers properly with MixKV
+            if self.is_kv_shared_layer:
+                # For KV shared layers: use shared_layers KV directly
+                if not is_prefill:
+                    # DECODE PHASE for KV shared layers
+                    if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                        key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                        key_states = key_states.to(query_states.device)
+                        value_states = value_states.to(query_states.device)
+                
+                # Repeat KV for GQA and set key_states_attn/value_states_attn for attention computation
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                # Skip MixKV processing - use standard attention below
+            elif is_prefill:
+                # PREFILL PHASE for non-shared layers
+                
+                # IMPORTANT: For layers that provide KV for sharing, store full-length KV BEFORE compression
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
                 
                 # CRITICAL FIX: If budget is a ratio, dynamically adjust max_capacity_prompt before compression
                 # This matches AdaKV's implementation to ensure budget_ratio is correctly applied
@@ -2404,6 +2668,20 @@ class Gemma3nTextAttentionMixKV(Gemma3nTextAttention):
                 cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
                 key_states_updated, value_states_updated = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+                # CRITICAL FIX: Update shared_layers in decode phase for store_full_length_kv layers
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    if self.layer_idx in past_key_values.shared_layers:
+                        prev_key, prev_value = past_key_values.shared_layers[self.layer_idx]
+                        prev_key = prev_key.to(key_states.device)
+                        prev_value = prev_value.to(value_states.device)
+                        updated_key = torch.cat([prev_key, key_states], dim=2)
+                        updated_value = torch.cat([prev_value, value_states], dim=2)
+                        past_key_values.shared_layers[self.layer_idx] = (updated_key, updated_value)
+                    else:
+                        past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+
                 self.kv_cluster.klen_sum += num_kv_heads
                 self.kv_cluster.max_seqlen_k += 1
                 self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
@@ -2426,7 +2704,15 @@ class Gemma3nTextAttentionMixKV(Gemma3nTextAttention):
                 attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
                 attn_output = self.o_proj(attn_output)
                 return attn_output, None
+        elif past_key_values is not None and not is_split_head_flatten_cache:
+            # Fallback: use standard DynamicCache with standard attention
+            # NOTE: This branch is ONLY for standard DynamicCache, NOT for DynamicCacheSplitHeadFlatten
+            # DynamicCacheSplitHeadFlatten returns 2D tensors which are incompatible with repeat_kv
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
         else:
+            # No cache or DynamicCacheSplitHeadFlatten that wasn't handled above - use original KV
             key_states_attn = key_states
             value_states_attn = value_states
 

@@ -1445,12 +1445,19 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
         generate_kwargs["no_repeat_ngram_size"] = int(NO_REPEAT_NGRAM_SIZE)
     
     # Only create custom cache if needed (for performance optimization)
-    # If SparseMM is enabled, use DynamicCacheSplitHeadFlatten
-    # If budget is set (and not default), use BudgetLimitedKVCache
-    # Otherwise, let model use default cache (fastest)
+    # - SnapKV: uses standard DynamicCache (uniform compression, all heads same length)
+    # - AdaKV/SparseMM/PyramidKV/MixKV: uses DynamicCacheSplitHeadFlatten (variable-length per head)
+    # - If budget is set (and not default), use BudgetLimitedKVCache
+    # - Otherwise, let model use default cache (fastest)
     if sparsem_enabled:
-        # Use DynamicCacheSplitHeadFlatten for SparseMM
-        generate_kwargs["past_key_values"] = DynamicCacheSplitHeadFlatten()
+        # Determine which cache type to use based on KV_METHOD
+        if KV_METHOD == "snapkv":
+            # SnapKV uses standard DynamicCache because all heads have the same compressed length
+            generate_kwargs["past_key_values"] = DynamicCache()
+        else:
+            # AdaKV, SparseMM, PyramidKV, MixKV use DynamicCacheSplitHeadFlatten
+            # because each head may have different number of tokens
+            generate_kwargs["past_key_values"] = DynamicCacheSplitHeadFlatten()
     elif ENV_BUDGET_RAW != "4096" or ENV_BUDGET != 4096.0:
         # Budget is set, use budget-limited cache
         generate_kwargs["past_key_values"] = BudgetLimitedKVCache(budget=ENV_BUDGET, seed=42)

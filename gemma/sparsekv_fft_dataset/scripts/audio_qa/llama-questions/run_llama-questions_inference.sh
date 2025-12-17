@@ -1,17 +1,12 @@
 #!/bin/bash
 # llama-questions 推理脚本
-# 用于生成模型答案
 
 set -e
-
-# =================== 用户配置区 ===================
-export GPU_ID="0"
+export GPU_ID="4"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/gemma-3n-E2B-it}"
 export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/llama_questions_Results/SnapKV/budget0.8}"
 
-# 推理配置
 export SAMPLE_LIMIT=0
-# KV Cache compression method: sparsemm, snapkv, adakv, pyramidkv, mixkv
 export KV_METHOD="sparsekv"
 export USE_SPARSEKV="true"
 export BUDGET=0.8
@@ -19,21 +14,15 @@ export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-# HEAD_SCORE_FILE: for sparsemm method, options: "uniform", "aggregated", or path to head score file
 export HEAD_SCORE_FILE="uniform"
-# HEAD_SCORE_PATH: path to head score JSON file (for sparsemm method)
-# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/head_score/audio_head_scores_aggregated.json"
 export HEAD_SCORE_AGGREGATION="first"
-# export HEAD_SCORE_BATCH=None  # 可选
 
-# FFT 滤波配置（可选）
 # export USE_FFT_FILTER="true"
 # export FFT_FILTER_TYPE="lowpass"
 # export FFT_CUTOFF_RATIO="0.3"
 # export FFT_ALPHA="0.5"
 # export FFT_ADAPTIVE_CUTOFF="true"
 # export FFT_USE_SALIENCY="false"
-# =============================================================
 
 export CUDA_VISIBLE_DEVICES=$GPU_ID
 GREEN='\033[0;32m'

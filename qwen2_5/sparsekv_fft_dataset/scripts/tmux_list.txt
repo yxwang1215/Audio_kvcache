@@ -5,3 +5,7 @@
 7b_libri_snapkv 17300
 7b_libri_adakv 17300
 7b_libri_pyramidkv 17300
+
+3b_kespeech_adakv: 1 windows (created Wed Dec 17 10:04:20 2025)
+3b_kespeech_pyramidkv: 1 windows (created Wed Dec 17 10:07:35 2025)
+3b_kespeech_snapkv: 1 windows (created Wed Dec 17 10:02:58 2025)

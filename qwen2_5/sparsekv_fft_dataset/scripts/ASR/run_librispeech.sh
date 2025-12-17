@@ -5,8 +5,8 @@ export CUDA_VISIBLE_DEVICES=6
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-7B"
 export SAMPLE_LIMIT=0
 
-# export KV_METHOD="sparsekv"
-export KV_METHOD="pyramidkv"
+export KV_METHOD="adakv"
+# export KV_METHOD="pyramidkv"
 # export KV_METHOD="mixkv"
 # export METHOD="mixsparsemm"
 # export SELECT_METHOD="headwisemixkv"

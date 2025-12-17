@@ -714,8 +714,21 @@ class AdaKVCluster():
 
     def calcul_attn_sore(self, key_states, query_states):
         bsz, num_heads, q_len, head_dim = query_states.shape
-        attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(
-            head_dim)
+        # CRITICAL FIX for Gemma3n: Use scaling=1.0 instead of 1/sqrt(head_dim)
+        # Gemma3n already normalizes Q and K via q_norm and k_norm (RMSNorm),
+        # so the attention computation uses scaling=1.0 (see modeling_gemma3n.py line 1402, 1868, etc.)
+        # Using 1/sqrt(head_dim) here would cause attention scores to be too small,
+        # resulting in nearly uniform attention weights and incorrect token selection.
+        # 
+        # Check if model is Gemma3n by looking for gemma_scaling config or default to standard scaling
+        use_gemma_scaling = getattr(self.config, 'use_gemma_scaling', True) if hasattr(self, 'config') and self.config is not None else False
+        
+        if use_gemma_scaling:
+            # Gemma3n uses scaling=1.0 because Q and K are already normalized
+            attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3))
+        else:
+            # Standard scaling for other models
+            attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(head_dim)
         mask = torch.full((self.window_size, self.window_size), torch.finfo(attn_weights.dtype).min,
                           device=attn_weights.device)
         mask_cond = torch.arange(mask.size(-1), device=attn_weights.device)
@@ -1444,8 +1457,18 @@ def init_adakv(self):
             self.config.skip = 0
         if not hasattr(self.config,'gqa_func'):
             if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
-                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type or \
+                'gemma' in self.config.model_type:
                 self.config.gqa_func = 'mean'
+        # CRITICAL: Set use_gemma_scaling for Gemma3n models
+        # Gemma3n uses scaling=1.0 in attention because Q and K are already normalized via q_norm and k_norm
+        # This flag tells AdaKVCluster.calcul_attn_sore() to use the correct scaling
+        if not hasattr(self.config, 'use_gemma_scaling'):
+            # Auto-detect Gemma models by model_type
+            if hasattr(self.config, 'model_type') and 'gemma' in self.config.model_type.lower():
+                self.config.use_gemma_scaling = True
+            else:
+                self.config.use_gemma_scaling = False
 
     if not hasattr(self, "kv_cluster"):
         self.kv_cluster = AdaKVCluster(

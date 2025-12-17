@@ -1,7 +1,7 @@
 #!/bin/bash
 # LibriSpeech-long ASR Evaluation with Gemma-3n-E2B-it
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=2
 export MODEL_PATH="/mnt/public/models/gemma-3n-E2B-it"
 export SAMPLE_LIMIT=0
 
@@ -10,12 +10,11 @@ export KV_METHOD="pyramidkv"
 # export SELECT_METHOD="headwisemixkv"
 # export METHOD="mixsparsemm"
 export USE_SPARSEKV="true"
-export BUDGET=0.99
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-# HEAD_SCORE_FILE: for sparsemm method, options: "uniform", "aggregated", or path to head score file
 export HEAD_SCORE_FILE="uniform"
 # HEAD_SCORE_PATH: path to head score JSON file (for sparsemm method)
 # export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/head_score/audio_head_scores_aggregated.json"
