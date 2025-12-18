@@ -256,18 +256,19 @@ def update_sparsemm_budget(model, prefill_token_count):
         The actual budget value used (integer)
     """
     if not ENV_BUDGET_IS_RATIO:
-        # Use absolute budget value, no update needed
-        return int(ENV_BUDGET)
-    
-    # Calculate budget as ratio of prefill tokens
-    budget_ratio = ENV_BUDGET
-    actual_budget = int(prefill_token_count * budget_ratio)
+        # Use absolute budget value, but still need to update it for AdaKV and other methods
+        actual_budget = int(ENV_BUDGET)
+    else:
+        # Calculate budget as ratio of prefill tokens
+        budget_ratio = ENV_BUDGET
+        actual_budget = int(prefill_token_count * budget_ratio)
     
     # Ensure budget is at least window_size to avoid errors
     min_budget = ENV_WINDOW_SIZE + 1
     if actual_budget < min_budget:
         actual_budget = min_budget
-        print(f"[SparseMM] Warning: Calculated budget {int(prefill_token_count * budget_ratio)} is too small, using minimum {min_budget}")
+        if ENV_BUDGET_IS_RATIO:
+            print(f"[SparseMM] Warning: Calculated budget {int(prefill_token_count * ENV_BUDGET)} is too small, using minimum {min_budget}")
     
     # Update budget in all layers
     base_model = model
@@ -283,9 +284,14 @@ def update_sparsemm_budget(model, prefill_token_count):
                     updated_count += 1
                 elif hasattr(kv_cluster, 'base_capacity'):
                     # Fallback for older versions without update_budget method
+                    # For AdaKVCluster, we need to update floor_capacity and adaptive_capacity too
                     kv_cluster.base_capacity = actual_budget - kv_cluster.window_size
                     if kv_cluster.base_capacity <= 0:
                         kv_cluster.base_capacity = 1
+                    # Update floor_capacity and adaptive_capacity if they exist
+                    if hasattr(kv_cluster, 'floor_ratio'):
+                        kv_cluster.floor_capacity = int(kv_cluster.base_capacity * kv_cluster.floor_ratio)
+                        kv_cluster.adaptive_capacity = kv_cluster.base_capacity - kv_cluster.floor_capacity
                     updated_count += 1
                 elif hasattr(kv_cluster, 'max_capacity_prompt'):
                     # Fallback: Direct assignment (should not happen if update_budget exists)
@@ -300,7 +306,10 @@ def update_sparsemm_budget(model, prefill_token_count):
         if hasattr(base_model, 'config'):
             base_model.config.max_capacity_prompt = actual_budget
     
-    print(f"[SparseMM] Updated budget: {prefill_token_count} tokens * {budget_ratio:.2%} = {actual_budget} (base_capacity={actual_budget - ENV_WINDOW_SIZE})")
+    if ENV_BUDGET_IS_RATIO:
+        print(f"[SparseMM] Updated budget: {prefill_token_count} tokens * {ENV_BUDGET:.2%} = {actual_budget} (base_capacity={actual_budget - ENV_WINDOW_SIZE})")
+    else:
+        print(f"[SparseMM] Updated budget: {actual_budget} (absolute value, base_capacity={actual_budget - ENV_WINDOW_SIZE})")
     return actual_budget
 
 def load_audio_head_scores_for_sparsemm(
@@ -2373,8 +2382,9 @@ def main():
             if not audio_detected:
                 model.config.audio_prune_ratio = 0
 
-            # Update SparseMM budget based on prefill token count if budget is a ratio
-            if USE_SPARSEKV and sparsemm_enabled and ENV_BUDGET_IS_RATIO:
+            # Update KV compression budget based on prefill token count
+            # For ratio budgets, calculate based on prefill tokens; for absolute budgets, use the value directly
+            if USE_SPARSEKV and sparsemm_enabled:
                 if hasattr(inputs, 'input_ids'):
                     prefill_token_count = inputs.input_ids.shape[1] if len(inputs.input_ids.shape) > 1 else inputs.input_ids.shape[0]
                     update_sparsemm_budget(model, prefill_token_count)

@@ -1,12 +1,12 @@
 #!/bin/bash
 # Multilingual LibriSpeech ASR Evaluation with Qwen2.5-Omni - Spanish
 
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=6
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
 export SAMPLE_LIMIT=0
 
-export KV_METHOD="sparsekv"
-export BUDGET=0.4
+export KV_METHOD="adakv"
+export BUDGET=0.1
 export RATIO=0.5    
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5

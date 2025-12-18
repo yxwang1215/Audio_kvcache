@@ -1044,6 +1044,89 @@ def init_model():
 
     return processor, model, SPARSEM_ENABLED
 
+def update_sparsemm_budget(model, prefill_token_count):
+    """
+    Update SparseMM/SnapKV/AdaKV/PyramidKV budget for all layers based on prefill token count.
+    If ENV_BUDGET_IS_RATIO is True, calculate budget as ratio of prefill tokens.
+    Otherwise, use the absolute budget value.
+    
+    This function should be called BEFORE each inference when budget is a ratio,
+    to ensure the budget is computed based on actual sequence length.
+    
+    Args:
+        model: The model with KV compression enabled
+        prefill_token_count: Number of tokens in prefill phase
+    
+    Returns:
+        The actual budget value used (integer)
+    """
+    if not ENV_BUDGET_IS_RATIO:
+        # Use absolute budget value, but still need to update it for AdaKV and other methods
+        actual_budget = int(ENV_BUDGET)
+    else:
+        # Calculate budget as ratio of prefill tokens
+        budget_ratio = ENV_BUDGET
+        actual_budget = int(prefill_token_count * budget_ratio)
+    
+    # Ensure budget is at least window_size + 1 to avoid errors
+    min_budget = ENV_WINDOW_SIZE + 1
+    if actual_budget < min_budget:
+        actual_budget = min_budget
+        if ENV_BUDGET_IS_RATIO:
+            print(f"[KVCache] Warning: Calculated budget {int(prefill_token_count * ENV_BUDGET)} is too small, using minimum {min_budget}")
+    
+    # Update budget in all layers
+    try:
+        base_model = model.model.language_model  # Gemma3nTextModel
+        if hasattr(base_model, 'layers'):
+            updated_count = 0
+            total_layers = len(base_model.layers)
+            for layer_idx, layer in enumerate(base_model.layers):
+                has_self_attn = hasattr(layer, 'self_attn')
+                has_kv_cluster = has_self_attn and hasattr(layer.self_attn, 'kv_cluster')
+                if has_self_attn and has_kv_cluster:
+                    kv_cluster = layer.self_attn.kv_cluster
+                    # CRITICAL: Always use update_budget() if available to properly reset pyram_init
+                    # This is essential for PyramidKV and MixKV to recalculate pyramidal capacity
+                    if hasattr(kv_cluster, 'update_budget'):
+                        kv_cluster.update_budget(actual_budget)
+                        updated_count += 1
+                    elif hasattr(kv_cluster, 'base_capacity'):
+                        # Fallback for older versions without update_budget method
+                        # For AdaKVCluster, we need to update floor_capacity and adaptive_capacity too
+                        kv_cluster.base_capacity = actual_budget - kv_cluster.window_size
+                        if kv_cluster.base_capacity <= 0:
+                            kv_cluster.base_capacity = 1
+                        # Update floor_capacity and adaptive_capacity if they exist
+                        if hasattr(kv_cluster, 'floor_ratio'):
+                            kv_cluster.floor_capacity = int(kv_cluster.base_capacity * kv_cluster.floor_ratio)
+                            kv_cluster.adaptive_capacity = kv_cluster.base_capacity - kv_cluster.floor_capacity
+                        updated_count += 1
+                    elif hasattr(kv_cluster, 'max_capacity_prompt'):
+                        # Fallback: Direct assignment (should not happen if update_budget exists)
+                        # For PyramidKV/MixKV, this won't reset pyram_init, so it's not ideal
+                        # But we still update the budget value
+                        kv_cluster.max_capacity_prompt = actual_budget
+                        # Try to reset pyram_init if pyram_mode is enabled
+                        if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
+                            kv_cluster.pyram_init = False
+                        updated_count += 1
+            
+            # Also update model config for consistency
+            if hasattr(base_model, 'config'):
+                base_model.config.max_capacity_prompt = actual_budget
+            
+            if ENV_BUDGET_IS_RATIO:
+                print(f"[KVCache] Updated budget: {prefill_token_count} tokens * {ENV_BUDGET:.2%} = {actual_budget} "
+                      f"(base_capacity={actual_budget - ENV_WINDOW_SIZE}, updated {updated_count}/{total_layers} layers)")
+            else:
+                print(f"[KVCache] Updated budget: {actual_budget} (absolute value, base_capacity={actual_budget - ENV_WINDOW_SIZE}, "
+                      f"updated {updated_count}/{total_layers} layers)")
+    except (AttributeError, KeyError) as e:
+        print(f"[KVCache] Warning: Failed to update budget: {e}")
+    
+    return actual_budget
+
 def _move_to_device_safely(batch, device, float_dtype):
     AUDIO_FLOAT_KEYS = {"input_features"}
     AUDIO_BOOL_INT_KEYS = {"input_features_mask"}
@@ -1266,6 +1349,17 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
         "pad_token_id": processor.tokenizer.pad_token_id,
         "use_cache": True,
     }
+    
+    # Update KV compression budget based on prefill token count
+    # For ratio budgets, calculate based on prefill tokens; for absolute budgets, use the value directly
+    if sparsem_enabled:
+        if hasattr(model_inputs, 'input_ids'):
+            prefill_token_count = model_inputs.input_ids.shape[1] if len(model_inputs.input_ids.shape) > 1 else model_inputs.input_ids.shape[0]
+        elif 'input_ids' in model_inputs:
+            prefill_token_count = model_inputs['input_ids'].shape[1] if len(model_inputs['input_ids'].shape) > 1 else model_inputs['input_ids'].shape[0]
+        else:
+            prefill_token_count = 1024  # Default estimate
+        update_sparsemm_budget(model, prefill_token_count)
     
     if sparsem_enabled:
         # Use DynamicCacheSplitHeadFlatten for SparseMM

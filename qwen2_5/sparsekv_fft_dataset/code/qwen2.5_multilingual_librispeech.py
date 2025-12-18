@@ -359,15 +359,15 @@ def update_sparsemm_budget(model, prefill_token_count):
         The actual budget value used (integer)
     """
     if not ENV_BUDGET_IS_RATIO:
-        # Use absolute budget value, no update needed
-        return int(ENV_BUDGET)
-    
-    # Calculate budget as ratio of prefill tokens
-    budget_ratio = ENV_BUDGET  # Use the actual ENV_BUDGET value (should be 0.99 if set correctly)
-    actual_budget = int(prefill_token_count * budget_ratio)
-    
-    # Debug: Print the actual budget ratio being used
-    print(f"[DEBUG] update_sparsemm_budget: ENV_BUDGET={ENV_BUDGET}, budget_ratio={budget_ratio}, prefill_token_count={prefill_token_count}")
+        # Use absolute budget value, but still need to update it for AdaKV and other methods
+        actual_budget = int(ENV_BUDGET)
+    else:
+        # Calculate budget as ratio of prefill tokens
+        budget_ratio = ENV_BUDGET  # Use the actual ENV_BUDGET value (should be 0.99 if set correctly)
+        actual_budget = int(prefill_token_count * budget_ratio)
+        
+        # Debug: Print the actual budget ratio being used
+        print(f"[DEBUG] update_sparsemm_budget: ENV_BUDGET={ENV_BUDGET}, budget_ratio={budget_ratio}, prefill_token_count={prefill_token_count}")
     
     # Ensure budget is at least window_size to avoid errors
     min_budget = ENV_WINDOW_SIZE + 1
@@ -1433,8 +1433,9 @@ def main():
             if not audio_detected:
                 model.thinker.model.config.audio_prune_ratio = 0
 
-            # Update SparseMM budget based on prefill token count if budget is a ratio
-            if USE_SPARSEKV and sparsemm_enabled and ENV_BUDGET_IS_RATIO:
+            # Update KV compression budget based on prefill token count
+            # For ratio budgets, calculate based on prefill tokens; for absolute budgets, use the value directly
+            if USE_SPARSEKV and sparsemm_enabled:
                 if hasattr(inputs, 'input_ids'):
                     prefill_token_count = inputs.input_ids.shape[1] if len(inputs.input_ids.shape) > 1 else inputs.input_ids.shape[0]
                     update_sparsemm_budget(model, prefill_token_count)
