@@ -10,11 +10,10 @@ CUDA_VISIBLE_DEVICES=5 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache
     --model_path /mnt/public/models/gemma-3n-E4B-it \
     --audio_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/librispeech/output_audio \
     --whisperx_dir /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/librispeech/whisperx_parquet_output \
-    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/results/E4B \
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/results/Gemma_3n_E4B \
     --num_samples 0 \
     --score_threshold 0.95 \
-    --topk 24 \
-    --alpha 1.0 --beta 1.0 --gamma 1.0
+    --topk 16 
 
-echo "E4B analysis complete! Check results/E4B/ for results."
+echo "E4B analysis complete! Check results/Gemma_3n_E4B/ for results."
 

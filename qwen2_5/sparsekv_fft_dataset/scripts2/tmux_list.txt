@@ -16,11 +16,38 @@
 7b_fr_adakv 13100
 7b_fr_pyramidkv 13100
 
-3b_ge_snapkv
-3b_ge_adakv
-3b_ge_pyramidkv 
+3b_ge_snapkv 13100
+3b_ge_adakv 13100
+3b_ge_pyramidkv 13100
 
-7b_ge_snapkv
-7b_ge_adakv 
-7b_ge_pyramidkv 
+7b_ge_snapkv 17100
+7b_ge_adakv  17100
+7b_ge_pyramidkv  17100
 
+3b_sp_snapkv 17100
+3b_sp_adakv 17100
+3b_sp_pyramidkv 17100
+
+3b_chatbot_snapkv 13100
+3b_chatbot_adakv 13100 
+3b_chatbot_pyramidkv 13100
+
+7b_chatbot_snapkv 13100
+7b_chatbot_adakv 13100 
+7b_chatbot_pyramidkv 13100
+
+3b_lla_snapkv 13100
+3b_lla_adakv 13100
+3b_lla_pyramidkv 13100
+
+7b_lla_snapkv 13100
+7b_lla_adakv 13100 
+7b_lla_pyramidkv 13100
+
+3b_tri_snapkv 16900
+3b_tri_adakv 16900
+3b_tri_pyramidkv 16900
+
+7b_tri_snapkv 16900
+7b_tri_adakv 16900 
+7b_tri_pyramidkv 16900

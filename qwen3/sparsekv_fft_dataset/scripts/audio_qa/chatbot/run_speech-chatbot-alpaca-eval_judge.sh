@@ -7,7 +7,7 @@ export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-3}"
 export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}"
 export JUDGE_API_KEY="${JUDGE_API_KEY:-sk-nSeZoIkSf8DGjeO5IvHnZpEc9O0QqeJrUyiJ5Oij55LW4QjF}"  # API Key
 export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}" 
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_chatbot_alpaca_eval_Results/SparseKV/budget0.4}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_chatbot_alpaca_eval_Results/SparseKV_FFT/budget0.6}"
 
 if [ -n "${INFERENCE_OUTPUT_FILE}" ]; then
     # 如果 INFERENCE_OUTPUT_FILE 被显式指定，从它推导 OUTPUT_DIR

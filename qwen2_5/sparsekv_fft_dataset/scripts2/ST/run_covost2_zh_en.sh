@@ -1,18 +1,27 @@
 #!/bin/bash
 # CoVoST2 Chinese-to-English Speech Translation Evaluation with Qwen2.5-Omni
 
-export CUDA_VISIBLE_DEVICES=7
-export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-7B"
+set -e
+
+KV_METHOD=${1:-sparsekv}          # 第1个参数，默认 sparsekv
+BUDGET=${2:-0.8}                  # 第2个参数
+MODEL_SIZE=${3:-7B}               # 第3个参数，默认 7B
+CUDA_VISIBLE_DEVICES=${4:-7}      # 第4个参数，默认 7
+NAME=${5:-SparseKV_FFT}           # 第5个参数，默认 SparseKV_FFT
+
+export CUDA_VISIBLE_DEVICES
+export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-${MODEL_SIZE}"
 export SAMPLE_LIMIT=0
 
-export KV_METHOD="sparsekv"
-export BUDGET=0.8
-export RATIO=0.5    
+export KV_METHOD
+export BUDGET
+
+export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
 # export HEAD_SCORE_FILE="uniform"
-export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_7B/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_${MODEL_SIZE}/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
 
 export USE_FFT_FILTER="true"
 export FFT_FILTER_TYPE="lowpass"
@@ -27,5 +36,5 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_datas
 python code/qwen2.5_covost2.py \
     --direction zh_en \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/CoVoST2/ZH_EN/SparseKV_FFT/lowpass_0.7_alpha0.5/budget0.8_topk24_alpha1_beta1_gamma1_1215 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/CoVoST2/ZH_EN/SparseKV_FFT/lowpass_0.7_alpha0.5/budget0.8_topk24_alpha1_beta1_gamma1_1215/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_${MODEL_SIZE}/datasets/CoVoST2/ZH_EN/${NAME}/budget${BUDGET}_topk24_alpha1_beta1_gamma1_1215 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_${MODEL_SIZE}/datasets/CoVoST2/ZH_EN/${NAME}/budget${BUDGET}_topk24_alpha1_beta1_gamma1_1215/timing_stats.json

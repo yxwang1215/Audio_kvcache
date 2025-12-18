@@ -1442,12 +1442,12 @@ conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=5 python /mnt/users/wangyuxuan-20
     --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/results/qwen2_5_7B/topk24
 
 # 7. 使用不同的topk值进行对比实验
-conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=1 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/word_attention_analysis.py \
+conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=0 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/word_attention_analysis.py \
     --num_samples 0 \
-    --topk 48 \
-    --model_path /mnt/public/models/Qwen2.5-Omni-7B \
+    --topk 8 \
+    --model_path /mnt/public/models/Qwen2.5-Omni-3B \
     --skip_detailed_analysis \
-    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/results/qwen2_5_7B/topk48
+    --output_dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/results/qwen2_5_3B/topk8
 
 conda activate Qwen3_2 && CUDA_VISIBLE_DEVICES=6 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/word_attention_analysis.py \
     --num_samples 0 \

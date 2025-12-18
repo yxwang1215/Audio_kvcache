@@ -2143,6 +2143,9 @@ class Qwen3OmniMoeThinkerTextAttentionMixKV(Qwen3OmniMoeThinkerTextAttention):
         super().__init__(*args, **kwargs)
         self.num_heads = self.config.num_attention_heads
         self.num_key_value_heads = self.config.num_key_value_heads
+        # Note: For qwen3, num_heads * head_dim may differ from config.hidden_size
+        # So we compute the actual attention output size
+        self.attn_output_size = self.num_heads * self.head_dim
 
     @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
@@ -2166,38 +2169,84 @@ class Qwen3OmniMoeThinkerTextAttentionMixKV(Qwen3OmniMoeThinkerTextAttention):
 
         bsz, num_heads, q_len, head_dim = query_states.shape
         cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position} if past_key_values is not None else None
+        
+        is_prefill = q_len != 1
 
         # Initialize MixKV cluster
         if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
             init_mixkv(self)
 
-        if past_key_values is not None:
-            if q_len == 1:  # Decoding
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            else:  # Prefill
+        if is_prefill:
+            # Prefill phase: compress and store, use original for attention
+            if past_key_values is not None:
                 key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
                 past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            # Use original KV for attention computation
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states_attn,
+                value_states_attn,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                sliding_window=self.sliding_window,
+                **kwargs,
+            )
+            attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        else:
+            # Decode phase: use flattened cache with varlen attention
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            # Initialize head metadata if needed - get actual length from cache
+            if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                # Get actual KV length from cache (prefill already stored compressed KV)
+                cache_key = past_key_values.key_cache[self.layer_idx]
+                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                head_len = total_cache_len // num_kv_heads  # Each head has same length for MixKV
+                
+                self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                self.kv_cluster.klen_sum = total_cache_len
+                self.kv_cluster.max_seqlen_k = head_len
+                self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
+            self.kv_cluster.klen_sum += num_kv_heads
+            self.kv_cluster.max_seqlen_k += 1
+            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+            self.kv_cluster.head_lens.add_(1)
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+            key_states = key_states.view(-1, 1, self.head_dim)
+            value_states = value_states.view(-1, 1, self.head_dim)
+
+            if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
+                attn_output = sparsemm_flash_attn_varlen_func(
+                    query_states, key_states, value_states,
+                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                    1, self.kv_cluster.max_seqlen_k, causal=True
+                )
+            else:
+                raise RuntimeError("sparsemm_flash_attn_varlen_func is not available for MixKV decode phase")
+            
+            attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+            attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, self.attn_output_size).contiguous()
+            attn_weights = None
+
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 

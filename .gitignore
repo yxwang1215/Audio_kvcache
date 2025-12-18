@@ -3,6 +3,7 @@ qwen2_5/sparsekv/cache_similarity/cache_similarity_heatmaps
 qwen2_5/sparsekv_fft/results/
 qwen2_5/sparsekv_random/results/
 qwen2_5/sparsekv_fft_dataset/dataset/MMAUPro/qwen2_5/sparsekv_fft_dataset/dataset/MMAUPro
+qwen2_5/sparsekv_fft_dataset/scripts2
 audio_head/gemma/word_attention_results
 # Python cache files
 __pycache__/

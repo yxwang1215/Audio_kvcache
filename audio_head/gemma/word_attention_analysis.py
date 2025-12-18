@@ -127,6 +127,7 @@ class WordAttentionAnalyzer:
         self.generation_attentions = []  # 每个生成步的注意力: List[Dict[(layer, head), tensor]]
         self.generated_token_ids = []  # 生成的 token IDs
         self.is_generating = False  # 标记是否在生成阶段
+        self.current_generation_step = -1  # 当前生成步骤索引（从0开始）
         
         # 统计结果
         self.token_stats = []  # 所有样本的 token 统计
@@ -289,9 +290,6 @@ class WordAttentionAnalyzer:
                 
                 batch_size, seq_len, hidden_dim = hidden_states.shape
                 
-                # 检测是否在生成阶段（seq_len == 1 表示 decode step）
-                is_decode_step = (seq_len == 1)
-                
                 # 初始化 num_heads 和 head_dim
                 if self.num_heads is None:
                     # Gemma3n 的 attention 配置
@@ -299,9 +297,23 @@ class WordAttentionAnalyzer:
                     self.num_heads = config.num_attention_heads
                     self.head_dim = getattr(config, 'head_dim', config.hidden_size // config.num_attention_heads)
                 
-                # 标记生成开始
-                if is_decode_step and not self.is_generating:
+                # 检测是否在生成阶段
+                # seq_len == 1 表示 decode step（生成阶段）
+                # seq_len > 1 表示 prefill 阶段
+                is_decode_step = (seq_len == 1)
+                
+                # 在 prefill 阶段，记录 prefill_length（使用第一个 layer 来记录）
+                if not is_decode_step and layer_idx == 0:
+                    self.prefill_length = seq_len
+                    self.is_generating = False
+                    return output
+                
+                # 标记生成开始（第一个 decode step，layer 0）
+                if is_decode_step and not self.is_generating and layer_idx == 0:
                     self.is_generating = True
+                    self.current_generation_step = 0
+                    # 初始化第一个生成步骤的注意力字典
+                    self.generation_attentions.append({})
                 
                 # 只在生成阶段（decode step）捕获注意力
                 if not is_decode_step or not self.is_generating:
@@ -389,15 +401,23 @@ class WordAttentionAnalyzer:
                     # 保存注意力
                     last_token_attn = attn_weights[0].detach().cpu()  # [num_heads, kv_seq_len]
                     
-                    # 开始新的生成步
-                    if len(self.generation_attentions) == 0:
+                    # 在 layer 0 时，判断是否需要开始新的生成步骤
+                    # 如果当前步骤已经有 layer 0 的注意力，说明这是下一个生成步骤
+                    if layer_idx == 0:
+                        if (self.current_generation_step >= 0 and 
+                            self.current_generation_step < len(self.generation_attentions)):
+                            current_step = self.generation_attentions[self.current_generation_step]
+                            # 检查是否已经有 layer 0 的注意力（任意 head）
+                            has_layer0 = any((0, head_idx) in current_step for head_idx in range(num_heads))
+                            if has_layer0:
+                                # 上一个步骤已完成，开始新步骤
+                                self.current_generation_step += 1
+                    
+                    # 确保有足够的步骤空间
+                    while len(self.generation_attentions) <= self.current_generation_step:
                         self.generation_attentions.append({})
                     
-                    current_step = self.generation_attentions[-1]
-                    # 如果当前步骤已经收集了所有 layer*head，开始新步骤
-                    if len(current_step) >= self.num_layers * num_heads:
-                        self.generation_attentions.append({})
-                        current_step = self.generation_attentions[-1]
+                    current_step = self.generation_attentions[self.current_generation_step]
                     
                     # 保存当前 layer 的注意力
                     for head_idx in range(num_heads):
@@ -407,8 +427,11 @@ class WordAttentionAnalyzer:
                     del last_token_attn, attn_weights, full_key
                     
                 except Exception as e:
-                    # 如果计算失败，静默跳过（可以打开下面的注释来调试）
-                    # print(f"Hook error at layer {layer_idx}: {e}")
+                    # 如果计算失败，记录错误（只在第一个 layer 打印，避免重复）
+                    if layer_idx == 0:
+                        print(f"Warning: Hook error at layer {layer_idx} (step {self.current_generation_step}): {e}")
+                        import traceback
+                        traceback.print_exc()
                     pass
                 
                 return output
@@ -788,6 +811,7 @@ class WordAttentionAnalyzer:
         self.generation_attentions = []
         self.generated_token_ids = []
         self.is_generating = False  # 重置生成标志
+        self.current_generation_step = -1  # 重置生成步骤计数器
         self.prefill_length = 0
         
         # 调试信息：检查初始状态
@@ -872,10 +896,15 @@ class WordAttentionAnalyzer:
         
         for step_idx, (token_id, token_text, word_alignment) in enumerate(token_to_word):
             if step_idx >= len(self.generation_attentions):
-                print(f"Warning: No attention captured for step {step_idx}")
+                print(f"Warning: No attention captured for step {step_idx} (total captured: {len(self.generation_attentions)}, total tokens: {len(token_to_word)})")
                 continue
             
             step_attention = self.generation_attentions[step_idx]
+            
+            # 检查当前步骤的注意力是否完整
+            if len(step_attention) == 0:
+                print(f"Warning: Step {step_idx} has empty attention dict")
+                continue
             
             # 只分析属于高质量单词的 tokens
             if word_alignment is None:
@@ -1466,76 +1495,6 @@ def main():
     
     # 设置模型大小
     analyzer.current_model_size = detected_model_type
-    
-    # ========== 统计所有完整音频（不分片）的音频 tokens 总数 ==========
-    print(f"\n{'='*80}")
-    print(f"Tokenizing all complete audio samples (no chunking) to count total audio tokens...")
-    print(f"{'='*80}")
-    print(f"Note: Each audio file is processed as a complete unit (no splitting/chunking)")
-    print(f"{'='*80}\n")
-    
-    audio_token_stats = []
-    for idx, sample in enumerate(samples, 1):
-        try:
-            sample_id = sample['sample_id']
-            audio_path = sample['audio_path']
-            
-            # 加载完整音频（不分片）
-            audio_np = analyzer.load_audio(audio_path)
-            if audio_np is None:
-                continue
-            
-            # 统计完整音频 tokenize 后的音频 tokens 数量（从头到尾）
-            num_audio_tokens, total_seq_len = analyzer.count_audio_tokens(audio_np)
-            audio_duration = len(audio_np) / 16000
-            
-            audio_token_stats.append({
-                'sample_id': sample_id,
-                'num_audio_tokens': num_audio_tokens,
-                'total_seq_len': total_seq_len,
-                'audio_duration': audio_duration,
-                'tokens_per_second': num_audio_tokens / audio_duration if audio_duration > 0 else 0
-            })
-            
-            if audio_duration > 0:
-                print(f"[{idx}/{len(samples)}] {sample_id}: {num_audio_tokens} audio tokens "
-                      f"(complete audio, duration: {audio_duration:.2f}s, total seq_len: {total_seq_len}, "
-                      f"tokens/s: {num_audio_tokens/audio_duration:.2f})")
-            else:
-                print(f"[{idx}/{len(samples)}] {sample_id}: {num_audio_tokens} audio tokens "
-                      f"(complete audio, duration: {audio_duration:.2f}s, total seq_len: {total_seq_len})")
-            
-        except Exception as e:
-            print(f"Error processing {sample.get('sample_id', 'unknown')}: {e}")
-            import traceback
-            traceback.print_exc()
-            continue
-    
-    # 输出统计摘要 - 强调所有音频从头到尾的总 tokens 数
-    if audio_token_stats:
-        total_audio_tokens = sum(s['num_audio_tokens'] for s in audio_token_stats)
-        avg_audio_tokens = total_audio_tokens / len(audio_token_stats)
-        min_audio_tokens = min(s['num_audio_tokens'] for s in audio_token_stats)
-        max_audio_tokens = max(s['num_audio_tokens'] for s in audio_token_stats)
-        total_duration = sum(s['audio_duration'] for s in audio_token_stats)
-        avg_tokens_per_second = np.mean([s['tokens_per_second'] for s in audio_token_stats if s['tokens_per_second'] > 0])
-        
-        print(f"\n{'='*80}")
-        print(f"Complete Audio Token Statistics (No Chunking):")
-        print(f"{'='*80}")
-        print(f"Total samples processed: {len(audio_token_stats)}")
-        print(f"\n>>> TOTAL AUDIO TOKENS (all complete audios from start to end): {total_audio_tokens} <<<")
-        print(f"    (This is the sum of all audio tokens from all complete audio files)")
-        print(f"\nPer-sample statistics:")
-        print(f"  - Average audio tokens per sample: {avg_audio_tokens:.2f}")
-        print(f"  - Min audio tokens in a sample: {min_audio_tokens}")
-        print(f"  - Max audio tokens in a sample: {max_audio_tokens}")
-        print(f"\nAudio duration statistics:")
-        print(f"  - Total audio duration: {total_duration:.2f}s ({total_duration/60:.2f} minutes)")
-        print(f"  - Average tokens per second: {avg_tokens_per_second:.2f}")
-        print(f"{'='*80}\n")
-    else:
-        print("Warning: No audio token statistics collected!")
     
     # 注册 hooks
     analyzer.register_attention_hooks()

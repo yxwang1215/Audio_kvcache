@@ -1,0 +1,3042 @@
+{
+  "L0_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.28502652780506976,
+    "avg_topk_hits_on_audio": 8.809589310277069,
+    "avg_attn_weight_on_word": 0.010566181062101264,
+    "avg_attn_weight_on_audio": 0.32150789906749483,
+    "avg_attn_ratio": 0.03126576035762463,
+    "median_attn_ratio": 0.013250018137930399,
+    "avg_hit_ratio": 0.01781415798781686,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05134375201744199,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10042367036288348,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L0_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.187463155826292,
+    "avg_topk_hits_on_audio": 2.9044016506189823,
+    "avg_attn_weight_on_word": 0.00945339737270679,
+    "avg_attn_weight_on_audio": 0.13379761834850637,
+    "avg_attn_ratio": 0.031910873853921044,
+    "median_attn_ratio": 0.00406588641599364,
+    "avg_hit_ratio": 0.01171644723914325,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.020841182315920633,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06446850340898493,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L0_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.328257024955787,
+    "avg_topk_hits_on_audio": 10.311849086264493,
+    "avg_attn_weight_on_word": 0.0073603981440665284,
+    "avg_attn_weight_on_audio": 0.19737582145588772,
+    "avg_attn_ratio": 0.030527080417317495,
+    "median_attn_ratio": 0.010664390001678643,
+    "avg_hit_ratio": 0.02051606405973669,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05660662070428724,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10764976518134142,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L0_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.02279426213401454,
+    "avg_topk_hits_on_audio": 0.7328551778345451,
+    "avg_attn_weight_on_word": 0.002366742702618713,
+    "avg_attn_weight_on_audio": 0.061617397830685504,
+    "avg_attn_ratio": 0.02900598772387657,
+    "median_attn_ratio": 0.012169169946046072,
+    "avg_hit_ratio": 0.0014246413833759089,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0020615928146530895,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.03249222192190557,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L0_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.11348005502063274,
+    "avg_topk_hits_on_audio": 2.5357634112792296,
+    "avg_attn_weight_on_word": 0.012567019146014097,
+    "avg_attn_weight_on_audio": 0.3544442220115118,
+    "avg_attn_ratio": 0.027695477088217433,
+    "median_attn_ratio": 0.01248197921393919,
+    "avg_hit_ratio": 0.007092503438789546,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.015575109075700174,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05036308960270715,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L0_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2997641972882688,
+    "avg_topk_hits_on_audio": 9.988897622322657,
+    "avg_attn_weight_on_word": 0.021864551202296374,
+    "avg_attn_weight_on_audio": 0.6874515201186456,
+    "avg_attn_ratio": 0.030768719897703564,
+    "median_attn_ratio": 0.01739872692726667,
+    "avg_hit_ratio": 0.0187352623305168,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05392984506956961,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10343382729778997,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L0_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.1750835134604048,
+    "avg_topk_hits_on_audio": 5.40990371389271,
+    "avg_attn_weight_on_word": 0.007146765700312454,
+    "avg_attn_weight_on_audio": 0.20344765081689323,
+    "avg_attn_ratio": 0.03181238865050058,
+    "median_attn_ratio": 0.012930714770405603,
+    "avg_hit_ratio": 0.0109427195912753,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.030866571345263886,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07362167958703976,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L0_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.27736293967380626,
+    "avg_topk_hits_on_audio": 6.363430929455689,
+    "avg_attn_weight_on_word": 0.018716594846015778,
+    "avg_attn_weight_on_audio": 0.5065234789823134,
+    "avg_attn_ratio": 0.03308449446769074,
+    "median_attn_ratio": 0.011964090145659167,
+    "avg_hit_ratio": 0.01733518372961289,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.040539559670554885,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0909592378678585,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L1_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.21595598349381018,
+    "avg_topk_hits_on_audio": 5.774120652387502,
+    "avg_attn_weight_on_word": 0.017055206154955243,
+    "avg_attn_weight_on_audio": 0.47351022103145823,
+    "avg_attn_ratio": 0.0361416735951524,
+    "median_attn_ratio": 0.013317280330495344,
+    "avg_hit_ratio": 0.013497248968363136,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.03174493447864553,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08138385704216106,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L1_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.016309687561406955,
+    "avg_topk_hits_on_audio": 0.6978777755944193,
+    "avg_attn_weight_on_word": 0.0044902500246867426,
+    "avg_attn_weight_on_audio": 0.16052940739103244,
+    "avg_attn_ratio": 0.026546994382907217,
+    "median_attn_ratio": 0.014551162911774404,
+    "avg_hit_ratio": 0.0010193554725879347,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.001893520126982651,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0294598699824778,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L1_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.030850854784830024,
+    "avg_topk_hits_on_audio": 1.032422872863038,
+    "avg_attn_weight_on_word": 0.0040851643725209495,
+    "avg_attn_weight_on_audio": 0.12624519213782803,
+    "avg_attn_ratio": 0.029199285333185446,
+    "median_attn_ratio": 0.014796549443151195,
+    "avg_hit_ratio": 0.0019281784240518765,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.003585580205703373,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0347130439629407,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L1_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.265769306347023,
+    "avg_topk_hits_on_audio": 6.642758891727254,
+    "avg_attn_weight_on_word": 0.018167620931813004,
+    "avg_attn_weight_on_audio": 0.6433547686262789,
+    "avg_attn_ratio": 0.028765092932598935,
+    "median_attn_ratio": 0.010250984581315022,
+    "avg_hit_ratio": 0.016610581646688938,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.041369537486119934,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0867452120654078,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L1_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.052269601100412656,
+    "avg_topk_hits_on_audio": 3.3211829436038514,
+    "avg_attn_weight_on_word": 0.0011218883276783924,
+    "avg_attn_weight_on_audio": 0.037676951667377015,
+    "avg_attn_ratio": 0.024889740142822508,
+    "median_attn_ratio": 0.011225913949211784,
+    "avg_hit_ratio": 0.003266850068775791,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.011103289573322735,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.039259879784921035,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L1_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.009825112988799371,
+    "avg_topk_hits_on_audio": 0.6114167812929848,
+    "avg_attn_weight_on_word": 0.0007742736171941218,
+    "avg_attn_weight_on_audio": 0.025428118442162462,
+    "avg_attn_ratio": 0.024174391981524806,
+    "median_attn_ratio": 0.010624052491323841,
+    "avg_hit_ratio": 0.0006140695617999607,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0018130819751712957,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.02660154351849606,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L1_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.0437217528001572,
+    "avg_topk_hits_on_audio": 2.2906268422086855,
+    "avg_attn_weight_on_word": 0.007955087268909715,
+    "avg_attn_weight_on_audio": 0.3031540382621188,
+    "avg_attn_ratio": 0.024671241731364736,
+    "median_attn_ratio": 0.010721876705751126,
+    "avg_hit_ratio": 0.002732609550009825,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.005244420667298374,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.03264827194867294,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L1_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.06995480448025153,
+    "avg_topk_hits_on_audio": 2.8625466692866968,
+    "avg_attn_weight_on_word": 0.005113281510987682,
+    "avg_attn_weight_on_audio": 0.14304059739785685,
+    "avg_attn_ratio": 0.02870222875202136,
+    "median_attn_ratio": 0.010723882757680662,
+    "avg_hit_ratio": 0.0043721752800157205,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.008232065905545715,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0413064699375828,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L2_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.021025741796030655,
+    "avg_topk_hits_on_audio": 1.701807820789939,
+    "avg_attn_weight_on_word": 0.005186084846647178,
+    "avg_attn_weight_on_audio": 0.18181075719101264,
+    "avg_attn_ratio": 0.025547478600473697,
+    "median_attn_ratio": 0.009925707988800233,
+    "avg_hit_ratio": 0.001314108862251916,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0015007286464090394,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.028362316109134655,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L2_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.05678915307526036,
+    "avg_topk_hits_on_audio": 1.7408135193554726,
+    "avg_attn_weight_on_word": 0.01126125998936414,
+    "avg_attn_weight_on_audio": 0.3244562249083798,
+    "avg_attn_ratio": 0.03126926811217115,
+    "median_attn_ratio": 0.01883919164823072,
+    "avg_hit_ratio": 0.0035493220672037726,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.005722124636094547,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04054071481546947,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L2_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.008842601689919434,
+    "avg_topk_hits_on_audio": 1.2723521320495186,
+    "avg_attn_weight_on_word": 0.0030891740853463815,
+    "avg_attn_weight_on_audio": 0.11652854705452627,
+    "avg_attn_ratio": 0.02552997149403567,
+    "median_attn_ratio": 0.013791368362059346,
+    "avg_hit_ratio": 0.0005526626056199646,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0010261255344952622,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.027108759634150898,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L2_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.1140695617999607,
+    "avg_topk_hits_on_audio": 3.499606995480448,
+    "avg_attn_weight_on_word": 0.00533748256650157,
+    "avg_attn_weight_on_audio": 0.10610838435892912,
+    "avg_attn_ratio": 0.031072412864979648,
+    "median_attn_ratio": 0.013834883048590433,
+    "avg_hit_ratio": 0.007129347612497543,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.014084631046411814,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.052286391523889,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L2_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.021811750835134605,
+    "avg_topk_hits_on_audio": 1.7066221261544507,
+    "avg_attn_weight_on_word": 0.0011068234291606847,
+    "avg_attn_weight_on_audio": 0.051998217764691455,
+    "avg_attn_ratio": 0.02504048465730134,
+    "median_attn_ratio": 0.009340722046613136,
+    "avg_hit_ratio": 0.0013632344271959128,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0031482854042503587,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.02955200448874761,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L2_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.09461583808213794,
+    "avg_topk_hits_on_audio": 3.4404598152878756,
+    "avg_attn_weight_on_word": 0.004699367430953793,
+    "avg_attn_weight_on_audio": 0.1638704596675686,
+    "avg_attn_ratio": 0.02852980393106163,
+    "median_attn_ratio": 0.011298278335260346,
+    "avg_hit_ratio": 0.0059134898801336214,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.01613176891856083,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05057506272975608,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L2_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.13804283749263116,
+    "avg_topk_hits_on_audio": 6.227844370210257,
+    "avg_attn_weight_on_word": 0.0010938539099888405,
+    "avg_attn_weight_on_audio": 0.03932271367601557,
+    "avg_attn_ratio": 0.025042521317185568,
+    "median_attn_ratio": 0.00791598164356037,
+    "avg_hit_ratio": 0.008627677343289447,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.02124368323877092,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05491388189924593,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L2_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.0359599135390057,
+    "avg_topk_hits_on_audio": 2.357142857142857,
+    "avg_attn_weight_on_word": 0.006322572827152597,
+    "avg_attn_weight_on_audio": 0.21319391223753195,
+    "avg_attn_ratio": 0.02696421173318715,
+    "median_attn_ratio": 0.014863322775868194,
+    "avg_hit_ratio": 0.002247494596187856,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.005162068345629418,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.03437377467500442,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L3_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.053841619178620556,
+    "avg_topk_hits_on_audio": 1.7408135193554726,
+    "avg_attn_weight_on_word": 0.0038448399747653948,
+    "avg_attn_weight_on_audio": 0.11594854683505512,
+    "avg_attn_ratio": 0.031860914062688574,
+    "median_attn_ratio": 0.015472697275480597,
+    "avg_hit_ratio": 0.0033651011986637848,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.007138495642307424,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04236451090365978,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L3_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.051287089801532716,
+    "avg_topk_hits_on_audio": 1.0444095107093732,
+    "avg_attn_weight_on_word": 0.005894824521651389,
+    "avg_attn_weight_on_audio": 0.12912589623983653,
+    "avg_attn_ratio": 0.029586488546846604,
+    "median_attn_ratio": 0.014081952739244685,
+    "avg_hit_ratio": 0.0032054431125957948,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.004391887473501033,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.037183819132943434,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L3_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.09481234034191394,
+    "avg_topk_hits_on_audio": 2.1611318530163097,
+    "avg_attn_weight_on_word": 0.012302107570569959,
+    "avg_attn_weight_on_audio": 0.3619040491522424,
+    "avg_attn_ratio": 0.030672284872530188,
+    "median_attn_ratio": 0.019128943175415115,
+    "avg_hit_ratio": 0.005925771271369621,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.010478655444499392,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.047076711588399205,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L3_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2548634309294557,
+    "avg_topk_hits_on_audio": 5.774415405777167,
+    "avg_attn_weight_on_word": 0.017968507262970425,
+    "avg_attn_weight_on_audio": 0.37814673660133113,
+    "avg_attn_ratio": 0.03736785882355424,
+    "median_attn_ratio": 0.01304845927760085,
+    "avg_hit_ratio": 0.01592896443309098,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.03354684118495843,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08684366444160366,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L3_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.04008646099430144,
+    "avg_topk_hits_on_audio": 1.9307329534289643,
+    "avg_attn_weight_on_word": 0.0034372062020494583,
+    "avg_attn_weight_on_audio": 0.10191788211549808,
+    "avg_attn_ratio": 0.029790637743443177,
+    "median_attn_ratio": 0.012917284337511006,
+    "avg_hit_ratio": 0.00250540381214384,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0036228088696406025,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.03591885042522762,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L3_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.1815680880330124,
+    "avg_topk_hits_on_audio": 3.645215169974455,
+    "avg_attn_weight_on_word": 0.012157751190157598,
+    "avg_attn_weight_on_audio": 0.27537225611073357,
+    "avg_attn_ratio": 0.034374508495284575,
+    "median_attn_ratio": 0.021120129163293363,
+    "avg_hit_ratio": 0.011348005502063274,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.01953345374893392,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06525596774628177,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L3_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.09952839457653763,
+    "avg_topk_hits_on_audio": 2.38003537040676,
+    "avg_attn_weight_on_word": 0.011248150904486389,
+    "avg_attn_weight_on_audio": 0.29234037927492956,
+    "avg_attn_ratio": 0.033486937155623335,
+    "median_attn_ratio": 0.018567624276869303,
+    "avg_hit_ratio": 0.006220524661033602,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.012576503659089267,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0522839654757462,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L3_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.12920023580271173,
+    "avg_topk_hits_on_audio": 4.64393790528591,
+    "avg_attn_weight_on_word": 0.018530488815849403,
+    "avg_attn_weight_on_audio": 0.586639152002782,
+    "avg_attn_ratio": 0.03105076819784003,
+    "median_attn_ratio": 0.01958902609719923,
+    "avg_hit_ratio": 0.008075014737669483,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.021956679089203977,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06108246202471349,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L4_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.3325800746708587,
+    "avg_topk_hits_on_audio": 10.442817842405187,
+    "avg_attn_weight_on_word": 0.027115545561931954,
+    "avg_attn_weight_on_audio": 0.7265132456605771,
+    "avg_attn_ratio": 0.03644966226529414,
+    "median_attn_ratio": 0.003284336590558437,
+    "avg_hit_ratio": 0.02078625466692867,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05110661684915536,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10834253378137818,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L4_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.15474552957359008,
+    "avg_topk_hits_on_audio": 3.092159559834938,
+    "avg_attn_weight_on_word": 0.0077750899943173895,
+    "avg_attn_weight_on_audio": 0.21556042368608536,
+    "avg_attn_ratio": 0.03223239747939896,
+    "median_attn_ratio": 0.013845778269903186,
+    "avg_hit_ratio": 0.00967159559834938,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.019131082431026118,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06103507550877446,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L4_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.22548634309294557,
+    "avg_topk_hits_on_audio": 6.5831204558852425,
+    "avg_attn_weight_on_word": 0.014521754022679289,
+    "avg_attn_weight_on_audio": 0.407063597161461,
+    "avg_attn_ratio": 0.03371310954248441,
+    "median_attn_ratio": 0.010490389336352764,
+    "avg_hit_ratio": 0.014092896443309098,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.03279612100805136,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08060212699384486,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L4_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.3028099823147966,
+    "avg_topk_hits_on_audio": 9.15621929652191,
+    "avg_attn_weight_on_word": 0.027485803107503436,
+    "avg_attn_weight_on_audio": 0.7346350167810425,
+    "avg_attn_ratio": 0.035584520599576425,
+    "median_attn_ratio": 0.0036446432578290623,
+    "avg_hit_ratio": 0.018925623894674788,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.047097472270725,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.1016076167649762,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L4_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.22951463941835332,
+    "avg_topk_hits_on_audio": 5.985851837296129,
+    "avg_attn_weight_on_word": 0.014109815577527,
+    "avg_attn_weight_on_audio": 0.42314733141297145,
+    "avg_attn_ratio": 0.029326990949509277,
+    "median_attn_ratio": 0.010990100907679023,
+    "avg_hit_ratio": 0.014344664963647082,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.03550573809721372,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07917739401037008,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L4_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.024562782471998428,
+    "avg_topk_hits_on_audio": 1.1910984476321478,
+    "avg_attn_weight_on_word": 0.005287891331254676,
+    "avg_attn_weight_on_audio": 0.1962906628887246,
+    "avg_attn_ratio": 0.027352084417774054,
+    "median_attn_ratio": 0.016969508555190034,
+    "avg_hit_ratio": 0.0015351739044999018,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0037822055776619208,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.03266946389993588,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L4_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.18235409707211633,
+    "avg_topk_hits_on_audio": 4.621045392022008,
+    "avg_attn_weight_on_word": 0.014146702201371491,
+    "avg_attn_weight_on_audio": 0.4310262056366286,
+    "avg_attn_ratio": 0.029111443874997783,
+    "median_attn_ratio": 0.011750137000045208,
+    "avg_hit_ratio": 0.01139713106700727,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.027975390920907377,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06848396586291243,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L4_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.08066417763804284,
+    "avg_topk_hits_on_audio": 2.4134407545686773,
+    "avg_attn_weight_on_word": 0.009820324672779572,
+    "avg_attn_weight_on_audio": 0.33784431407084015,
+    "avg_attn_ratio": 0.028531566270159285,
+    "median_attn_ratio": 0.01423968380141681,
+    "avg_hit_ratio": 0.005041511102377678,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.011230547273067512,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04480362464560448,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L5_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.08980153271762625,
+    "avg_topk_hits_on_audio": 1.4003733542935743,
+    "avg_attn_weight_on_word": 0.00610089796263971,
+    "avg_attn_weight_on_audio": 0.17306403858104194,
+    "avg_attn_ratio": 0.03170072041191764,
+    "median_attn_ratio": 0.016846360509965932,
+    "avg_hit_ratio": 0.005612595794851641,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.011031473313979434,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.048344789520748714,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L5_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.1766555315386127,
+    "avg_topk_hits_on_audio": 2.9314207113381805,
+    "avg_attn_weight_on_word": 0.014446481075136346,
+    "avg_attn_weight_on_audio": 0.336946404158519,
+    "avg_attn_ratio": 0.03595073173075843,
+    "median_attn_ratio": 0.013856217126729485,
+    "avg_hit_ratio": 0.011040970721163293,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.02339783256254215,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07038953501446388,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L5_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.32206720377284337,
+    "avg_topk_hits_on_audio": 6.665356651601494,
+    "avg_attn_weight_on_word": 0.019667683981157986,
+    "avg_attn_weight_on_audio": 0.5035461125185087,
+    "avg_attn_ratio": 0.03188590652650868,
+    "median_attn_ratio": 0.01263868094288681,
+    "avg_hit_ratio": 0.02012920023580271,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0437905062868941,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.09580561304920548,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L5_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.08027117311849086,
+    "avg_topk_hits_on_audio": 3.2850265278050697,
+    "avg_attn_weight_on_word": 0.011384007294116993,
+    "avg_attn_weight_on_audio": 0.376244579348761,
+    "avg_attn_ratio": 0.029836063063148163,
+    "median_attn_ratio": 0.01736634756835375,
+    "avg_hit_ratio": 0.005016948319905679,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.011781765045617405,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04663477642867125,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L5_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.08056592650815485,
+    "avg_topk_hits_on_audio": 1.9501866771467873,
+    "avg_attn_weight_on_word": 0.005882985323906305,
+    "avg_attn_weight_on_audio": 0.17261172828614593,
+    "avg_attn_ratio": 0.029084759121662,
+    "median_attn_ratio": 0.013026926449711543,
+    "avg_hit_ratio": 0.005035370406759678,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.012318231504581887,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04643836103300357,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L5_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.0796816663391629,
+    "avg_topk_hits_on_audio": 2.031931617213598,
+    "avg_attn_weight_on_word": 0.010701643236896105,
+    "avg_attn_weight_on_audio": 0.34403784339849425,
+    "avg_attn_ratio": 0.029773303846511456,
+    "median_attn_ratio": 0.016057884317040104,
+    "avg_hit_ratio": 0.0049801041461976815,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.01364804739655361,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04840145538926274,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L5_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.18657889565730007,
+    "avg_topk_hits_on_audio": 3.9469443898604832,
+    "avg_attn_weight_on_word": 0.007916915543240243,
+    "avg_attn_weight_on_audio": 0.19106145905858835,
+    "avg_attn_ratio": 0.03074523659377489,
+    "median_attn_ratio": 0.013347047196977681,
+    "avg_hit_ratio": 0.011661180978581254,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.02757239769203136,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06997881526438751,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L5_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.15071723324818234,
+    "avg_topk_hits_on_audio": 3.4929259186480643,
+    "avg_attn_weight_on_word": 0.0068172245194420104,
+    "avg_attn_weight_on_audio": 0.1874658177536081,
+    "avg_attn_ratio": 0.0290846149399027,
+    "median_attn_ratio": 0.014959576286153771,
+    "avg_hit_ratio": 0.009419827078011396,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.02140347790736369,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05990791992527778,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L6_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.08076242876793083,
+    "avg_topk_hits_on_audio": 1.4127529966594616,
+    "avg_attn_weight_on_word": 0.005703058189974821,
+    "avg_attn_weight_on_audio": 0.14023736021783023,
+    "avg_attn_ratio": 0.032419047689764155,
+    "median_attn_ratio": 0.015421957168965862,
+    "avg_hit_ratio": 0.005047651797995677,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.010616239454383733,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04808293894214356,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L6_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.06297897425820397,
+    "avg_topk_hits_on_audio": 1.5513853409314207,
+    "avg_attn_weight_on_word": 0.003646720322938191,
+    "avg_attn_weight_on_audio": 0.10311179235567318,
+    "avg_attn_ratio": 0.029249175797377236,
+    "median_attn_ratio": 0.011392844556282585,
+    "avg_hit_ratio": 0.003936185891137748,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.007478968316858366,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04066433000537335,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L6_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.04951856946354883,
+    "avg_topk_hits_on_audio": 1.5651404991157398,
+    "avg_attn_weight_on_word": 0.003026068519501293,
+    "avg_attn_weight_on_audio": 0.09788798418591649,
+    "avg_attn_ratio": 0.028009025080702694,
+    "median_attn_ratio": 0.010743772055913575,
+    "avg_hit_ratio": 0.003094910591471802,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.007398523427982802,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.038502459100157295,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L6_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.060227942621340146,
+    "avg_topk_hits_on_audio": 1.8407349184515622,
+    "avg_attn_weight_on_word": 0.0037755145093693932,
+    "avg_attn_weight_on_audio": 0.1161857171973885,
+    "avg_attn_ratio": 0.030091340471080766,
+    "median_attn_ratio": 0.013903530052918013,
+    "avg_hit_ratio": 0.003764246413833759,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.009594268100916478,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.043449854985831,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L6_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.08174494006681077,
+    "avg_topk_hits_on_audio": 1.1582825702495578,
+    "avg_attn_weight_on_word": 0.004745882779226321,
+    "avg_attn_weight_on_audio": 0.1337104892630075,
+    "avg_attn_ratio": 0.03099436022215232,
+    "median_attn_ratio": 0.01646386707824344,
+    "avg_hit_ratio": 0.005109058754175673,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.009867574167764305,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.045970993144092295,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L6_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.0008842601689919434,
+    "avg_topk_hits_on_audio": 1.403419139320102,
+    "avg_attn_weight_on_word": 0.000476462039240835,
+    "avg_attn_weight_on_audio": 0.02380633901928656,
+    "avg_attn_ratio": 0.02241783069669524,
+    "median_attn_ratio": 0.01136522689492634,
+    "avg_hit_ratio": 5.526626056199646e-05,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 3.837763615886934e-05,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.022511474593416105,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L6_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.21035566909019454,
+    "avg_topk_hits_on_audio": 7.606798978188249,
+    "avg_attn_weight_on_word": 0.00040676646061967763,
+    "avg_attn_weight_on_audio": 0.01507633120539558,
+    "avg_attn_ratio": 0.02794506539659928,
+    "median_attn_ratio": 0.009445379866781161,
+    "avg_hit_ratio": 0.013147229318137159,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.032709852012124965,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0738021467268614,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L6_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.08312045588524268,
+    "avg_topk_hits_on_audio": 3.2528984083316956,
+    "avg_attn_weight_on_word": 0.013461007682360106,
+    "avg_attn_weight_on_audio": 0.4285764306828151,
+    "avg_attn_ratio": 0.030559474651588828,
+    "median_attn_ratio": 0.018690391925474163,
+    "avg_hit_ratio": 0.0051950284928276675,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.00958558442545467,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.045340087569871165,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L7_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.07938691294949891,
+    "avg_topk_hits_on_audio": 1.6049322067203773,
+    "avg_attn_weight_on_word": 0.005740242370312262,
+    "avg_attn_weight_on_audio": 0.1547295398940749,
+    "avg_attn_ratio": 0.026592097763916328,
+    "median_attn_ratio": 0.010040005169985811,
+    "avg_hit_ratio": 0.004961682059343682,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.009658239415482339,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04121201923874235,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L7_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.06946354883081156,
+    "avg_topk_hits_on_audio": 1.5329141285124779,
+    "avg_attn_weight_on_word": 0.0032656481235512117,
+    "avg_attn_weight_on_audio": 0.08701954043548085,
+    "avg_attn_ratio": 0.02741130693915512,
+    "median_attn_ratio": 0.012942882162265513,
+    "avg_hit_ratio": 0.004341471801925722,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.010752664709237273,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04250544345031812,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L7_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.11436431518962469,
+    "avg_topk_hits_on_audio": 1.7306936529770092,
+    "avg_attn_weight_on_word": 0.0032616520083589926,
+    "avg_attn_weight_on_audio": 0.06130567601436491,
+    "avg_attn_ratio": 0.03063290446530386,
+    "median_attn_ratio": 0.01131694876027312,
+    "avg_hit_ratio": 0.007147769699351543,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.013748467367116572,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.051529141531771974,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L7_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2486736097465121,
+    "avg_topk_hits_on_audio": 6.529573590096286,
+    "avg_attn_weight_on_word": 0.024528979810113257,
+    "avg_attn_weight_on_audio": 0.6505107196312934,
+    "avg_attn_ratio": 0.03319729767106639,
+    "median_attn_ratio": 0.0034494781678630158,
+    "avg_hit_ratio": 0.015542100609157006,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.03388842271991113,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08262782100013452,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L7_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.07919041068972293,
+    "avg_topk_hits_on_audio": 2.0197484771074867,
+    "avg_attn_weight_on_word": 0.0015918141039021321,
+    "avg_attn_weight_on_audio": 0.06606634721551759,
+    "avg_attn_ratio": 0.026850533228700305,
+    "median_attn_ratio": 0.012058993217921091,
+    "avg_hit_ratio": 0.004949400668107683,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.00924978729435817,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.041049721191166164,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L7_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.05109058754175673,
+    "avg_topk_hits_on_audio": 1.5868539988209864,
+    "avg_attn_weight_on_word": 0.0022534387260928247,
+    "avg_attn_weight_on_audio": 0.06895034640087369,
+    "avg_attn_ratio": 0.027502050629725557,
+    "median_attn_ratio": 0.012858691949051584,
+    "avg_hit_ratio": 0.0031931617213597956,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.007166745219014294,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.03786195757009964,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L7_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.16751817645902928,
+    "avg_topk_hits_on_audio": 2.3992925918648065,
+    "avg_attn_weight_on_word": 0.007146449564096189,
+    "avg_attn_weight_on_audio": 0.13097444178810644,
+    "avg_attn_ratio": 0.03341442017784597,
+    "median_attn_ratio": 0.013961282956351328,
+    "avg_hit_ratio": 0.01046988602868933,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0185487184470017,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.062433024653537,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L7_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.0421497347219493,
+    "avg_topk_hits_on_audio": 1.7131067007270584,
+    "avg_attn_weight_on_word": 0.0026539597315183828,
+    "avg_attn_weight_on_audio": 0.09232919424015876,
+    "avg_attn_ratio": 0.025973216783961504,
+    "median_attn_ratio": 0.01324801852231379,
+    "avg_hit_ratio": 0.0026343584201218313,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.007449942239645029,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.036057517443728364,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L8_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.26969935154254276,
+    "avg_topk_hits_on_audio": 4.733542935743761,
+    "avg_attn_weight_on_word": 0.01536138646105067,
+    "avg_attn_weight_on_audio": 0.26914354549785147,
+    "avg_attn_ratio": 0.03507496273367789,
+    "median_attn_ratio": 0.00693631255567605,
+    "avg_hit_ratio": 0.016856209471408923,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0393439823242101,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.09127515452929691,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L8_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.17596777362939675,
+    "avg_topk_hits_on_audio": 3.1957162507368833,
+    "avg_attn_weight_on_word": 0.01108057058287192,
+    "avg_attn_weight_on_audio": 0.23084787743188656,
+    "avg_attn_ratio": 0.033284459595622574,
+    "median_attn_ratio": 0.006842486164362744,
+    "avg_hit_ratio": 0.010997985851837297,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.026350082519952803,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07063252796741268,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L8_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.34466496364708193,
+    "avg_topk_hits_on_audio": 6.694635488308116,
+    "avg_attn_weight_on_word": 0.022309753662126362,
+    "avg_attn_weight_on_audio": 0.4643736741796775,
+    "avg_attn_ratio": 0.03568975903342936,
+    "median_attn_ratio": 0.005832479729736715,
+    "avg_hit_ratio": 0.02154156022794262,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04792903543214047,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10516035469351245,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L8_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.15022597759874237,
+    "avg_topk_hits_on_audio": 2.3218707015130673,
+    "avg_attn_weight_on_word": 0.011438030418101037,
+    "avg_attn_weight_on_audio": 0.29554910821734787,
+    "avg_attn_ratio": 0.03301562950766855,
+    "median_attn_ratio": 0.012330434876909888,
+    "avg_hit_ratio": 0.009389123599921398,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.020761457948397455,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06316621105598741,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L8_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.40597366869719004,
+    "avg_topk_hits_on_audio": 7.672037728433877,
+    "avg_attn_weight_on_word": 0.021045754169938907,
+    "avg_attn_weight_on_audio": 0.5082496041339858,
+    "avg_attn_ratio": 0.03577237926374561,
+    "median_attn_ratio": 0.005686424354580503,
+    "avg_hit_ratio": 0.025373354293574377,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05527331999508382,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.11641905355240381,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L8_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.18795441147573197,
+    "avg_topk_hits_on_audio": 2.1457064256238945,
+    "avg_attn_weight_on_word": 0.011210998800005976,
+    "avg_attn_weight_on_audio": 0.16633286130459526,
+    "avg_attn_ratio": 0.032267848088007305,
+    "median_attn_ratio": 0.009878395661005998,
+    "avg_hit_ratio": 0.011747150717233248,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.022641638963309313,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06665663776854987,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L8_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.10689722931813715,
+    "avg_topk_hits_on_audio": 2.329534289644331,
+    "avg_attn_weight_on_word": 0.0014618540338310396,
+    "avg_attn_weight_on_audio": 0.028212331611303147,
+    "avg_attn_ratio": 0.029753269894502752,
+    "median_attn_ratio": 0.01059310811016221,
+    "avg_hit_ratio": 0.006681076832383572,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.014174205110694435,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.050608551837580756,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L8_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.13823933975240715,
+    "avg_topk_hits_on_audio": 1.6510119866378463,
+    "avg_attn_weight_on_word": 0.006752725811051181,
+    "avg_attn_weight_on_audio": 0.06891673573162588,
+    "avg_attn_ratio": 0.033956623896465137,
+    "median_attn_ratio": 0.009343958601793843,
+    "avg_hit_ratio": 0.008639958734525447,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.01567942687116471,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05827600950215529,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L9_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.343584201218314,
+    "avg_topk_hits_on_audio": 7.643544900766359,
+    "avg_attn_weight_on_word": 0.019055925914770663,
+    "avg_attn_weight_on_audio": 0.49865485325451375,
+    "avg_attn_ratio": 0.035808617699481037,
+    "median_attn_ratio": 0.015883814791281134,
+    "avg_hit_ratio": 0.021474012576144626,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0498326446677173,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10711527494334297,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L9_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.10414619768127334,
+    "avg_topk_hits_on_audio": 1.5507958341520927,
+    "avg_attn_weight_on_word": 0.004787657696234222,
+    "avg_attn_weight_on_audio": 0.10786394172153133,
+    "avg_attn_ratio": 0.032114184726929666,
+    "median_attn_ratio": 0.01297090973205271,
+    "avg_hit_ratio": 0.006509137355079584,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.01541730209891377,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05404062418092302,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L9_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.3169581450186677,
+    "avg_topk_hits_on_audio": 6.987227353114561,
+    "avg_attn_weight_on_word": 0.018032088341367974,
+    "avg_attn_weight_on_audio": 0.4865787408286312,
+    "avg_attn_ratio": 0.034732624291531004,
+    "median_attn_ratio": 0.008439655334972023,
+    "avg_hit_ratio": 0.01980988406366673,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04546732435078949,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10000983270598723,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L9_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.4679701316565141,
+    "avg_topk_hits_on_audio": 12.125270190607193,
+    "avg_attn_weight_on_word": 0.03288352553601037,
+    "avg_attn_weight_on_audio": 0.8591078582130424,
+    "avg_attn_ratio": 0.038334253723925266,
+    "median_attn_ratio": 0.0006066398361866195,
+    "avg_hit_ratio": 0.02924813322853213,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.07022897072594356,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.13781135767840097,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L9_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.37541756730202397,
+    "avg_topk_hits_on_audio": 11.134898801336215,
+    "avg_attn_weight_on_word": 0.03754709484079678,
+    "avg_attn_weight_on_audio": 0.9585764019726919,
+    "avg_attn_ratio": 0.039688183091538175,
+    "median_attn_ratio": 8.235356247712441e-05,
+    "avg_hit_ratio": 0.023463597956376498,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05717821119973962,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.1203299922476543,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L9_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.3005502063273728,
+    "avg_topk_hits_on_audio": 8.443112595794851,
+    "avg_attn_weight_on_word": 0.020609597570076334,
+    "avg_attn_weight_on_audio": 0.5978057754887561,
+    "avg_attn_ratio": 0.03273118506078404,
+    "median_attn_ratio": 0.005001275133222481,
+    "avg_hit_ratio": 0.0187843878954608,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04151563117848393,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.09303120413472878,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L9_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.31479662016113186,
+    "avg_topk_hits_on_audio": 8.885832187070152,
+    "avg_attn_weight_on_word": 0.03328140700645061,
+    "avg_attn_weight_on_audio": 0.6760432434218615,
+    "avg_attn_ratio": 0.04086570970457798,
+    "median_attn_ratio": 0.005033735981595774,
+    "avg_hit_ratio": 0.01967478876007074,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.046006245403470925,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10654674386811964,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L9_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.30762428767930833,
+    "avg_topk_hits_on_audio": 10.360188642169385,
+    "avg_attn_weight_on_word": 0.035310276703585275,
+    "avg_attn_weight_on_audio": 0.9769094266260708,
+    "avg_attn_ratio": 0.0372441481859379,
+    "median_attn_ratio": 2.2949970792321524e-05,
+    "avg_hit_ratio": 0.01922651797995677,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04274006990533753,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.09921073607123221,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L10_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.19168795441147574,
+    "avg_topk_hits_on_audio": 3.7326586755747693,
+    "avg_attn_weight_on_word": 0.013158771308324714,
+    "avg_attn_weight_on_audio": 0.3232900562854383,
+    "avg_attn_ratio": 0.03106629495832706,
+    "median_attn_ratio": 0.014073424599721926,
+    "avg_hit_ratio": 0.011980497150717234,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.027629567408547634,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07067635951759194,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L10_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.20829239536254668,
+    "avg_topk_hits_on_audio": 4.790037335429357,
+    "avg_attn_weight_on_word": 0.012251661089569134,
+    "avg_attn_weight_on_audio": 0.2757869576444412,
+    "avg_attn_ratio": 0.03252991894213737,
+    "median_attn_ratio": 0.01307362615465833,
+    "avg_hit_ratio": 0.013018274710159167,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0350965579377759,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08064475159007244,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L10_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.16624091177048536,
+    "avg_topk_hits_on_audio": 3.7521123992925918,
+    "avg_attn_weight_on_word": 0.008378417546378535,
+    "avg_attn_weight_on_audio": 0.2126941980604229,
+    "avg_attn_ratio": 0.030838273691028595,
+    "median_attn_ratio": 0.011291128837621293,
+    "avg_hit_ratio": 0.010390056985655335,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.028212598532114688,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06944092920879862,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L10_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2910198467282374,
+    "avg_topk_hits_on_audio": 6.948909412458243,
+    "avg_attn_weight_on_word": 0.015268005915869758,
+    "avg_attn_weight_on_audio": 0.3775109990201248,
+    "avg_attn_ratio": 0.03339790817615276,
+    "median_attn_ratio": 0.005389583776289892,
+    "avg_hit_ratio": 0.018188740420514837,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04230941989304743,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.09389606848971503,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L10_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.016506189821182942,
+    "avg_topk_hits_on_audio": 0.9433090980546276,
+    "avg_attn_weight_on_word": 0.0006251712311554094,
+    "avg_attn_weight_on_audio": 0.021824484789396466,
+    "avg_attn_ratio": 0.026318644936148224,
+    "median_attn_ratio": 0.014064624081623834,
+    "avg_hit_ratio": 0.0010316368638239339,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0028484663330089408,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0301987481329811,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L10_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.015916683041854982,
+    "avg_topk_hits_on_audio": 1.6435449007663587,
+    "avg_attn_weight_on_word": 0.006218999760397948,
+    "avg_attn_weight_on_audio": 0.22274993462828804,
+    "avg_attn_ratio": 0.027458408782226044,
+    "median_attn_ratio": 0.01494203585861295,
+    "avg_hit_ratio": 0.0009947926901159364,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.00264813421193931,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.031101335684281292,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L10_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.08459422283356259,
+    "avg_topk_hits_on_audio": 2.948909412458243,
+    "avg_attn_weight_on_word": 0.0028848774928918047,
+    "avg_attn_weight_on_audio": 0.08218433552477182,
+    "avg_attn_ratio": 0.0291114047476984,
+    "median_attn_ratio": 0.015232394959393476,
+    "avg_hit_ratio": 0.005287138927097662,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.011504009106655184,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04590255278145125,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L10_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.05875417567302024,
+    "avg_topk_hits_on_audio": 1.6767537826685006,
+    "avg_attn_weight_on_word": 0.008110066047488915,
+    "avg_attn_weight_on_audio": 0.25148901217234115,
+    "avg_attn_ratio": 0.02745251061615951,
+    "median_attn_ratio": 0.015660814844993348,
+    "avg_hit_ratio": 0.003672135979563765,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.009546126516789311,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04067077311251259,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L11_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.12409117704853606,
+    "avg_topk_hits_on_audio": 2.6676164275889174,
+    "avg_attn_weight_on_word": 0.009139508229036995,
+    "avg_attn_weight_on_audio": 0.20565185425797455,
+    "avg_attn_ratio": 0.034212761946993034,
+    "median_attn_ratio": 0.00851276547407364,
+    "avg_hit_ratio": 0.007755698565533504,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.02150693266468564,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06347539317721218,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L11_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.26675181764590294,
+    "avg_topk_hits_on_audio": 5.250933385733936,
+    "avg_attn_weight_on_word": 0.014987611098485861,
+    "avg_attn_weight_on_audio": 0.3094053201943239,
+    "avg_attn_ratio": 0.03530702793165585,
+    "median_attn_ratio": 0.008663058942265359,
+    "avg_hit_ratio": 0.016671988602868934,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.042224346557221105,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.09420336309174589,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L11_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.23580271173118492,
+    "avg_topk_hits_on_audio": 5.377677343289448,
+    "avg_attn_weight_on_word": 0.015218331345409569,
+    "avg_attn_weight_on_audio": 0.3345362725599186,
+    "avg_attn_ratio": 0.035470352801910174,
+    "median_attn_ratio": 0.0066504257485108294,
+    "avg_hit_ratio": 0.014737669483199057,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.03880257056117685,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08901059284628608,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L11_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.3855374336804873,
+    "avg_topk_hits_on_audio": 7.3258007467085875,
+    "avg_attn_weight_on_word": 0.02224819477510738,
+    "avg_attn_weight_on_audio": 0.4268844815639578,
+    "avg_attn_ratio": 0.03743835182558489,
+    "median_attn_ratio": 0.007189441777366391,
+    "avg_hit_ratio": 0.024096089605030457,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.057181677771072435,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.11871611920168779,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L11_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.27274513656907057,
+    "avg_topk_hits_on_audio": 5.812045588524268,
+    "avg_attn_weight_on_word": 0.0172403799515634,
+    "avg_attn_weight_on_audio": 0.4029079681228329,
+    "avg_attn_ratio": 0.03543583229774414,
+    "median_attn_ratio": 0.014831581322508232,
+    "avg_hit_ratio": 0.01704657103556691,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04252462627561573,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.09500702960892679,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L11_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.124975437217528,
+    "avg_topk_hits_on_audio": 2.2964236588720772,
+    "avg_attn_weight_on_word": 0.007515347024835237,
+    "avg_attn_weight_on_audio": 0.2195352294670937,
+    "avg_attn_ratio": 0.030420133943047628,
+    "median_attn_ratio": 0.011839674046966207,
+    "avg_hit_ratio": 0.0078109648260955,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.018305287760686934,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05653638652983006,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L11_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.3324818235409707,
+    "avg_topk_hits_on_audio": 7.380723128315975,
+    "avg_attn_weight_on_word": 0.014059825978043086,
+    "avg_attn_weight_on_audio": 0.3391667233441625,
+    "avg_attn_ratio": 0.032318280727495985,
+    "median_attn_ratio": 0.007876331064598565,
+    "avg_hit_ratio": 0.02078011397131067,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.049238710641642126,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10233710534044879,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L11_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.22293181371585774,
+    "avg_topk_hits_on_audio": 7.459520534486146,
+    "avg_attn_weight_on_word": 0.0181035373909832,
+    "avg_attn_weight_on_audio": 0.5992959962187301,
+    "avg_attn_ratio": 0.028628852431826435,
+    "median_attn_ratio": 0.013929231436014967,
+    "avg_hit_ratio": 0.013933238357241109,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04292782795484757,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08548991874391512,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L12_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.18166633916290037,
+    "avg_topk_hits_on_audio": 3.9467478876007074,
+    "avg_attn_weight_on_word": 0.011280152656238175,
+    "avg_attn_weight_on_audio": 0.24400030337353326,
+    "avg_attn_ratio": 0.03398989145335779,
+    "median_attn_ratio": 0.006964886142644745,
+    "avg_hit_ratio": 0.011354146197681273,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.02969971123358915,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07504374888462821,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L12_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.42857142857142855,
+    "avg_topk_hits_on_audio": 10.012870898015327,
+    "avg_attn_weight_on_word": 0.028425399264708162,
+    "avg_attn_weight_on_audio": 0.6864054291718953,
+    "avg_attn_ratio": 0.03566673032484658,
+    "median_attn_ratio": 0.004649246668899569,
+    "avg_hit_ratio": 0.026785714285714284,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.06352013491949353,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.1259725795300544,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L12_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2221458046767538,
+    "avg_topk_hits_on_audio": 4.54018471212419,
+    "avg_attn_weight_on_word": 0.017393575507823656,
+    "avg_attn_weight_on_audio": 0.44035805827117863,
+    "avg_attn_ratio": 0.03440255998810593,
+    "median_attn_ratio": 0.013454914605832058,
+    "avg_hit_ratio": 0.013884112792297112,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.03568902820191398,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08397570098231702,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L12_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.20858714875221065,
+    "avg_topk_hits_on_audio": 4.276871684024366,
+    "avg_attn_weight_on_word": 0.015755148576549062,
+    "avg_attn_weight_on_audio": 0.3656118243113365,
+    "avg_attn_ratio": 0.035115990180843076,
+    "median_attn_ratio": 0.009659051786562046,
+    "avg_hit_ratio": 0.013036696797013166,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.031989002731871566,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0801416897097278,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L12_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2436628021222244,
+    "avg_topk_hits_on_audio": 5.097170367459226,
+    "avg_attn_weight_on_word": 0.014657323720122921,
+    "avg_attn_weight_on_audio": 0.3532886315665192,
+    "avg_attn_ratio": 0.03161047461985332,
+    "median_attn_ratio": 0.008784946893938233,
+    "avg_hit_ratio": 0.015228925132639026,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.037194011960960366,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08403341171345272,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L12_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.19630575751621143,
+    "avg_topk_hits_on_audio": 4.153959520534486,
+    "avg_attn_weight_on_word": 0.005495784637936287,
+    "avg_attn_weight_on_audio": 0.1321598260705187,
+    "avg_attn_ratio": 0.03221156365019978,
+    "median_attn_ratio": 0.004615246225728297,
+    "avg_hit_ratio": 0.012269109844763215,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.029108719308024913,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07358939280298792,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L12_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.18707015130674004,
+    "avg_topk_hits_on_audio": 4.999901748870112,
+    "avg_attn_weight_on_word": 0.011762033443400245,
+    "avg_attn_weight_on_audio": 0.31739108710357233,
+    "avg_attn_ratio": 0.030419535964271643,
+    "median_attn_ratio": 0.006254742714665147,
+    "avg_hit_ratio": 0.011691884456671253,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.031891505753491624,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07400292617443452,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L12_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2875810571821576,
+    "avg_topk_hits_on_audio": 7.4035173904499905,
+    "avg_attn_weight_on_word": 0.016638277461233805,
+    "avg_attn_weight_on_audio": 0.4598573615156625,
+    "avg_attn_ratio": 0.03036640602269033,
+    "median_attn_ratio": 0.006153134853384084,
+    "avg_hit_ratio": 0.01797381607388485,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04642190974880416,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.09476213184537935,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L13_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.14325014737669484,
+    "avg_topk_hits_on_audio": 2.140597366869719,
+    "avg_attn_weight_on_word": 0.008421872774236224,
+    "avg_attn_weight_on_audio": 0.16783182187677495,
+    "avg_attn_ratio": 0.03514662298958829,
+    "median_attn_ratio": 0.014120699856114393,
+    "avg_hit_ratio": 0.008953134211043427,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.021108020022821743,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06520777722345346,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L13_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.07476910984476322,
+    "avg_topk_hits_on_audio": 1.1963057575162115,
+    "avg_attn_weight_on_word": 0.004669197570491701,
+    "avg_attn_weight_on_audio": 0.10972005667864561,
+    "avg_attn_ratio": 0.03297479372832986,
+    "median_attn_ratio": 0.015170248425986757,
+    "avg_hit_ratio": 0.004673069365297701,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.009132420982920842,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.046780284076548405,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L13_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.08626449204165848,
+    "avg_topk_hits_on_audio": 1.2842405187659658,
+    "avg_attn_weight_on_word": 0.0030256399960617085,
+    "avg_attn_weight_on_audio": 0.06471872332586281,
+    "avg_attn_ratio": 0.03446192855974222,
+    "median_attn_ratio": 0.010327209470613247,
+    "avg_hit_ratio": 0.005391530752603655,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.011766440163595729,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05161989947594161,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L13_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.07958341520927491,
+    "avg_topk_hits_on_audio": 0.9652191000196503,
+    "avg_attn_weight_on_word": 0.005675206897992007,
+    "avg_attn_weight_on_audio": 0.1036670951085059,
+    "avg_attn_ratio": 0.03489103218356137,
+    "median_attn_ratio": 0.015168423942863184,
+    "avg_hit_ratio": 0.004973963450579682,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.008980667811958758,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04884566344609981,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L13_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.16506189821182943,
+    "avg_topk_hits_on_audio": 2.910198467282374,
+    "avg_attn_weight_on_word": 0.008542537915773918,
+    "avg_attn_weight_on_audio": 0.1937797683447156,
+    "avg_attn_ratio": 0.03306010835767933,
+    "median_attn_ratio": 0.009649370558384357,
+    "avg_hit_ratio": 0.01031636863823934,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.021072002789843204,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06444847978576188,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L13_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.11180978581253684,
+    "avg_topk_hits_on_audio": 2.926704657103557,
+    "avg_attn_weight_on_word": 0.00918612924145969,
+    "avg_attn_weight_on_audio": 0.25589691180660423,
+    "avg_attn_ratio": 0.03359461510903833,
+    "median_attn_ratio": 0.009237958889984188,
+    "avg_hit_ratio": 0.006988111613283552,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.019791872612760174,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06037459933508206,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L13_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.23825898997838474,
+    "avg_topk_hits_on_audio": 5.228040872470033,
+    "avg_attn_weight_on_word": 0.012453732208075417,
+    "avg_attn_weight_on_audio": 0.31230235976999354,
+    "avg_attn_ratio": 0.0316038840813663,
+    "median_attn_ratio": 0.0052514266267696084,
+    "avg_hit_ratio": 0.014891186873649046,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.037134556263917394,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08362962721893274,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L13_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.22902338376891335,
+    "avg_topk_hits_on_audio": 5.84427195912753,
+    "avg_attn_weight_on_word": 0.014859615613580525,
+    "avg_attn_weight_on_audio": 0.3593440469941863,
+    "avg_attn_ratio": 0.033213831411534146,
+    "median_attn_ratio": 0.006086992418806591,
+    "avg_hit_ratio": 0.014313961485557084,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04034085425630551,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08786864715339673,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L14_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.34328944782865,
+    "avg_topk_hits_on_audio": 10.23069365297701,
+    "avg_attn_weight_on_word": 0.020134279144252573,
+    "avg_attn_weight_on_audio": 0.5749029647039877,
+    "avg_attn_ratio": 0.03356650891443572,
+    "median_attn_ratio": 0.00802715340722747,
+    "avg_hit_ratio": 0.021455590489290625,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05938539949583965,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.114407498899566,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L14_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.5112006288072313,
+    "avg_topk_hits_on_audio": 12.716741992532913,
+    "avg_attn_weight_on_word": 0.03001260324553519,
+    "avg_attn_weight_on_audio": 0.836501925617392,
+    "avg_attn_ratio": 0.03459662546323194,
+    "median_attn_ratio": 0.0013306136721636835,
+    "avg_hit_ratio": 0.031950039300451955,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0905528048277811,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.15709946959146498,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L14_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.5393987030850855,
+    "avg_topk_hits_on_audio": 13.052957359009628,
+    "avg_attn_weight_on_word": 0.03293702729631262,
+    "avg_attn_weight_on_audio": 0.8978646135052649,
+    "avg_attn_ratio": 0.037554828140692345,
+    "median_attn_ratio": 0.00014630281900417222,
+    "avg_hit_ratio": 0.033712418942817846,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.08596953410803278,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.15723678119154297,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L14_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.17577127136962076,
+    "avg_topk_hits_on_audio": 5.093142071133818,
+    "avg_attn_weight_on_word": 0.0161860592684874,
+    "avg_attn_weight_on_audio": 0.4933550171096545,
+    "avg_attn_ratio": 0.029544396470589724,
+    "median_attn_ratio": 0.01212768136600321,
+    "avg_hit_ratio": 0.010985704460601297,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.027857222949593113,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06838732388078414,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L14_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.3230497150717233,
+    "avg_topk_hits_on_audio": 8.815975633719788,
+    "avg_attn_weight_on_word": 0.02151813057666792,
+    "avg_attn_weight_on_audio": 0.6238670884569734,
+    "avg_attn_ratio": 0.03201549295343658,
+    "median_attn_ratio": 0.004357221570810282,
+    "avg_hit_ratio": 0.020190607191982707,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05338151375103732,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.1055876138964566,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L14_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.41668304185498134,
+    "avg_topk_hits_on_audio": 9.443112595794851,
+    "avg_attn_weight_on_word": 0.02393370213611409,
+    "avg_attn_weight_on_audio": 0.6165603974360893,
+    "avg_attn_ratio": 0.034650025041821124,
+    "median_attn_ratio": 0.0030777404593088,
+    "avg_hit_ratio": 0.026042690115936334,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.06019702628155995,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.12088974143931741,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L14_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.40263313028099823,
+    "avg_topk_hits_on_audio": 10.3829829043034,
+    "avg_attn_weight_on_word": 0.024148591328265544,
+    "avg_attn_weight_on_audio": 0.6956942202863728,
+    "avg_attn_ratio": 0.03368396826697633,
+    "median_attn_ratio": 0.0028447205175564493,
+    "avg_hit_ratio": 0.02516457064256239,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.060592900486785416,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.11944143939632414,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L14_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.4044999017488701,
+    "avg_topk_hits_on_audio": 11.575653370013756,
+    "avg_attn_weight_on_word": 0.030813873557457037,
+    "avg_attn_weight_on_audio": 0.8475809674477567,
+    "avg_attn_ratio": 0.03741157125177222,
+    "median_attn_ratio": 0.0005664217416247886,
+    "avg_hit_ratio": 0.025281243859304383,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.06324343578169359,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.1259362508927702,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L15_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.12428767930831204,
+    "avg_topk_hits_on_audio": 2.3522303006484573,
+    "avg_attn_weight_on_word": 0.008200368714039551,
+    "avg_attn_weight_on_audio": 0.1717694296437417,
+    "avg_attn_ratio": 0.03350383617855784,
+    "median_attn_ratio": 0.006807054589426546,
+    "avg_hit_ratio": 0.0077679799567695025,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.020387884480984282,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.061659700616311625,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L15_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.1783258007467086,
+    "avg_topk_hits_on_audio": 3.263214776969935,
+    "avg_attn_weight_on_word": 0.00968094654348678,
+    "avg_attn_weight_on_audio": 0.21253792746167918,
+    "avg_attn_ratio": 0.0328498216805242,
+    "median_attn_ratio": 0.004889205533782918,
+    "avg_hit_ratio": 0.011145362546669287,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.024956217492622456,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06895140171981594,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L15_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.12104539202200826,
+    "avg_topk_hits_on_audio": 1.65572804087247,
+    "avg_attn_weight_on_word": 0.0024956627446364164,
+    "avg_attn_weight_on_audio": 0.044134422912164316,
+    "avg_attn_ratio": 0.03288386720168897,
+    "median_attn_ratio": 0.007963245963437414,
+    "avg_hit_ratio": 0.007565337001375516,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.01560626118166357,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.056055465384728054,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L15_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.03252112399292592,
+    "avg_topk_hits_on_audio": 0.4385930438200039,
+    "avg_attn_weight_on_word": 0.002221223587841175,
+    "avg_attn_weight_on_audio": 0.06541008968278197,
+    "avg_attn_ratio": 0.0308140283903654,
+    "median_attn_ratio": 0.014929424459130675,
+    "avg_hit_ratio": 0.00203257024955787,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.004319500485927807,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.03716609912585108,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L15_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.32865002947533895,
+    "avg_topk_hits_on_audio": 7.199253291412851,
+    "avg_attn_weight_on_word": 0.010862160906488446,
+    "avg_attn_weight_on_audio": 0.28026627603156146,
+    "avg_attn_ratio": 0.03509293153770919,
+    "median_attn_ratio": 0.002736659185148291,
+    "avg_hit_ratio": 0.020540626842208684,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.050316675897323956,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10595023427724183,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L15_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2393397524071527,
+    "avg_topk_hits_on_audio": 5.785616034584398,
+    "avg_attn_weight_on_word": 0.013353260430410562,
+    "avg_attn_weight_on_audio": 0.3320823779872009,
+    "avg_attn_ratio": 0.03179189139277521,
+    "median_attn_ratio": 0.009686486651002711,
+    "avg_hit_ratio": 0.014958734525447043,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04182280405046777,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08857342996869003,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L15_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.18982118294360384,
+    "avg_topk_hits_on_audio": 4.498820986441344,
+    "avg_attn_weight_on_word": 0.011644054421961784,
+    "avg_attn_weight_on_audio": 0.2894792724561461,
+    "avg_attn_ratio": 0.033052686961351566,
+    "median_attn_ratio": 0.0072536491135229645,
+    "avg_hit_ratio": 0.01186382393397524,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.029757483816080028,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07467399471140683,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L15_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.19768127333464336,
+    "avg_topk_hits_on_audio": 3.7086853998820986,
+    "avg_attn_weight_on_word": 0.01258135342414393,
+    "avg_attn_weight_on_audio": 0.26923755308358616,
+    "avg_attn_ratio": 0.03344840340299575,
+    "median_attn_ratio": 0.010814775947853416,
+    "avg_hit_ratio": 0.01235507958341521,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.030607927536893717,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07641141052330468,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L16_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.37207702888583216,
+    "avg_topk_hits_on_audio": 8.202200825309491,
+    "avg_attn_weight_on_word": 0.022830612267015823,
+    "avg_attn_weight_on_audio": 0.5536320638393554,
+    "avg_attn_ratio": 0.03662880589432555,
+    "median_attn_ratio": 0.0022072690948975815,
+    "avg_hit_ratio": 0.02325481430536451,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05574429430597395,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.11562791450566401,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L16_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.20878365101198665,
+    "avg_topk_hits_on_audio": 3.3810178817056395,
+    "avg_attn_weight_on_word": 0.008639346144731126,
+    "avg_attn_weight_on_audio": 0.13632056613649218,
+    "avg_attn_ratio": 0.03619880264632156,
+    "median_attn_ratio": 0.0034790628667207687,
+    "avg_hit_ratio": 0.013048978188249166,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.02710301607646235,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07635079691103308,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L16_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.3951660444095107,
+    "avg_topk_hits_on_audio": 8.586853998820986,
+    "avg_attn_weight_on_word": 0.02625378869168795,
+    "avg_attn_weight_on_audio": 0.6060595735224436,
+    "avg_attn_ratio": 0.037019507261186475,
+    "median_attn_ratio": 0.00037282417206414137,
+    "avg_hit_ratio": 0.02469787777559442,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05708265987661598,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.11880004491339688,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L16_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.10581646688936923,
+    "avg_topk_hits_on_audio": 1.3223619571625074,
+    "avg_attn_weight_on_word": 0.006335276032680951,
+    "avg_attn_weight_on_audio": 0.10962877486804831,
+    "avg_attn_ratio": 0.03899470640028197,
+    "median_attn_ratio": 0.013467295156543022,
+    "avg_hit_ratio": 0.006613529180585577,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.012579794336693128,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.058188029917560675,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L16_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.18048732560424444,
+    "avg_topk_hits_on_audio": 4.034093142071134,
+    "avg_attn_weight_on_word": 0.011498908576254583,
+    "avg_attn_weight_on_audio": 0.28528852740233085,
+    "avg_attn_ratio": 0.03652272917084205,
+    "median_attn_ratio": 0.004383154187978283,
+    "avg_hit_ratio": 0.011280457850265277,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.028511953541593752,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.07631514056270108,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L16_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.28394576537630184,
+    "avg_topk_hits_on_audio": 4.50884260168992,
+    "avg_attn_weight_on_word": 0.017790342426043357,
+    "avg_attn_weight_on_audio": 0.34683074016640053,
+    "avg_attn_ratio": 0.03752323563828676,
+    "median_attn_ratio": 0.0064315214775694865,
+    "avg_hit_ratio": 0.017746610336018865,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.039044855519540386,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.094314701493846,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L16_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2170367459225781,
+    "avg_topk_hits_on_audio": 4.664570642562389,
+    "avg_attn_weight_on_word": 0.018498553333181605,
+    "avg_attn_weight_on_audio": 0.4338010053038295,
+    "avg_attn_ratio": 0.037008446891921204,
+    "median_attn_ratio": 0.01281430507231741,
+    "avg_hit_ratio": 0.013564796620161131,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.03680311808841599,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08737636160049833,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L16_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.44763214776969934,
+    "avg_topk_hits_on_audio": 11.554627628217725,
+    "avg_attn_weight_on_word": 0.029673331536326703,
+    "avg_attn_weight_on_audio": 0.7780657033037088,
+    "avg_attn_ratio": 0.037135692500586764,
+    "median_attn_ratio": 0.000469414488696867,
+    "avg_hit_ratio": 0.02797700923560621,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.06756944257287642,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.13268214430906938,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L17_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.26606405973668695,
+    "avg_topk_hits_on_audio": 3.505010807624288,
+    "avg_attn_weight_on_word": 0.009176806171795534,
+    "avg_attn_weight_on_audio": 0.12023557621239905,
+    "avg_attn_ratio": 0.03607652016658079,
+    "median_attn_ratio": 0.0042287609172136,
+    "avg_hit_ratio": 0.016629003733542935,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.03354242020421523,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08624794410433896,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L17_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.14315189624680683,
+    "avg_topk_hits_on_audio": 1.4122617410100216,
+    "avg_attn_weight_on_word": 0.007538506354055443,
+    "avg_attn_weight_on_audio": 0.11822897584173488,
+    "avg_attn_ratio": 0.03510851053343408,
+    "median_attn_ratio": 0.008705684503246512,
+    "avg_hit_ratio": 0.008946993515425427,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.014978517579067438,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05903402162792694,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L17_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.16181961092552563,
+    "avg_topk_hits_on_audio": 1.6744940066810767,
+    "avg_attn_weight_on_word": 0.005304546526150436,
+    "avg_attn_weight_on_audio": 0.08076620181757689,
+    "avg_attn_ratio": 0.03253274935509811,
+    "median_attn_ratio": 0.0025595815002946182,
+    "avg_hit_ratio": 0.010113725682845352,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.015405285886148872,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05805176092409234,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L17_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.12487718608764001,
+    "avg_topk_hits_on_audio": 0.9493024169777953,
+    "avg_attn_weight_on_word": 0.0024675136472035544,
+    "avg_attn_weight_on_audio": 0.028421623371346898,
+    "avg_attn_ratio": 0.0367097040201227,
+    "median_attn_ratio": 0.007551972091178507,
+    "avg_hit_ratio": 0.0078048241304775005,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.011076422137309102,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0555909502879093,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L17_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.07584987227353114,
+    "avg_topk_hits_on_audio": 1.858223619571625,
+    "avg_attn_weight_on_word": 0.0003527664319474195,
+    "avg_attn_weight_on_audio": 0.010523145195942257,
+    "avg_attn_ratio": 0.029118882137263328,
+    "median_attn_ratio": 0.012010006321979672,
+    "avg_hit_ratio": 0.004740617017095696,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.012402111104894179,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.046261610259253204,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L17_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.22990764393790528,
+    "avg_topk_hits_on_audio": 4.775987423855375,
+    "avg_attn_weight_on_word": 0.013565380740426054,
+    "avg_attn_weight_on_audio": 0.31259539988553237,
+    "avg_attn_ratio": 0.03578020982163423,
+    "median_attn_ratio": 0.0042304533993854886,
+    "avg_hit_ratio": 0.01436922774611908,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0370788602667334,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.08722829783448671,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L17_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.33847514246413835,
+    "avg_topk_hits_on_audio": 6.165454902731382,
+    "avg_attn_weight_on_word": 0.017539994584973455,
+    "avg_attn_weight_on_audio": 0.37429446102176406,
+    "avg_attn_ratio": 0.03535329781056146,
+    "median_attn_ratio": 0.001437248744302271,
+    "avg_hit_ratio": 0.021154696404008647,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04365861602228342,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10016661023685353,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L17_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.4023383768913342,
+    "avg_topk_hits_on_audio": 8.907152682255846,
+    "avg_attn_weight_on_word": 0.024179075259150827,
+    "avg_attn_weight_on_audio": 0.5014960061101854,
+    "avg_attn_ratio": 0.037581924661995725,
+    "median_attn_ratio": 0.0002285937405288993,
+    "avg_hit_ratio": 0.02514614855570839,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.05324454086458623,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.11597261408229034,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L18_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.08243269797602673,
+    "avg_topk_hits_on_audio": 1.250835134604048,
+    "avg_attn_weight_on_word": 0.007132006337593967,
+    "avg_attn_weight_on_audio": 0.1765682763889921,
+    "avg_attn_ratio": 0.035020283222420706,
+    "median_attn_ratio": 0.010532460038861779,
+    "avg_hit_ratio": 0.005152043623501671,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.0062774311895341115,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.046449758035456486,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L18_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.19935154254273924,
+    "avg_topk_hits_on_audio": 1.9414423265867558,
+    "avg_attn_weight_on_word": 0.011473562333121141,
+    "avg_attn_weight_on_audio": 0.2210604032938791,
+    "avg_attn_ratio": 0.038694703237283024,
+    "median_attn_ratio": 0.008676416978112323,
+    "avg_hit_ratio": 0.012459471408921202,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.021126857047559375,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0722810316937636,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L18_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.12851247789349576,
+    "avg_topk_hits_on_audio": 3.2364904696404007,
+    "avg_attn_weight_on_word": 0.010732679974552123,
+    "avg_attn_weight_on_audio": 0.38174859636165914,
+    "avg_attn_ratio": 0.02856278891198813,
+    "median_attn_ratio": 0.00824219297964417,
+    "avg_hit_ratio": 0.008032029868343485,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.01308354296469047,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04967836174502208,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L18_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2221458046767538,
+    "avg_topk_hits_on_audio": 3.6040479465513853,
+    "avg_attn_weight_on_word": 0.014615302084099417,
+    "avg_attn_weight_on_audio": 0.2882611018877122,
+    "avg_attn_ratio": 0.03865069431941339,
+    "median_attn_ratio": 0.00662296132238876,
+    "avg_hit_ratio": 0.013884112792297112,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.02765074663655119,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.0801855537482617,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L18_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.049125564943996856,
+    "avg_topk_hits_on_audio": 0.343584201218314,
+    "avg_attn_weight_on_word": 0.003360173411224639,
+    "avg_attn_weight_on_audio": 0.06623765452806325,
+    "avg_attn_ratio": 0.03498920243272598,
+    "median_attn_ratio": 0.007798794431058829,
+    "avg_hit_ratio": 0.0030703478089998035,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.004937190790878151,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04299674103260393,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L18_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.04716054234623698,
+    "avg_topk_hits_on_audio": 1.3093928080172923,
+    "avg_attn_weight_on_word": 0.0005258233986790255,
+    "avg_attn_weight_on_audio": 0.015551349308905834,
+    "avg_attn_ratio": 0.029448602809507837,
+    "median_attn_ratio": 0.010647080255890728,
+    "avg_hit_ratio": 0.0029475338966398115,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.00821464305179359,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04061077975794124,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L18_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.0483395559048929,
+    "avg_topk_hits_on_audio": 0.6041461976812733,
+    "avg_attn_weight_on_word": 0.001676387380063842,
+    "avg_attn_weight_on_audio": 0.03340910232861313,
+    "avg_attn_ratio": 0.03243275737621671,
+    "median_attn_ratio": 0.0118269144299923,
+    "avg_hit_ratio": 0.0030212222440558064,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.006013312929404019,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.041467292549676536,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L18_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.04666928669679701,
+    "avg_topk_hits_on_audio": 0.7682255845942229,
+    "avg_attn_weight_on_word": 0.00132578894178079,
+    "avg_attn_weight_on_audio": 0.026890590507513412,
+    "avg_attn_ratio": 0.03154043775777532,
+    "median_attn_ratio": 0.011111671627585612,
+    "avg_hit_ratio": 0.0029168304185498133,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.007109741069905515,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.04156700924623065,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L19_H0": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.30222047553546866,
+    "avg_topk_hits_on_audio": 8.8207899390843,
+    "avg_attn_weight_on_word": 0.03547917368318501,
+    "avg_attn_weight_on_audio": 0.9357703409286232,
+    "avg_attn_ratio": 0.03929050128696262,
+    "median_attn_ratio": 3.838026512481947e-06,
+    "avg_hit_ratio": 0.01888877972096679,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.044364342371911024,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10254362337984044,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L19_H1": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.3328748280605227,
+    "avg_topk_hits_on_audio": 9.554529377087837,
+    "avg_attn_weight_on_word": 0.02966051123059284,
+    "avg_attn_weight_on_audio": 0.8486249528904038,
+    "avg_attn_ratio": 0.037353920836337526,
+    "median_attn_ratio": 5.271131613813478e-05,
+    "avg_hit_ratio": 0.02080467675378267,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.046539282310906004,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10469787990102619,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L19_H2": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.29504814305364513,
+    "avg_topk_hits_on_audio": 7.8368048732560425,
+    "avg_attn_weight_on_word": 0.01795581177765401,
+    "avg_attn_weight_on_audio": 0.4387992286403912,
+    "avg_attn_ratio": 0.03606790978998228,
+    "median_attn_ratio": 0.0013928157863944768,
+    "avg_hit_ratio": 0.01844050894085282,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.04145034297009238,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.09595876170092749,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L19_H3": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.14767144822165454,
+    "avg_topk_hits_on_audio": 3.047455295735901,
+    "avg_attn_weight_on_word": 0.004693413421254115,
+    "avg_attn_weight_on_audio": 0.13839881456993455,
+    "avg_attn_ratio": 0.03378551475789236,
+    "median_attn_ratio": 0.0010067685968480396,
+    "avg_hit_ratio": 0.009229465513853409,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.019002502256937195,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06201748252868297,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L19_H4": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.2953428964433091,
+    "avg_topk_hits_on_audio": 6.295932403222637,
+    "avg_attn_weight_on_word": 0.01749168221855731,
+    "avg_attn_weight_on_audio": 0.4099834757081417,
+    "avg_attn_ratio": 0.037488399864630095,
+    "median_attn_ratio": 0.0028831289354281694,
+    "avg_hit_ratio": 0.018458931027706817,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.044705865875173195,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.10065319676751011,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L19_H5": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.1219296521910002,
+    "avg_topk_hits_on_audio": 4.564452741206524,
+    "avg_attn_weight_on_word": 0.009590032342425005,
+    "avg_attn_weight_on_audio": 0.30312409063552614,
+    "avg_attn_ratio": 0.03136918020768579,
+    "median_attn_ratio": 0.006813100456058575,
+    "avg_hit_ratio": 0.007620603261937513,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.01629542577407051,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.05528520924369381,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L19_H6": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.15847907250933385,
+    "avg_topk_hits_on_audio": 2.5420514835920613,
+    "avg_attn_weight_on_word": 0.010678911483542835,
+    "avg_attn_weight_on_audio": 0.23869714628501015,
+    "avg_attn_ratio": 0.03408101200119653,
+    "median_attn_ratio": 0.0036037183528636386,
+    "avg_hit_ratio": 0.009904942031833366,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.02312345054021492,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.06710940457324481,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  },
+  "L19_H7": {
+    "num_tokens": 10178,
+    "avg_topk_hits_on_word": 0.4480251522892513,
+    "avg_topk_hits_on_audio": 12.007761839261152,
+    "avg_attn_weight_on_word": 0.03343879133761271,
+    "avg_attn_weight_on_audio": 0.8391600629562802,
+    "avg_attn_ratio": 0.03976636032860969,
+    "median_attn_ratio": 0.0005217904918015496,
+    "avg_hit_ratio": 0.028001572018078208,
+    "median_hit_ratio": 0.0,
+    "avg_coverage_ratio": 0.06986004868188489,
+    "median_coverage_ratio": 0.0,
+    "importance_score": 0.1376279810285728,
+    "weights": {
+      "alpha": 1.0,
+      "beta": 1.0,
+      "gamma": 1.0
+    }
+  }
+}
