@@ -44,10 +44,8 @@
 7b_lla_adakv 13100 
 7b_lla_pyramidkv 13100
 
-3b_tri_snapkv 16900
-3b_tri_adakv 16900
-3b_tri_pyramidkv 16900
+3b_tri_snapkv 131
+3b_tri_adakv 131
+3b_tri_pyramidkv 131
 
-7b_tri_snapkv 16900
-7b_tri_adakv 16900 
-7b_tri_pyramidkv 16900
+3b_web_snap 169

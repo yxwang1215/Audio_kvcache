@@ -1,145 +1,147 @@
 # Audio KV Cache Compression Methods
 
-本项目实现了多种 KV Cache 压缩方法，用于优化音频理解任务中的内存使用和计算效率。
+This project implements multiple KV Cache compression methods for optimizing memory usage and computational efficiency in audio understanding tasks.
 
-## 📋 目录
+## 📋 Table of Contents
 
-- [环境配置](#环境配置)
-- [核心方法介绍](#核心方法介绍)
-- [支持的方法](#支持的方法)
-- [快速开始](#快速开始)
-- [详细配置](#详细配置)
-- [FFT 滤波增强](#fft-滤波增强)
-- [目录结构](#目录结构)
-- [常见问题](#常见问题)
+- [Environment Setup](#environment-setup)
+- [Core Methods Introduction](#core-methods-introduction)
+- [Supported Methods](#supported-methods)
+- [Quick Start](#quick-start)
+- [Detailed Configuration](#detailed-configuration)
+- [FFT Filter Enhancement](#fft-filter-enhancement)
+- [Directory Structure](#directory-structure)
+- [Usage Examples](#usage-examples)
+- [Method Comparison](#method-comparison)
+- [FAQ](#faq)
 
-## 🔧 环境配置
+## 🔧 Environment Setup
 
-本项目使用 conda 环境管理。环境配置文件位于项目根目录下的 `environment.yml`。
+This project uses conda for environment management. The environment configuration file is located at `environment.yml` in the project root directory.
 
-### 创建环境
+### Create Environment
 
 ```bash
-# 使用 environment.yml 创建 conda 环境
+# Create conda environment using environment.yml
 conda env create -f environment.yml
 
-# 激活环境
+# Activate environment
 conda activate Qwen3_2
 ```
 
-### 环境说明
+### Environment Details
 
-- **环境名称**: `Qwen3_2`
-- **Python 版本**: 3.11.0
-- **主要依赖**: 
-  - PyTorch 及相关深度学习库
+- **Environment Name**: `Qwen3_2`
+- **Python Version**: 3.11.0
+- **Main Dependencies**: 
+  - PyTorch and related deep learning libraries
   - Transformers
-  - 音频处理库（librosa, soundfile 等）
-  - 其他依赖请参考 `environment.yml` 文件
+  - Audio processing libraries (librosa, soundfile, etc.)
+  - Other dependencies please refer to `environment.yml` file
 
-详细依赖列表请查看项目根目录下的 `environment.yml` 文件。
+For detailed dependency list, please check the `environment.yml` file in the project root directory.
 
-### 编译 SparseMM 算子
+### Compile SparseMM Operators
 
-本项目需要编译 SparseMM 的 CUDA 算子。请参考 SparseMM 仓库配置算子：
+This project requires compiling SparseMM CUDA operators. Please refer to the SparseMM repository to configure the operators:
 
 ```bash
-# 进入 SparseMM csrc 目录
+# Navigate to SparseMM csrc directory
 cd /mnt/users/wangyuxuan-20250915/Audio/AudioMarathon/SparseMM/csrc
 
-# 编译 CUDA 算子
+# Compile CUDA operators
 make
 
-# 或者使用 Python setup
+# Or use Python setup
 pip install packaging torch
 pip uninstall ninja && pip cache purge && pip install ninja --no-cache-dir
 python setup.py build_ext --inplace
 ```
 
-**注意**: 
-- 如果遇到 CUDA 编译错误，请检查您的 GPU 虚拟架构（GPU Virtual Architecture）和 GPU 特性（GPU Feature）
-- 可能需要根据您的 GPU 架构修改 `csrc/build.py` 中的编译标志
-- 编译完成后，算子会自动被项目代码调用
+**Note**: 
+- If you encounter CUDA compilation errors, please check your GPU Virtual Architecture and GPU Features
+- You may need to modify the compilation flags in `csrc/build.py` according to your GPU architecture
+- After compilation, the operators will be automatically called by the project code
 
-## ⭐ 核心方法介绍
+## ⭐ Core Methods Introduction
 
-本项目实现了多种 KV Cache 压缩方法，其中**核心方法**包括：
+This project implements multiple KV Cache compression methods, with the **core methods** including:
 
-### 1. SparseKV - 基于 Head Score 的自适应 KV Cache 压缩
+### 1. SparseKV - Head Score-based Adaptive KV Cache Compression
 
-**SparseKV** 是本项目的核心方法，专门针对音频理解任务设计。
+**SparseKV** is the core method of this project, specifically designed for audio understanding tasks.
 
-#### 核心思想
+#### Core Concept
 
-SparseKV 通过**预计算的 Head Score** 来实现自适应的 KV Cache 分配：
+SparseKV achieves adaptive KV Cache allocation through **pre-computed Head Scores**:
 
-- **Head Score 机制**: 为每个注意力头（attention head）计算重要性分数，分数高的头获得更多的 KV Cache 预算
-- **自适应分配**: 根据 Head Score 动态分配每个头的 KV Cache 容量，重要头保留更多信息
-- **音频感知**: 通过分析音频任务中的注意力模式，识别对音频理解最关键的注意力头
+- **Head Score Mechanism**: Computes importance scores for each attention head, with higher-scoring heads receiving more KV Cache budget
+- **Adaptive Allocation**: Dynamically allocates KV Cache capacity for each head based on Head Score, with important heads retaining more information
+- **Audio-Aware**: Identifies the most critical attention heads for audio understanding by analyzing attention patterns in audio tasks
 
-#### 工作原理
+#### How It Works
 
-1. **预计算阶段**: 使用 `audio_head/` 目录下的工具分析模型在音频任务上的注意力模式，生成 Head Score 文件
-2. **运行时阶段**: 
-   - 根据 Head Score 为每个头分配不同的 KV Cache 容量
-   - 使用注意力权重计算每个 token 的重要性
-   - 基于重要性分数选择保留的 KV Cache
+1. **Pre-computation Phase**: Use tools in the `audio_head/` directory to analyze the model's attention patterns on audio tasks and generate Head Score files
+2. **Runtime Phase**: 
+   - Allocate different KV Cache capacities for each head based on Head Score
+   - Compute importance of each token using attention weights
+   - Select KV Cache to retain based on importance scores
 
-#### 优势
+#### Advantages
 
-- ✅ **任务特化**: 针对音频理解任务优化，性能优于通用方法
-- ✅ **自适应**: 根据 Head Score 自动调整，无需手动调参
-- ✅ **高效**: 在保持性能的同时显著减少内存使用
+- ✅ **Task-Specific**: Optimized for audio understanding tasks, outperforming general methods
+- ✅ **Adaptive**: Automatically adjusts based on Head Score, no manual parameter tuning required
+- ✅ **Efficient**: Significantly reduces memory usage while maintaining performance
 
-### 2. FFT 频谱滤波 - SparseKV+FFT 的核心增强
+### 2. FFT Spectral Filtering - Core Enhancement in SparseKV+FFT
 
-**FFT 频谱滤波**是 SparseKV+FFT 方法中的核心增强技术，通过频域分析提升注意力权重计算的准确性。
+**FFT Spectral Filtering** is the core enhancement technique in the SparseKV+FFT method, improving the accuracy of attention weight computation through frequency domain analysis.
 
-#### 核心思想
+#### Core Concept
 
-FFT 滤波将注意力权重从时域转换到频域，利用频谱特性进行滤波和增强：
+FFT filtering transforms attention weights from time domain to frequency domain, utilizing spectral characteristics for filtering and enhancement:
 
-- **频域分析**: 使用 FFT 将注意力权重序列转换到频域
-- **频谱滤波**: 通过低通/高通滤波器保留或抑制特定频率成分
-- **时域重构**: 将滤波后的频谱转换回时域，得到平滑的注意力权重
+- **Frequency Domain Analysis**: Uses FFT to transform attention weight sequences to frequency domain
+- **Spectral Filtering**: Preserves or suppresses specific frequency components through lowpass/highpass filters
+- **Time Domain Reconstruction**: Converts filtered spectrum back to time domain to obtain smoothed attention weights
 
-#### 工作原理
+#### How It Works
 
-1. **FFT 变换**: 将注意力权重序列进行 FFT 变换，得到频谱表示
-2. **频谱滤波**: 
-   - **低通滤波**: 保留低频成分，平滑注意力权重，适合捕捉长期依赖
-   - **高通滤波**: 保留高频成分，突出局部变化
-   - **自适应截止**: 根据序列特性动态调整截止频率
-3. **IFFT 重构**: 将滤波后的频谱通过 IFFT 转换回时域
-4. **混合策略**: 将原始注意力权重与滤波后的权重按比例混合
+1. **FFT Transform**: Perform FFT transform on attention weight sequences to obtain spectral representation
+2. **Spectral Filtering**: 
+   - **Lowpass Filtering**: Preserves low-frequency components, smooths attention weights, suitable for capturing long-term dependencies
+   - **Highpass Filtering**: Preserves high-frequency components, highlights local changes
+   - **Adaptive Cutoff**: Dynamically adjusts cutoff frequency based on sequence characteristics
+3. **IFFT Reconstruction**: Convert filtered spectrum back to time domain through IFFT
+4. **Mixing Strategy**: Mix original attention weights with filtered weights proportionally
 
-#### 优势
+#### Advantages
 
-- ✅ **频谱感知**: 利用频域特性更好地理解注意力模式
-- ✅ **平滑增强**: 通过滤波减少噪声，提升注意力权重的质量
-- ✅ **音频适配**: 特别适合音频信号的频谱特性
+- ✅ **Spectrum-Aware**: Better understands attention patterns using frequency domain characteristics
+- ✅ **Smoothing Enhancement**: Reduces noise through filtering, improving attention weight quality
+- ✅ **Audio-Adapted**: Particularly suitable for spectral characteristics of audio signals
 
-#### 与 SparseKV 的结合
+#### Integration with SparseKV
 
-SparseKV+FFT 将两种技术结合：
-- **SparseKV**: 提供基于 Head Score 的自适应 KV Cache 分配
-- **FFT 滤波**: 在计算注意力权重时进行频谱增强，提升选择准确性
+SparseKV+FFT combines both techniques:
+- **SparseKV**: Provides Head Score-based adaptive KV Cache allocation
+- **FFT Filtering**: Performs spectral enhancement when computing attention weights, improving selection accuracy
 
-这种结合在音频理解任务上取得了最佳的性能表现。
+This combination achieves the best performance on audio understanding tasks.
 
-## 🎯 支持的方法
+## 🎯 Supported Methods
 
-| 方法 | 环境变量 | 描述 | 需要 Head Score | FFT 支持 |
-|------|----------|------|----------------|---------|
-| **SparseKV** | `KV_METHOD="sparsekv"` | 基于 head score 的自适应 KV cache 压缩 | ✅ | ✅ |
-| **SnapKV** | `KV_METHOD="snapkv"` | 基于注意力权重的 KV cache 压缩 | ❌ | ✅ |
-| **AdaKV** | `KV_METHOD="adakv"` | 自适应 KV cache 分配 | ❌ | ❌ |
-| **PyramidKV** | `KV_METHOD="pyramidkv"` | 金字塔形 KV cache 压缩 | ❌ | ❌ |
-| **MixKV** | `KV_METHOD="mixkv"` | SparseKV + MixKV 混合策略 KV cache 压缩 | ✅ | ❌ |
-| **SnapKV_FFT** | `KV_METHOD="sparsekv"` + `HEAD_SCORE_FILE="uniform"` + `USE_FFT_FILTER="true"` | SparseKV (uniform) + FFT 频谱滤波 | ❌ | ✅ |
-| **SparseKV_FFT** | `KV_METHOD="sparsekv"` + `USE_FFT_FILTER="true"` | SparseKV + FFT 频谱滤波 | ✅ | ✅ |
+| Method | Environment Variable | Description | Requires Head Score | FFT Support |
+|--------|---------------------|-------------|---------------------|------------|
+| **SparseKV** | `KV_METHOD="sparsekv"` | Head score-based adaptive KV cache compression | ✅ | ✅ |
+| **SnapKV** | `KV_METHOD="snapkv"` | Attention weight-based KV cache compression | ❌ | ✅ |
+| **AdaKV** | `KV_METHOD="adakv"` | Adaptive KV cache allocation | ❌ | ❌ |
+| **PyramidKV** | `KV_METHOD="pyramidkv"` | Pyramid-shaped KV cache compression | ❌ | ❌ |
+| **MixKV** | `KV_METHOD="mixkv"` | SparseKV + MixKV hybrid strategy KV cache compression | ✅ | ❌ |
+| **SnapKV_FFT** | `KV_METHOD="sparsekv"` + `HEAD_SCORE_FILE="uniform"` + `USE_FFT_FILTER="true"` | SparseKV (uniform) + FFT spectral filtering | ❌ | ✅ |
+| **SparseKV_FFT** | `KV_METHOD="sparsekv"` + `USE_FFT_FILTER="true"` | SparseKV + FFT spectral filtering | ✅ | ✅ |
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
 ### 1. SparseKV
 
@@ -149,19 +151,19 @@ export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/path/to/model"
 export SAMPLE_LIMIT=0
 
-# SparseKV 配置
+# SparseKV configuration
 export KV_METHOD="sparsekv"
-export BUDGET=0.4                          # 40% 压缩率
+export BUDGET=0.4                          # 40% compression rate
 export RATIO=0.5                          
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
 
-# Head Score 配置（必需）
+# Head Score configuration (required)
 export HEAD_SCORE_PATH="/path/to/audio_head_scores.json"
 export HEAD_SCORE_AGGREGATION="first"      # first/mean/max/min
 
-# 运行脚本
+# Run script
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
@@ -178,7 +180,7 @@ export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/path/to/model"
 export SAMPLE_LIMIT=0
 
-# SnapKV 配置
+# SnapKV configuration
 export KV_METHOD="snapkv"
 export BUDGET=0.4
 export RATIO=0.5
@@ -186,7 +188,7 @@ export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
 
-# 运行脚本
+# Run script
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
@@ -203,15 +205,15 @@ export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/path/to/model"
 export SAMPLE_LIMIT=0
 
-# AdaKV 配置
+# AdaKV configuration
 export KV_METHOD="adakv"
 export BUDGET=0.4
-export RATIO=0.2                           # floor_alpha 参数
+export RATIO=0.2                           # floor_alpha parameter
 export WINDOW_SIZE=32
-export KERNEL_SIZE=7                       # AdaKV 默认使用 7
+export KERNEL_SIZE=7                       # AdaKV defaults to 7
 export POOLING="maxpool"
 
-# 运行脚本
+# Run script
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
@@ -228,15 +230,15 @@ export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/path/to/model"
 export SAMPLE_LIMIT=0
 
-# PyramidKV 配置
+# PyramidKV configuration
 export KV_METHOD="pyramidkv"
 export BUDGET=0.4
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
-export POOLING="avgpool"                   # PyramidKV 默认使用 avgpool
+export POOLING="avgpool"                   # PyramidKV defaults to avgpool
 
-# 运行脚本
+# Run script
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
@@ -247,7 +249,7 @@ python code/qwen3_kespeech.py \
 
 ### 5. MixKV (SparseKV+MixKV)
 
-**注意**: MixKV 是 SparseKV + MixKV 的混合方法。
+**Note**: MixKV is a hybrid method combining SparseKV + MixKV.
 
 ```bash
 #!/bin/bash
@@ -255,30 +257,30 @@ export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/path/to/model"
 export SAMPLE_LIMIT=0
 
-# MixKV 配置（基于 SparseKV + MixKV）
-export KV_METHOD="sparsekv"               # 基座方法：使用 SparseKV
-export METHOD="mixsparsemm"               # 指定使用 MixedSparseMM（SparseKV 基座 + MixKV 评分）
+# MixKV configuration (based on SparseKV + MixKV)
+export KV_METHOD="sparsekv"               # Base method: use SparseKV
+export METHOD="mixsparsemm"               # Specify MixedSparseMM (SparseKV base + MixKV scoring)
 export BUDGET=0.4
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
 
-# Head Score 配置（使用均匀分布，不需要 head score 文件）
-export HEAD_SCORE_FILE="uniform"          # 使用均匀分布
+# Head Score configuration (use uniform distribution, no head score file needed)
+export HEAD_SCORE_FILE="uniform"          # Use uniform distribution
 
-# FFT 滤波配置（启用 FFT 增强）
-export USE_FFT_FILTER="true"              # 启用 FFT 滤波
-export FFT_FILTER_TYPE="lowpass"          # 滤波类型: lowpass/highpass/saliency
-export FFT_CUTOFF_RATIO="0.7"             # 截止频率比例
-export FFT_ALPHA="0.5"                    # 混合系数
-export FFT_ADAPTIVE_CUTOFF="false"        # 自适应截止频率
-export FFT_USE_SALIENCY="false"           # 是否使用显著性检测
+# FFT filter configuration (enable FFT enhancement)
+export USE_FFT_FILTER="true"              # Enable FFT filtering
+export FFT_FILTER_TYPE="lowpass"          # Filter type: lowpass/highpass/saliency
+export FFT_CUTOFF_RATIO="0.7"             # Cutoff frequency ratio
+export FFT_ALPHA="0.5"                    # Mixing coefficient
+export FFT_ADAPTIVE_CUTOFF="false"        # Adaptive cutoff frequency
+export FFT_USE_SALIENCY="false"           # Whether to use saliency detection
 
-# MixKV 特有配置（固定配置）
-export SELECT_METHOD="headwisemixkv"      # 固定为 headwisemixkv（基于 head 的混合策略）
+# MixKV-specific configuration (fixed)
+export SELECT_METHOD="headwisemixkv"      # Fixed to headwisemixkv (head-based hybrid strategy)
 
-# 运行脚本
+# Run script
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
@@ -287,84 +289,84 @@ python code/qwen3_kespeech.py \
     --output-dir ./results/MixKV/budget0.4
 ```
 
-## 🔧 详细配置
+## 🔧 Detailed Configuration
 
-### 通用环境变量
+### Common Environment Variables
 
-所有方法共享以下环境变量：
+All methods share the following environment variables:
 
 ```bash
-# 基本配置
-export CUDA_VISIBLE_DEVICES=0              # GPU 设备
-export MODEL_PATH="/path/to/model"         # 模型路径
-export SAMPLE_LIMIT=0                      # 样本数量限制（0=全部）
-                                           # 注意：只有 CoVoST2 en_zh 任务使用样本限制（SAMPLE_LIMIT=4898），其他任务默认使用全部样本
+# Basic configuration
+export CUDA_VISIBLE_DEVICES=0              # GPU device
+export MODEL_PATH="/path/to/model"         # Model path
+export SAMPLE_LIMIT=0                      # Sample limit (0=all)
+                                           # Note: Only CoVoST2 en_zh task uses sample limit (SAMPLE_LIMIT=4898), other tasks default to all samples
 
-# KV Cache 压缩配置
-export KV_METHOD="sparsekv"                # 方法选择: sparsekv/snapkv/adakv/pyramidkv/mixkv
-export BUDGET=0.4                          # 压缩预算（<1.0 表示比例，>=1 表示绝对值）
-export RATIO=0.5                           # 最小缓存比例
-export WINDOW_SIZE=32                      # 窗口大小
-export KERNEL_SIZE=5                       # 卷积核大小
-export POOLING="maxpool"                   # 池化方法 (maxpool/avgpool)
+# KV Cache compression configuration
+export KV_METHOD="sparsekv"                # Method selection: sparsekv/snapkv/adakv/pyramidkv/mixkv
+export BUDGET=0.4                          # Compression budget (<1.0 means ratio, >=1 means absolute value)
+export RATIO=0.5                           # Minimum cache ratio
+export WINDOW_SIZE=32                      # Window size
+export KERNEL_SIZE=5                       # Convolution kernel size
+export POOLING="maxpool"                   # Pooling method (maxpool/avgpool)
 ```
 
-### SparseKV 特有配置
+### SparseKV-Specific Configuration
 
 ```bash
-# Head Score 配置（必需）
+# Head Score configuration (required)
 export HEAD_SCORE_PATH="/path/to/audio_head_scores.json"
 export HEAD_SCORE_AGGREGATION="first"      # first/mean/max/min
 
-# 或者使用均匀分布（不需要 head score 文件）
+# Or use uniform distribution (no head score file needed)
 export HEAD_SCORE_FILE="uniform"
 ```
 
-### MixKV 特有配置
+### MixKV-Specific Configuration
 
-**注意**: MixKV 是 SparseKV + MixKV 的混合方法，需要 Head Score 文件。
+**Note**: MixKV is a hybrid method combining SparseKV + MixKV, requires Head Score file.
 
 ```bash
-# 基座方法配置（必需）
-export KV_METHOD="sparsekv"               # 基座方法：使用 SparseKV
-export METHOD="mixsparsemm"               # 指定使用 MixedSparseMM（SparseKV 基座 + MixKV 评分）
+# Base method configuration (required)
+export KV_METHOD="sparsekv"               # Base method: use SparseKV
+export METHOD="mixsparsemm"               # Specify MixedSparseMM (SparseKV base + MixKV scoring)
 
-# Head Score 配置（必需，来自 SparseKV 基座方法）
+# Head Score configuration (required, from SparseKV base method)
 export HEAD_SCORE_PATH="/path/to/audio_head_scores.json"
 export HEAD_SCORE_AGGREGATION="first"      # first/mean/max/min
 
-# MixKV 选择方法（固定配置）
-export SELECT_METHOD="headwisemixkv"      # 固定为 headwisemixkv（基于 head 的混合策略）
-                                           # 注意：当前实现中此参数固定为 headwisemixkv
-                                           # 其他可选值（当前未使用）:
-                                           # - attn: 基于注意力权重
-                                           # - keydiff: 基于 key 差异
-                                           # - mixkv: 混合策略
-                                           # - knorm: 基于 key 范数
-                                           # - vnorm: 基于 value 范数
+# MixKV selection method (fixed configuration)
+export SELECT_METHOD="headwisemixkv"      # Fixed to headwisemixkv (head-based hybrid strategy)
+                                           # Note: This parameter is fixed to headwisemixkv in current implementation
+                                           # Other optional values (currently unused):
+                                           # - attn: Based on attention weights
+                                           # - keydiff: Based on key differences
+                                           # - mixkv: Hybrid strategy
+                                           # - knorm: Based on key norm
+                                           # - vnorm: Based on value norm
 ```
 
-### Budget 参数说明
+### Budget Parameter Explanation
 
-`BUDGET` 参数支持两种模式：
+The `BUDGET` parameter supports two modes:
 
-1. **比例模式** (`BUDGET < 1.0`): 按 prefill token 数量的比例计算
+1. **Ratio Mode** (`BUDGET < 1.0`): Calculated as a ratio of prefill token count
    ```bash
-   export BUDGET=0.4  # 保留 40% 的 KV cache
+   export BUDGET=0.4  # Retain 40% of KV cache
    ```
 
-2. **绝对值模式** (`BUDGET >= 1`): 固定 token 数量
+2. **Absolute Value Mode** (`BUDGET >= 1`): Fixed token count
    ```bash
-   export BUDGET=4096  # 固定保留 4096 个 token
+   export BUDGET=4096  # Fixed retention of 4096 tokens
    ```
 
-## 🎵 FFT 滤波增强
+## 🎵 FFT Filter Enhancement
 
-以下 KV Cache 方法支持 FFT 频谱滤波增强，通过设置 `USE_FFT_FILTER="true"` 来启用：
+The following KV Cache methods support FFT spectral filtering enhancement, enabled by setting `USE_FFT_FILTER="true"`:
 - SparseKV
 - SnapKV
 
-**注意**: AdaKV、MixKV 和 PyramidKV 目前不支持 FFT 滤波。
+**Note**: AdaKV, MixKV, and PyramidKV currently do not support FFT filtering.
 
 ### SnapKV_FFT
 
@@ -372,26 +374,26 @@ export SELECT_METHOD="headwisemixkv"      # 固定为 headwisemixkv（基于 hea
 #!/bin/bash
 export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/path/to/model"
-export SAMPLE_LIMIT=4898                  # CoVoST2 en_zh 任务使用样本数量限制（0=全部）
+export SAMPLE_LIMIT=4898                  # CoVoST2 en_zh task uses sample limit (0=all)
 
-# SparseKV 基础配置（使用均匀分布，不需要 head score 文件）
+# SparseKV base configuration (use uniform distribution, no head score file needed)
 export KV_METHOD="sparsekv"
 export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-export HEAD_SCORE_FILE="uniform"           # 使用均匀分布，不需要 head score 文件
+export HEAD_SCORE_FILE="uniform"           # Use uniform distribution, no head score file needed
 
-# FFT 滤波配置
-export USE_FFT_FILTER="true"               # 启用 FFT 滤波
-export FFT_FILTER_TYPE="lowpass"           # 滤波类型: lowpass/highpass/saliency
-export FFT_CUTOFF_RATIO="0.7"              # 截止频率比例
-export FFT_ALPHA="0.5"                     # 混合系数
-export FFT_ADAPTIVE_CUTOFF="false"         # 自适应截止频率
-export FFT_USE_SALIENCY="false"            # 是否使用显著性检测
+# FFT filter configuration
+export USE_FFT_FILTER="true"               # Enable FFT filtering
+export FFT_FILTER_TYPE="lowpass"           # Filter type: lowpass/highpass/saliency
+export FFT_CUTOFF_RATIO="0.7"              # Cutoff frequency ratio
+export FFT_ALPHA="0.5"                     # Mixing coefficient
+export FFT_ADAPTIVE_CUTOFF="false"         # Adaptive cutoff frequency
+export FFT_USE_SALIENCY="false"            # Whether to use saliency detection
 
-# 运行脚本
+# Run script
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
@@ -409,7 +411,7 @@ export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/path/to/model"
 export SAMPLE_LIMIT=0
 
-# SparseKV 基础配置
+# SparseKV base configuration
 export KV_METHOD="sparsekv"
 export BUDGET=0.8
 export RATIO=0.5
@@ -419,7 +421,7 @@ export POOLING="maxpool"
 export HEAD_SCORE_PATH="/path/to/audio_head_scores.json"
 export HEAD_SCORE_AGGREGATION="first"
 
-# FFT 滤波配置
+# FFT filter configuration
 export USE_FFT_FILTER="true"
 export FFT_FILTER_TYPE="lowpass"
 export FFT_CUTOFF_RATIO="0.7"
@@ -427,7 +429,7 @@ export FFT_ALPHA="0.5"
 export FFT_ADAPTIVE_CUTOFF="false"
 export FFT_USE_SALIENCY="false"
 
-# 运行脚本
+# Run script
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
@@ -436,122 +438,121 @@ python code/qwen3_kespeech.py \
     --output-dir ./results/SparseKV_FFT/budget0.8
 ```
 
-### FFT 滤波参数说明
+### FFT Filter Parameters
 
-| 参数 | 说明 | 默认值 | 可选值 |
-|------|------|--------|--------|
-| `USE_FFT_FILTER` | 是否启用 FFT 滤波 | `"false"` | `"true"` / `"false"` |
-| `FFT_FILTER_TYPE` | 滤波类型 | `"lowpass"` | `"lowpass"` / `"highpass"` / `"saliency"` |
-| `FFT_CUTOFF_RATIO` | 截止频率比例 | `"0.7"` | `0.0` - `1.0` |
-| `FFT_ALPHA` | 混合系数 | `"0.5"` | `0.0` - `1.0` |
-| `FFT_ADAPTIVE_CUTOFF` | 自适应截止频率 | `"false"` | `"true"` / `"false"` |
-| `FFT_USE_SALIENCY` | 使用显著性检测 | `"false"` | `"true"` / `"false"` |
+| Parameter | Description | Default | Options |
+|-----------|-------------|---------|---------|
+| `USE_FFT_FILTER` | Whether to enable FFT filtering | `"false"` | `"true"` / `"false"` |
+| `FFT_FILTER_TYPE` | Filter type | `"lowpass"` | `"lowpass"` / `"highpass"` / `"saliency"` |
+| `FFT_CUTOFF_RATIO` | Cutoff frequency ratio | `"0.7"` | `0.0` - `1.0` |
+| `FFT_ALPHA` | Mixing coefficient | `"0.5"` | `0.0` - `1.0` |
+| `FFT_ADAPTIVE_CUTOFF` | Adaptive cutoff frequency | `"false"` | `"true"` / `"false"` |
+| `FFT_USE_SALIENCY` | Use saliency detection | `"false"` | `"true"` / `"false"` |
 
-**注意**: FFT 滤波可以与支持的方法（SparseKV、SnapKV）结合使用，只需在对应方法的配置基础上添加 FFT 相关环境变量即可。AdaKV、MixKV 和 PyramidKV 不支持 FFT 滤波。
+**Note**: FFT filtering can be combined with supported methods (SparseKV, SnapKV) by adding FFT-related environment variables to the corresponding method's configuration. AdaKV, MixKV, and PyramidKV do not support FFT filtering.
 
-## 📁 目录结构
+## 📁 Directory Structure
 
 ```
 Audio_kvcache/
-├── qwen2_5/                          # Qwen2.5-Omni 模型
+├── qwen2_5/                          # Qwen2.5-Omni model
 │   └── sparsekv_fft_dataset/
-│       ├── code/                     # 代码文件
-│       └── scripts/                  # 运行脚本
-│           ├── ASR/                  # 自动语音识别任务
-│           ├── ST/                   # 语音翻译任务
-│           └── KV_METHODS_README.md # 详细文档
-├── qwen3/                            # Qwen3-Omni 模型
+│       ├── code/                     # Code files
+│       └── scripts/                  # Run scripts
+│           ├── ASR/                  # Automatic Speech Recognition tasks
+│           ├── ST/                   # Speech Translation tasks
+│           └── KV_METHODS_README.md # Detailed documentation
+├── qwen3/                            # Qwen3-Omni model
 │   └── sparsekv_fft_dataset/
 │       ├── code/
 │       └── scripts/
 │           ├── ASR/
 │           ├── ST/
 │           └── audio_qa/
-├── gemma/                            # Gemma 模型
+├── gemma/                            # Gemma model
 │   └── sparsekv_fft_dataset/
 │       ├── code/
 │       └── scripts/
-├── audio_head/                       # Head Score 计算工具
+├── audio_head/                       # Head Score computation tools
 │   ├── qwen2.5_omni/
 │   ├── qwen3_omni/
 │   └── gemma/
-└── README.md                         # 本文档
+└── README.md                         # This document
 ```
 
-## 📝 使用示例
+## 📝 Usage Examples
 
-### 示例 1: 运行 KeSpeech ASR 任务（SparseKV）
+### Example 1: Run KeSpeech ASR Task (SparseKV)
 
 ```bash
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset/scripts/ASR
 bash run_kespeech.sh
 ```
 
-### 示例 2: 运行 CoVoST2 语音翻译任务（SnapKV_FFT）
+### Example 2: Run CoVoST2 Speech Translation Task (SnapKV_FFT)
 
-**注意**: **只有 CoVoST2 en_zh 任务使用了样本数量限制** `SAMPLE_LIMIT=4898`，其他所有任务默认使用全部样本（`SAMPLE_LIMIT=0`）。如需使用全部样本，请修改脚本中的 `SAMPLE_LIMIT=0`。
+**Note**: **Only the CoVoST2 en_zh task uses sample limit** `SAMPLE_LIMIT=4898`, all other tasks default to using all samples (`SAMPLE_LIMIT=0`). To use all samples, modify `SAMPLE_LIMIT=0` in the script.
 
 ```bash
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset/scripts/ST
 bash run_covost2_en_zh.sh
 ```
 
-## 🔍 方法对比
+## 🔍 Method Comparison
 
-| 方法 | 需要 Head Score | 计算复杂度 | 内存效率 | 推荐场景 |
-|------|----------------|-----------|---------|---------|
-| **SparseKV** | ✅ | 中 | 中 | 音频理解任务（推荐） |
-| **SnapKV** | ❌ | 低 | 高 | 通用场景 |
-| **AdaKV** | ❌ | 中 | 中 | 需要自适应分配 |
-| **PyramidKV** | ❌ | 低 | 高 | 长序列处理 |
-| **MixKV** | ✅ | 高 | 中 | SparseKV + MixKV 混合策略（需要基座方法参数） |
-| **SnapKV_FFT** | ❌ | 中 | 高 | 音频任务 + 频谱增强 |
-| **SparseKV_FFT** | ✅ | 中 | 中 | 音频任务 + 频谱增强（推荐） |
+| Method | Requires Head Score | Computational Complexity | Memory Efficiency | Recommended Scenario |
+|--------|---------------------|-------------------------|-------------------|---------------------|
+| **SparseKV** | ✅ | Medium | Medium | Audio understanding tasks (recommended) |
+| **SnapKV** | ❌ | Low | High | General scenarios |
+| **AdaKV** | ❌ | Medium | Medium | Requires adaptive allocation |
+| **PyramidKV** | ❌ | Low | High | Long sequence processing |
+| **MixKV** | ✅ | High | Medium | SparseKV + MixKV hybrid strategy (requires base method parameters) |
+| **SnapKV_FFT** | ❌ | Medium | High | Audio tasks + spectral enhancement |
+| **SparseKV_FFT** | ✅ | Medium | Medium | Audio tasks + spectral enhancement (recommended) |
 
-## 🐛 常见问题
+## 🐛 FAQ
 
-### Q1: 如何生成 Head Score 文件？
+### Q1: How to generate Head Score files?
 
-A: 使用 `audio_head/` 目录下的工具：
+A: Use tools in the `audio_head/` directory:
 
 ```bash
 cd audio_head/qwen3_omni
 bash run_word_attention_analysis_E2B.sh
 ```
 
-### Q2: FFT 滤波和普通方法的区别？
+### Q2: What's the difference between FFT filtering and regular methods?
 
-A: FFT 滤波使用频谱域分析来增强注意力权重计算，通常能提升音频任务的表现。可以通过设置 `USE_FFT_FILTER="true"` 来启用。
+A: FFT filtering uses frequency domain analysis to enhance attention weight computation, typically improving performance on audio tasks. It can be enabled by setting `USE_FFT_FILTER="true"`.
 
-### Q3: 如何选择合适的方法？
-
-A: 
-- **音频理解任务**: 推荐使用 SparseKV 或 SparseKV_FFT
-- **通用任务**: 推荐使用 SnapKV 或 SnapKV_FFT
-- **长序列**: 推荐使用 PyramidKV
-- **需要混合策略**: 使用 MixKV（SparseKV + MixKV 混合方法，需要 Head Score）
-
-### Q4: Budget 参数如何设置？
+### Q3: How to choose the appropriate method?
 
 A: 
-- 从 0.8 开始尝试（保留 80% 的 KV cache）
-- 根据任务表现和内存限制调整
-- 音频任务通常可以使用 0.6-0.8 的 budget
+- **Audio understanding tasks**: Recommended to use SparseKV or SparseKV_FFT
+- **General tasks**: Recommended to use SnapKV or SnapKV_FFT
+- **Long sequences**: Recommended to use PyramidKV
+- **Requires hybrid strategy**: Use MixKV (SparseKV + MixKV hybrid method, requires Head Score)
 
-### Q5: 如何验证方法是否生效？
+### Q4: How to set the Budget parameter?
 
-A: 检查日志输出，应该看到类似信息：
+A: 
+- Start with 0.8 (retain 80% of KV cache)
+- Adjust based on task performance and memory constraints
+- Audio tasks typically can use budget of 0.6-0.8
+
+### Q5: How to verify if the method is working?
+
+A: Check the log output, you should see information like:
 ```
 [SnapKV] SnapKV attention enabled successfully
 [SparseMM FFT] Layer 0: Using FFT spectral filtering with filter_type=lowpass, cutoff_ratio=0.7, alpha=0.5
 ```
 
-## 📚 更多资源
+## 📚 Additional Resources
 
-- 详细的方法说明和参数配置，请参考各模型目录下的 `scripts/KV_METHODS_README.md`
-- Head Score 计算工具使用说明，请参考 `audio_head/` 目录下的文档
+- For detailed method descriptions and parameter configurations, please refer to `scripts/KV_METHODS_README.md` in each model directory
+- For Head Score computation tool usage, please refer to documentation in the `audio_head/` directory
 
-## 📄 许可证
+## 📄 License
 
-请参考项目根目录的 LICENSE 文件。
-
+Please refer to the LICENSE file in the project root directory.

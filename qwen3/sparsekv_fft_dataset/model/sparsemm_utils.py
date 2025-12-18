@@ -641,6 +641,22 @@ class AdaKVCluster():
         self.num_key_value_groups = num_key_value_groups
         self.gqa_func = gqa_func
 
+    def update_budget(self, new_budget):
+        """
+        Update base_capacity and recalculate floor_capacity and adaptive_capacity.
+        This is called when budget is specified as a ratio and needs to be updated
+        based on the actual prefill token count.
+        
+        Args:
+            new_budget: New total budget (base_capacity = new_budget - window_size)
+        """
+        self.base_capacity = new_budget - self.window_size
+        if self.base_capacity <= 0:
+            self.base_capacity = 1
+        # Recalculate floor_capacity and adaptive_capacity
+        self.floor_capacity = int(self.base_capacity * self.floor_ratio)
+        self.adaptive_capacity = self.base_capacity - self.floor_capacity
+
     def calcul_attn_sore(self, key_states, query_states):
         bsz, num_heads, q_len, head_dim = query_states.shape
         attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(
