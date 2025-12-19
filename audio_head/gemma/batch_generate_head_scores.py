@@ -545,25 +545,25 @@ python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/batch
 
 # 4. 同时处理多个 alpha/beta/gamma 组合（并行运行）
 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/batch_generate_head_scores.py \
-    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/results/topk64/results_topk64_alpha1_beta1_gamma1 \
+    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/results/Gemma_3n_E4B \
     --alpha 1.0 \
     --beta 1.0 \
     --gamma 1.0 &
     
 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/batch_generate_head_scores.py \
-    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/results/topk64/results_topk64_alpha1_beta1_gamma1 \
+    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/results/Gemma_3n_E4B \
     --alpha 1.0 \
     --beta 0 \
     --gamma 0 &
     
 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/batch_generate_head_scores.py \
-    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/results/topk64/results_topk64_alpha1_beta1_gamma1 \
+    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/results/Gemma_3n_E4B \
     --alpha 0 \
     --beta 1.0 \
     --gamma 0 &
     
 python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/batch_generate_head_scores.py \
-    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/results/topk64/results_topk64_alpha1_beta1_gamma1 \
+    --specific_folder /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/results/Gemma_3n_E4B \
     --alpha 0 \
     --beta 0 \
     --gamma 1.0

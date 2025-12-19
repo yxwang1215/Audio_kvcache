@@ -60,8 +60,8 @@ echo ""
 echo "Config: GPU=${CUDA_VISIBLE_DEVICES}, Model=${MODEL_PATH}"
 echo ">>> KV_METHOD=${KV_METHOD}, BUDGET=${BUDGET}"
 echo ">>> 清空旧结果目录"
-rm -rf "${OUTPUT_DIR}"
-mkdir -p "${OUTPUT_DIR}"
+# rm -rf "${OUTPUT_DIR}"
+# mkdir -p "${OUTPUT_DIR}"
 
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -69,7 +69,7 @@ CODE_DIR="$(dirname "$SCRIPT_DIR")/code"
 
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
 
-# 1. 推理
+# # 1. 推理
 echo -e "${GREEN}>>> [1/2] 推理...${NC}"
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
@@ -81,6 +81,8 @@ python code/qwen2.5_speech-web-questions.py \
 
 # 确定推理结果文件路径
 INFERENCE_OUTPUT_FILE="${OUTPUT_DIR}/speech_web_questions_results_qwen25.json"
+
+# rm -rf "${OUTPUT_DIR}/judge_results.jsonl"
 
 # 2. 打分（使用 LLM as Judge）
 echo -e "${GREEN}>>> [2/2] 裁判打分...${NC}"

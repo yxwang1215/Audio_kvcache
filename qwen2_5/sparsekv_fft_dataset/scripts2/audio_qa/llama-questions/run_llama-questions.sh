@@ -90,8 +90,8 @@ elif [ -n "${JUDGE_API_MODEL}" ]; then
     JUDGE_ARGS="--judge-api-model ${JUDGE_API_MODEL}"
     echo "Using API judge model: ${JUDGE_API_MODEL}"
     # ======【最小新增】======
-    JUDGE_ARGS="${JUDGE_ARGS} --judge-api-key \"${JUDGE_API_KEY}\""
-    JUDGE_ARGS="${JUDGE_ARGS} --judge-api-base-url \"${JUDGE_API_BASE_URL}\""
+    JUDGE_ARGS="${JUDGE_ARGS} --judge-api-key ${JUDGE_API_KEY}"
+    JUDGE_ARGS="${JUDGE_ARGS} --judge-api-base-url ${JUDGE_API_BASE_URL}"
     # =======================
 else
     echo -e "${YELLOW}Warning: No judge model specified, skipping judge step${NC}"

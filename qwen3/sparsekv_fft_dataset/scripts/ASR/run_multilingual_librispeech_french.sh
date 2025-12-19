@@ -1,7 +1,7 @@
 #!/bin/bash
 # Multilingual LibriSpeech ASR Evaluation with Qwen2.5-Omni - French
 
-export CUDA_VISIBLE_DEVICES=5
+export CUDA_VISIBLE_DEVICES=2
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 

@@ -60,8 +60,8 @@ echo ""
 echo "Config: GPU=${CUDA_VISIBLE_DEVICES}, Model=${MODEL_PATH}"
 echo ">>> KV_METHOD=${KV_METHOD}, BUDGET=${BUDGET}"
 echo ">>> 清空旧结果目录"
-rm -rf "${OUTPUT_DIR}"
-mkdir -p "${OUTPUT_DIR}"
+# rm -rf "${OUTPUT_DIR}"
+# mkdir -p "${OUTPUT_DIR}"
 
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
