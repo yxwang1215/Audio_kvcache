@@ -2,19 +2,19 @@
 # speech-web-questions 推理脚本
 
 set -e
-export GPU_ID="1"
+export GPU_ID="7"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-3B}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results/SparseKV/budget0.8_topk24_alpha1_beta1_gamma1_1215}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results/SparseKV/budget0.2_topk24_alpha1_beta1_gamma1_1222}"
 export SAMPLE_LIMIT=0
 
 export KV_METHOD="sparsekv"
-export BUDGET=0.6
+export BUDGET=0.2
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
 # export HEAD_SCORE_FILE="uniform"
-export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_3B/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_3B_old/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
 export HEAD_SCORE_AGGREGATION="first"
 
 export USE_FFT_FILTER="false"

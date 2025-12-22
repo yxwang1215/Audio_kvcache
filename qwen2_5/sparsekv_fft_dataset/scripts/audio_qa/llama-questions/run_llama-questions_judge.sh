@@ -5,7 +5,7 @@ set -e
 export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}" 
 export JUDGE_API_KEY="${JUDGE_API_KEY:-sk-nSeZoIkSf8DGjeO5IvHnZpEc9O0QqeJrUyiJ5Oij55LW4QjF}"  # API Key
 export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}"  # API Base URL
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/llama_questions_Results/SparseKV_FFT/lowpass_0.7_alpha0.5/budget0.2_topk24_alpha1_beta1_gamma1_1215}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/llama_questions_Results/SnapKV_FFT/budget0.4_topk24_alpha1_beta1_gamma1_1221}"
 export INFERENCE_OUTPUT_FILE="${INFERENCE_OUTPUT_FILE:-${OUTPUT_DIR}/llama_questions_results_qwen25.json}"
 export JUDGE_OUTPUT_FILE="${JUDGE_OUTPUT_FILE:-${OUTPUT_DIR}/llama_questions_results_qwen25_judge.json}"
 export FORCE_REJUDGE="${FORCE_REJUDGE:-true}"

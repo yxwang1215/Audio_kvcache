@@ -6,11 +6,9 @@ export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}"  
 export JUDGE_API_KEY="${JUDGE_API_KEY:-sk-nSeZoIkSf8DGjeO5IvHnZpEc9O0QqeJrUyiJ5Oij55LW4QjF}"  # API Key
 export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}"  # 
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/speech_triviaqa_Results/SparseKV/budget0.2_topk24_alpha1_beta1_gamma1_1215}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_triviaqa_Results/SparseKV/budget0.2_topk24_alpha1_beta1_gamma1_1222}"
 export INFERENCE_OUTPUT_FILE="${INFERENCE_OUTPUT_FILE:-${OUTPUT_DIR}/speech_triviaqa_results_qwen25.json}"
-# Judge 输出文件：与 inference 相同目录，相同格式（JSON）
 export JUDGE_OUTPUT_FILE="${JUDGE_OUTPUT_FILE:-${OUTPUT_DIR}/speech_triviaqa_results_qwen25_judge.json}"
-# 强制重新打分（如果设置为 true，将重新处理所有样本，即使已经处理过）
 export FORCE_REJUDGE="${FORCE_REJUDGE:-true}"
 
 GREEN='\033[0;32m'

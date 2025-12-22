@@ -3784,8 +3784,10 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
         num_key_value_groups = num_attention_heads // num_key_value_heads
         
         # Set head_score in config for SparseMM initialization
-        def audio_load_head_score(model_type):
+        def audio_load_head_score(model_type, num_hidden_layers=None):
             # Return format: dict with "layer-head" keys and score lists
+            # Note: num_hidden_layers parameter is accepted for interface compatibility,
+            # but we use the outer scope's num_hidden_layers variable
             head_scores_dict = {}
             head_score_list = head_score_data['scores']
             

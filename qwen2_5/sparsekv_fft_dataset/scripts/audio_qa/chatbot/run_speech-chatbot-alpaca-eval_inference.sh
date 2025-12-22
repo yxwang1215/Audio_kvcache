@@ -2,19 +2,19 @@
 # speech-chatbot-alpaca-eval 推理脚本
 
 set -e
-export GPU_ID="4"
-export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-7B}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_7B/datasets/speech_chatbot_alpaca_eval_Results/SparseKV/budget0.4_topk24_alpha1_beta1_gamma1_1215}"
+export GPU_ID="7"
+export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-3B}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_chatbot_alpaca_eval_Results/SnapKV/budget0.4_topk24_alpha1_beta1_gamma1_1221}"
 export SAMPLE_LIMIT=0
 
-export KV_METHOD="sparsekv"
+export KV_METHOD="snapkv"
 export BUDGET=0.4
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
 # export HEAD_SCORE_FILE="uniform"
-export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_7B/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_3B_old/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
 
 export USE_FFT_FILTER="false"
 export FFT_FILTER_TYPE="lowpass"

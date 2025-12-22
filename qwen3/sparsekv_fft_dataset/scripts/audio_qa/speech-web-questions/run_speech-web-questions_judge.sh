@@ -6,6 +6,7 @@ export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-3}"
 export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}" 
 export JUDGE_API_KEY="${JUDGE_API_KEY:-sk-nSeZoIkSf8DGjeO5IvHnZpEc9O0QqeJrUyiJ5Oij55LW4QjF}"  # API Key
 export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}"  
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_web_questions_Results/SparseKV_FFT/budget0.4_1220}"
 
 # 优先从 INFERENCE_OUTPUT_FILE 推导 OUTPUT_DIR，确保路径一致
 if [ -n "${INFERENCE_OUTPUT_FILE}" ]; then
@@ -13,7 +14,7 @@ if [ -n "${INFERENCE_OUTPUT_FILE}" ]; then
     export OUTPUT_DIR="$(dirname "${INFERENCE_OUTPUT_FILE}")"
 else
     # 否则使用默认 OUTPUT_DIR，然后构建 INFERENCE_OUTPUT_FILE
-    export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_web_questions_Results/SnapKV/budget0.8}"
+    export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_web_questions_Results/SparseKV/budget0.8}"
     export INFERENCE_OUTPUT_FILE="${OUTPUT_DIR}/speech_web_questions_results_qwen3.json"
 fi
 # Judge 输出文件：与 inference 相同目录，相同格式（JSON）

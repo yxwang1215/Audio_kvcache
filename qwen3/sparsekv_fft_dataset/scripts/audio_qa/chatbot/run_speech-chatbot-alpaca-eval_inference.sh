@@ -2,14 +2,14 @@
 # speech-chatbot-alpaca-eval 推理脚本
 
 set -e
-export GPU_ID="6"
+export GPU_ID="5"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_chatbot_alpaca_eval_Results/AdaKV/budget0.6}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_chatbot_alpaca_eval_Results/PyramidKV/budget0.2}"
 
 export SAMPLE_LIMIT=0
 # KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
-export KV_METHOD="adakv"
-export BUDGET=0.6
+export KV_METHOD="pyramidkv"
+export BUDGET=0.2
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -48,10 +48,10 @@ echo -e "${GREEN}>>> 推理生成答案...${NC}"
 conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
 python code/qwen3_speech-chatbot-alpaca-eval.py \
-    --mode inference \
-    --model-path "${MODEL_PATH}" \
-    --output-dir "${OUTPUT_DIR}" \
-    --timing-output-file "${OUTPUT_DIR}/timing_stats.json"
+--mode inference \
+--model-path "${MODEL_PATH}" \
+--output-dir "${OUTPUT_DIR}" \
+--timing-output-file "${OUTPUT_DIR}/timing_stats.json"
 
 # 确定推理结果文件路径
 INFERENCE_OUTPUT_FILE="${OUTPUT_DIR}/speech_chatbot_alpaca_eval_results_qwen3.json"

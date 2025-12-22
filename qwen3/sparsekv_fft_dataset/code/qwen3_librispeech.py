@@ -286,11 +286,14 @@ def update_sparsemm_budget(model, prefill_token_count):
         print(f"[DEBUG] update_sparsemm_budget: ENV_BUDGET={ENV_BUDGET}, budget_ratio={ENV_BUDGET}, prefill_token_count={prefill_token_count}")
     
     # Ensure budget is at least window_size to avoid errors
-    min_budget = ENV_WINDOW_SIZE + 1
-    if actual_budget < min_budget:
-        actual_budget = min_budget
-        if ENV_BUDGET_IS_RATIO:
-            print(f"[SparseMM] Warning: Calculated budget {int(prefill_token_count * ENV_BUDGET)} is too small, using minimum {min_budget}")
+    # Note: Only SparseKV/SparseMM needs this minimum budget constraint
+    # Other methods (SnapKV, AdaKV, PyramidKV, MixKV) don't need this constraint
+    if KV_METHOD in ("sparsekv", "sparsemm"):
+        min_budget = ENV_WINDOW_SIZE + 1
+        if actual_budget < min_budget:
+            actual_budget = min_budget
+            if ENV_BUDGET_IS_RATIO:
+                print(f"[SparseMM] Warning: Calculated budget {int(prefill_token_count * ENV_BUDGET)} is too small, using minimum {min_budget}")
     
     # Update budget in all layers
     base_model = model.thinker.model

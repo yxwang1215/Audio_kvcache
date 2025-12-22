@@ -323,11 +323,14 @@ def update_sparsemm_budget(model, prefill_token_count):
         actual_budget = int(prefill_token_count * budget_ratio)
     
     # Ensure budget is at least window_size to avoid errors
-    min_budget = ENV_WINDOW_SIZE + 1
-    if actual_budget < min_budget:
-        actual_budget = min_budget
-        if ENV_BUDGET_IS_RATIO:
-            print(f"[SparseMM] Warning: Calculated budget {int(prefill_token_count * ENV_BUDGET)} is too small, using minimum {min_budget}")
+    # Note: Only SparseKV/SparseMM needs this minimum budget constraint
+    # Other methods (SnapKV, AdaKV, PyramidKV, MixKV) don't need this constraint
+    if KV_METHOD in ("sparsekv", "sparsemm"):
+        min_budget = ENV_WINDOW_SIZE + 1
+        if actual_budget < min_budget:
+            actual_budget = min_budget
+            if ENV_BUDGET_IS_RATIO:
+                print(f"[SparseMM] Warning: Calculated budget {int(prefill_token_count * ENV_BUDGET)} is too small, using minimum {min_budget}")
     
     # Update budget in all layers
     base_model = model.thinker.model
@@ -349,6 +352,10 @@ def update_sparsemm_budget(model, prefill_token_count):
                     kv_cluster.base_capacity = actual_budget - kv_cluster.window_size
                     if kv_cluster.base_capacity <= 0:
                         kv_cluster.base_capacity = 1
+                    # For AdaKV, recompute floor_capacity and adaptive_capacity if they exist
+                    if hasattr(kv_cluster, 'floor_ratio'):
+                        kv_cluster.floor_capacity = int(kv_cluster.base_capacity * kv_cluster.floor_ratio)
+                        kv_cluster.adaptive_capacity = kv_cluster.base_capacity - kv_cluster.floor_capacity
                     # For SparseMM, recompute head_adaptive_capacity if method exists
                     if hasattr(kv_cluster, '_compute_head_adaptive_capacity'):
                         kv_cluster._compute_head_adaptive_capacity()
