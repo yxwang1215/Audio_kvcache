@@ -3,9 +3,7 @@
 # 用于生成模型答案
 
 set -e
-
-# =================== 用户配置区 ===================
-export GPU_ID="4"
+export GPU_ID="1"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/gemma-3n-E2B-it}"
 export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/speech_chatbot_alpaca_eval_Results/SnapKV/budget0.2}"
 

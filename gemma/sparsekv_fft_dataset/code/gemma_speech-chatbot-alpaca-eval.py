@@ -2162,30 +2162,34 @@ def main():
             
             # Load head score file
             # Load head score file
-            # Priority 1: Use direct path if provided
-            if ENV_HEAD_SCORE_PATH:
-                head_score_path = ENV_HEAD_SCORE_PATH
-                print(f"[SparseMM] Using direct head score path: {head_score_path}")
-            # Priority 2: Check if using uniform distribution
-            elif ENV_HEAD_SCORE_FILE == "uniform":
-                head_score_path = "uniform"
+            # Priority 1: uniform or utils unavailable -> no file load
+            if ENV_HEAD_SCORE_FILE == "uniform" or not AUDIO_HEAD_UTILS_AVAILABLE:
                 print(f"[SparseMM] Using uniform head score distribution")
+                head_score_data = {
+                    'scores': [1.0 / (num_hidden_layers * num_attention_heads)] * (num_hidden_layers * num_attention_heads),
+                    'tensor': torch.ones(num_hidden_layers * num_attention_heads) / (num_hidden_layers * num_attention_heads)
+                }
             else:
-                # Priority 3: Construct path from file type and parameters
-                head_score_type = ENV_HEAD_SCORE_FILE
-                head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
-                head_score_path = get_audio_head_score_path(
-                    score_type=head_score_type,
-                    batch=head_score_batch
+                # Priority 2: Use direct path if provided
+                if ENV_HEAD_SCORE_PATH:
+                    head_score_path = ENV_HEAD_SCORE_PATH
+                    print(f"[SparseMM] Using direct head score path: {head_score_path}")
+                else:
+                    # Priority 3: Construct path from file type and parameters
+                    head_score_type = ENV_HEAD_SCORE_FILE
+                    head_score_batch = ENV_HEAD_SCORE_BATCH if ENV_HEAD_SCORE_BATCH else None
+                    head_score_path = get_audio_head_score_path(
+                        score_type=head_score_type,
+                        batch=head_score_batch
+                    )
+                    print(f"[SparseMM] Constructed head score path: {head_score_path}")
+                
+                print(f"[SparseMM] Loading audio head scores from: {head_score_path}")
+                head_score_data = load_audio_head_scores_for_sparsemm(
+                    head_score_path,
+                    num_hidden_layers,
+                    num_attention_heads
                 )
-                print(f"[SparseMM] Constructed head score path: {head_score_path}")
-            
-            print(f"[SparseMM] Loading audio head scores from: {head_score_path}")
-            head_score_data = load_audio_head_scores_for_sparsemm(
-                head_score_path,
-                num_hidden_layers,
-                num_attention_heads
-            )
             
             # Configure SparseMM
             # If budget is a ratio, use a placeholder value for initialization
@@ -2424,9 +2428,14 @@ def main():
             
             # Initialize cache for SparseMM if enabled
             # NOTE: Create fresh cache for each sample to avoid state leakage
+            # - SnapKV: uses standard DynamicCache (uniform compression, all heads same length)
+            # - AdaKV/SparseMM/PyramidKV/MixKV: uses DynamicCacheSplitHeadFlatten (variable-length per head)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                past_key_values = DynamicCacheSplitHeadFlatten()
+                if KV_METHOD == "snapkv":
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()
             
             # Measure prefill time: generate only 1 token to measure prefill phase
             prefill_start_event = torch.cuda.Event(enable_timing=True)
@@ -2449,7 +2458,10 @@ def main():
             if USE_SPARSEKV and sparsemm_enabled:
                 reset_sparsemm_state(model)
                 clear_model_cache(model)  # Clear model cache to prevent state leakage
-                past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
+                if KV_METHOD == "snapkv":
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
             # Measure decode time: generate full output
             decode_start_event = torch.cuda.Event(enable_timing=True)
             decode_end_event = torch.cuda.Event(enable_timing=True)

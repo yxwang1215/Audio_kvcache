@@ -1,7 +1,7 @@
 #!/bin/bash
 # Multilingual LibriSpeech ASR Evaluation with Gemma-3n-E2B-it - German
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=5
 export MODEL_PATH="/mnt/public/models/gemma-3n-E4B-it"
 export SAMPLE_LIMIT=0
 

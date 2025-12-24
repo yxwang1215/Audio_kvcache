@@ -8,6 +8,7 @@ export SAMPLE_LIMIT=0
 export KV_METHOD="sparsekv"
 # export KV_METHOD="pyramidkv"
 # export KV_METHOD="mixkv"
+# export KV_METHOD="tova"
 # export METHOD="mixsparsemm"
 # export SELECT_METHOD="headwisemixkv"
 export BUDGET=0.6

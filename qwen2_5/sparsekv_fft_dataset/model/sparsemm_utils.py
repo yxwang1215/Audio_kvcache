@@ -751,6 +751,98 @@ class SnapKVCluster():
                 value_states = torch.cat([v_past_compress, v_cur], dim = 2)
                 return key_states, value_states
 
+class TOVACluster():
+    """
+    TOVA (Token Omission via Attention) KV cache compression.
+    Uses the attention weights of the last token averaged across heads to select important KV pairs.
+    Based on: https://arxiv.org/abs/2401.06104
+    """
+    def __init__(self, max_capacity_prompt=256, layer_idx=None, num_hidden_layers=None, 
+                 num_key_value_groups=1, gqa_func='mean', config=None):
+        self.max_capacity_prompt = max_capacity_prompt
+        self.layer_idx = layer_idx
+        self.num_hidden_layers = num_hidden_layers
+        self.num_key_value_groups = num_key_value_groups
+        self.gqa_func = gqa_func
+        self.config = config
+        
+        # Metadata for decode phase
+        self.head_lens = None
+        self.max_seqlen_k = 0
+        self.klen_sum = 0
+        self.cu_klen = None
+        self.cu_qlen = None
+        self.cu_offset = None
+
+    def update_budget(self, new_budget):
+        """Update max_capacity_prompt budget for dynamic budget adjustment."""
+        self.max_capacity_prompt = new_budget
+
+    def update_kv(self, origin_key_states, query_states, origin_value_states):
+        """Update KV cache using TOVA scoring method."""
+        # Support GQA
+        key_states = repeat_kv(origin_key_states, self.num_key_value_groups)
+        value_states = repeat_kv(origin_value_states, self.num_key_value_groups)
+        assert key_states.shape[-2] == query_states.shape[-2]
+        
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        B, num_kv_heads, N, D = origin_key_states.shape
+        
+        if q_len < self.max_capacity_prompt:
+            return origin_key_states, origin_value_states
+        
+        # TOVA: Use the last token's attention weights
+        # Compute attention between last token query and all key states
+        last_query = query_states[..., -1:, :]  # (bsz, num_heads, 1, head_dim)
+        
+        # Compute attention scores
+        attn_weights = torch.matmul(last_query, key_states.transpose(2, 3)) / math.sqrt(head_dim)
+        # attn_weights: (bsz, num_heads, 1, q_len)
+        
+        # Softmax to get attention probabilities
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        # attn_weights: (bsz, num_heads, 1, q_len)
+        
+        # TOVA: Average across heads
+        # First, handle GQA by reshaping
+        attn_weights = attn_weights.view(bsz, num_heads // self.num_key_value_groups, self.num_key_value_groups, 1, q_len)
+        if self.gqa_func == 'max':
+            attn_weights = attn_weights.max(dim=-3).values  # (bsz, num_kv_heads, 1, q_len)
+        elif self.gqa_func == 'mean':
+            attn_weights = attn_weights.mean(dim=-3)  # (bsz, num_kv_heads, 1, q_len)
+        else:
+            raise ValueError('gqa_func not supported')
+        
+        # Average across KV heads (TOVA method: average across heads)
+        attn_weights_mean = attn_weights.mean(dim=1)  # (bsz, 1, q_len)
+        scores = attn_weights_mean.squeeze(1)  # (bsz, q_len)
+        
+        # Remove the last token (we'll add it back later with max score)
+        scores_except_last = scores[..., :-1]  # (bsz, q_len-1)
+        
+        # Add back the last token with max score to ensure it's not pruned
+        max_score = scores_except_last.max(dim=-1, keepdim=True)[0]  # (bsz, 1)
+        scores = torch.cat([scores_except_last, max_score], dim=-1)  # (bsz, q_len)
+        
+        # Select top-k tokens based on budget
+        capacity = self.max_capacity_prompt
+        if capacity >= q_len:
+            return origin_key_states, origin_value_states
+        
+        # Get top-k indices for each batch
+        _, indices = scores.topk(capacity, dim=-1)  # (bsz, capacity)
+        
+        # Expand indices for gathering: (bsz, num_kv_heads, capacity, head_dim)
+        # Need to ensure indices are properly shaped for gather operation
+        indices = indices.unsqueeze(1).unsqueeze(-1)  # (bsz, 1, capacity, 1)
+        indices = indices.expand(bsz, num_kv_heads, capacity, head_dim)  # (bsz, num_kv_heads, capacity, head_dim)
+        
+        # Select KV pairs
+        k_compress = origin_key_states.gather(dim=2, index=indices)
+        v_compress = origin_value_states.gather(dim=2, index=indices)
+        
+        return k_compress, v_compress
+
 class AdaKVCluster():
     def __init__(self, window_size = 32, kernel_size = 7, pooling = 'maxpool',base_capacity=None,floor_alpha = None,skip = None,normalize=None, 
                  layer_idx = None, num_hidden_layers = None, pyram_mode = False, pyram_beta = 20, num_key_value_groups=1, gqa_func='mean', config=None, select_method=None):
@@ -1510,6 +1602,38 @@ def init_snapkv(self):
             num_key_value_groups = self.config.num_attention_heads // self.config.num_key_value_heads,
             gqa_func=self.config.gqa_func,
             select_method=self.config.select_method,
+            config=self.config
+        )
+
+def init_tova(self):
+    if not hasattr(self, "kv_cluster"):
+        if not hasattr(self.config, 'max_capacity_prompt'):
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
+        if not hasattr(self.config, 'num_hidden_layers'):
+            raise ValueError('num_hidden_layers should be set')
+        if not hasattr(self.config, 'gqa_func'):
+            if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                self.config.gqa_func = 'mean'
+
+    if not hasattr(self, "kv_cluster"):
+        self.kv_cluster = TOVACluster(
+            max_capacity_prompt=self.config.max_capacity_prompt,
+            layer_idx=self.layer_idx,
+            num_hidden_layers=self.config.num_hidden_layers,
+            num_key_value_groups=self.config.num_attention_heads // self.config.num_key_value_heads,
+            gqa_func=self.config.gqa_func,
             config=self.config
         )
 

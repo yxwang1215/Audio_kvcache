@@ -286,18 +286,29 @@ def update_sparsemm_budget(model, prefill_token_count):
         budget_ratio = ENV_BUDGET
         actual_budget = int(prefill_token_count * budget_ratio)
     
-    # Ensure budget is at least window_size to avoid errors
-    # Note: Only SparseKV/SparseMM needs this minimum budget constraint
-    # Other methods (SnapKV, AdaKV, PyramidKV, MixKV) don't need this constraint
-    if KV_METHOD in ("sparsekv", "sparsemm"):
-        min_budget = ENV_WINDOW_SIZE + 1
-        if actual_budget < min_budget:
-            actual_budget = min_budget
-            if ENV_BUDGET_IS_RATIO:
-                print(f"[SparseMM] Warning: Calculated budget {int(prefill_token_count * ENV_BUDGET)} is too small, using minimum {min_budget}")
+    # Ensure budget is at least window_size + 1 to avoid errors
+    # This check is needed for all KV methods that use update_budget (PyramidKV, SnapKV, etc.)
+    # as update_budget has an assertion: max_capacity_prompt - window_size > 0
+    base_model = model.thinker.model
+    effective_window_size = ENV_WINDOW_SIZE  # Default to ENV_WINDOW_SIZE
+    if hasattr(base_model, 'layers') and len(base_model.layers) > 0:
+        # Get window_size from first layer's kv_cluster if available
+        first_layer = base_model.layers[0]
+        if hasattr(first_layer, 'self_attn') and hasattr(first_layer.self_attn, 'kv_cluster'):
+            first_kv_cluster = first_layer.self_attn.kv_cluster
+            if hasattr(first_kv_cluster, 'window_size'):
+                effective_window_size = first_kv_cluster.window_size
+    
+    # Check if actual_budget > window_size for all KV methods
+    min_budget = effective_window_size + 1
+    if actual_budget <= effective_window_size:
+        if ENV_BUDGET_IS_RATIO:
+            print(f"[{KV_METHOD}] Warning: Calculated budget {int(prefill_token_count * ENV_BUDGET)} is too small (<= window_size={effective_window_size}), using minimum {min_budget}")
+        else:
+            print(f"[{KV_METHOD}] Warning: Budget {actual_budget} is too small (<= window_size={effective_window_size}), using minimum {min_budget}")
+        actual_budget = min_budget
     
     # Update budget in all layers
-    base_model = model.thinker.model
     if hasattr(base_model, 'layers'):
         for layer in base_model.layers:
             if hasattr(layer, 'self_attn') and hasattr(layer.self_attn, 'kv_cluster'):

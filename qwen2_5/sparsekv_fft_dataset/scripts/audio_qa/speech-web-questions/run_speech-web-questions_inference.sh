@@ -2,9 +2,9 @@
 # speech-web-questions 推理脚本
 
 set -e
-export GPU_ID="7"
+export GPU_ID="6"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen2.5-Omni-3B}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results/SparseKV/budget0.2_topk24_alpha1_beta1_gamma1_1222}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/speech_web_questions_Results/SparseKV/budget0.2}"
 export SAMPLE_LIMIT=0
 
 export KV_METHOD="sparsekv"

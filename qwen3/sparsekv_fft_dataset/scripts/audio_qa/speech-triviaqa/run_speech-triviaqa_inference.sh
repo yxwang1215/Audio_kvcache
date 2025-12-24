@@ -2,9 +2,9 @@
 # speech-triviaqa 推理脚本
 
 set -e
-export GPU_ID="3"
+export GPU_ID="6"
 export MODEL_PATH="${MODEL_PATH:-/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_triviaqa_Results/SparseKV/budget0.2_topk16_alpha1_beta1_gamma1_1216}"
+export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_triviaqa_Results/SnapKV_FFT/budget0.2}"
 export SAMPLE_LIMIT=0
 
 # KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
@@ -14,16 +14,17 @@ export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/head_score/audio_head_scores_topk16_alpha1_beta1_gamma1.json"
+export HEAD_SCORE_FILE="uniform"
+# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/head_score/audio_head_scores_topk16_alpha1_beta1_gamma1.json"
 # export HEAD_SCORE_AGGREGATION="first" 
 # export HEAD_SCORE_FILE="uniform"
 
-# export USE_FFT_FILTER="true"
-# export FFT_FILTER_TYPE="lowpass"
-# export FFT_CUTOFF_RATIO="0.3"
-# export FFT_ALPHA="0.5"
-# export FFT_ADAPTIVE_CUTOFF="false"
-# export FFT_USE_SALIENCY="false"
+export USE_FFT_FILTER="true"
+export FFT_FILTER_TYPE="lowpass"
+export FFT_CUTOFF_RATIO="0.7"
+export FFT_ALPHA="0.5"
+export FFT_ADAPTIVE_CUTOFF="false"
+export FFT_USE_SALIENCY="false"
 
 export CUDA_VISIBLE_DEVICES=$GPU_ID
 GREEN='\033[0;32m'

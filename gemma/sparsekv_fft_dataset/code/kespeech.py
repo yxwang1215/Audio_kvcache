@@ -1287,12 +1287,12 @@ def init_model():
             # Prepare SparseMM config
             # Handle budget as ratio vs absolute value
             if ENV_BUDGET_IS_RATIO:
-                # For ratio mode, we need to compute budget based on expected sequence length
-                # Use a reasonable default sequence length estimate for audio (e.g., 1024 tokens)
-                # The actual budget will be dynamically adjusted in update_kv based on real seq_len
-                estimated_seq_len = 1024  # Reasonable estimate for audio ASR
-                budget_value = max(64, int(estimated_seq_len * ENV_BUDGET))
-                print(f"[SparseMM] Budget ratio mode: {ENV_BUDGET} -> estimated budget: {budget_value}")
+                # For ratio mode, use a placeholder budget for initialization.
+                # The actual budget will be dynamically adjusted by update_sparsemm_budget()
+                # BEFORE each inference based on actual prefill token count.
+                placeholder_budget = 4096  # Placeholder, will be updated before inference
+                budget_value = placeholder_budget
+                print(f"[SparseMM] Budget ratio mode: {ENV_BUDGET:.2%} (will be dynamically adjusted per sample)")
             else:
                 budget_value = int(ENV_BUDGET)
                 print(f"[SparseMM] Budget absolute mode: {budget_value}")
@@ -1729,6 +1729,11 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
     # For ASR, we usually don't want penalty, but slight penalty (1.01-1.05) can help avoid loops
     if REPETITION_PENALTY != 1.0:
         generate_kwargs["repetition_penalty"] = float(REPETITION_PENALTY)
+    
+    # Add no_repeat_ngram_size if configured (default: 0 = disabled)
+    # This prevents the model from repeating n-grams of the specified size
+    if NO_REPEAT_NGRAM_SIZE > 0:
+        generate_kwargs["no_repeat_ngram_size"] = int(NO_REPEAT_NGRAM_SIZE)
     
     # Optional: Add length penalty if configured
     # For ASR, length_penalty < 1.0 encourages longer outputs (helps with truncation)

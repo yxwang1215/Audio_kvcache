@@ -962,13 +962,21 @@ def init_model():
             # Enable based on KV_METHOD
             if KV_METHOD in ("sparsekv", "sparsemm"):
                 # Load head scores for SparseMM
-                if AUDIO_HEAD_UTILS_AVAILABLE:
+                num_layers = model.config.text_config.num_hidden_layers
+                num_heads = model.config.text_config.num_attention_heads
+                num_total_heads = num_layers * num_heads
+
+                # Priority 1: uniform or utils unavailable -> no file load
+                if ENV_HEAD_SCORE_FILE == "uniform" or not AUDIO_HEAD_UTILS_AVAILABLE:
+                    print(f"[SparseMM] Using uniform head score distribution")
+                    head_score_data = {
+                        'scores': [1.0 / num_total_heads] * num_total_heads,
+                        'tensor': torch.ones(num_total_heads) / num_total_heads
+                    }
+                elif AUDIO_HEAD_UTILS_AVAILABLE:
                     if ENV_HEAD_SCORE_PATH:
                         head_score_path = ENV_HEAD_SCORE_PATH
                         print(f"[SparseMM] Using direct head score path: {head_score_path}")
-                    elif ENV_HEAD_SCORE_FILE == "uniform":
-                        head_score_path = "uniform"
-                        print(f"[SparseMM] Using uniform head score distribution")
                     else:
                         head_score_path = get_audio_head_score_path(
                             score_type=ENV_HEAD_SCORE_FILE,
@@ -976,8 +984,6 @@ def init_model():
                         )
                         print(f"[SparseMM] Constructed head score path: {head_score_path}")
                     raw_head_scores = load_audio_head_scores(head_score_path)
-                    num_layers = model.config.text_config.num_hidden_layers
-                    num_heads = model.config.text_config.num_attention_heads
                     num_key_value_heads = getattr(model.config.text_config, 'num_key_value_heads', num_heads)
                     num_key_value_groups = num_heads // num_key_value_heads
                     head_score_tensor = process_audio_head_scores(
@@ -990,14 +996,6 @@ def init_model():
                     head_score_data = {
                         'scores': head_score_list,
                         'tensor': head_score_tensor
-                    }
-                else:
-                    num_layers = model.config.text_config.num_hidden_layers
-                    num_heads = model.config.text_config.num_attention_heads
-                    num_total_heads = num_layers * num_heads
-                    head_score_data = {
-                        'scores': [1.0 / num_total_heads] * num_total_heads,
-                        'tensor': torch.ones(num_total_heads) / num_total_heads
                     }
                 model.enable_sparsemm_attention(head_score_data, sparsemm_config)
                 print("[SparseMM] SparseMM attention enabled successfully")
@@ -1361,11 +1359,15 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
             prefill_token_count = 1024  # Default estimate
         update_sparsemm_budget(model, prefill_token_count)
     
+    # Only create custom cache if needed (for performance optimization)
+    # - SnapKV: uses standard DynamicCache (uniform compression, all heads same length)
+    # - AdaKV/SparseMM/PyramidKV/MixKV: uses DynamicCacheSplitHeadFlatten (variable-length per head)
     if sparsem_enabled:
-        # Use DynamicCacheSplitHeadFlatten for SparseMM
-        generate_kwargs["past_key_values"] = DynamicCacheSplitHeadFlatten()
+        if KV_METHOD == "snapkv":
+            generate_kwargs["past_key_values"] = DynamicCache()
+        else:
+            generate_kwargs["past_key_values"] = DynamicCacheSplitHeadFlatten()
     elif ENV_BUDGET_RAW != "4096" or ENV_BUDGET != 4096.0:
-        # Budget is set, use budget-limited cache
         generate_kwargs["past_key_values"] = BudgetLimitedKVCache(budget=ENV_BUDGET, seed=42)
     # else: use default cache (don't set past_key_values for best performance)
     

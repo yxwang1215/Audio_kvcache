@@ -95,6 +95,8 @@ def parse_args():
                         help='Output directory for results (overrides RESULTS_DIR env var)')
     parser.add_argument('--timing-output-file', type=str, default=None,
                         help='Output file for timing statistics')
+    parser.add_argument('--batch-size', type=int, default=1,
+                        help='Batch size for processing (default: 1 for single sample processing)')
     return parser.parse_args()
 
 # 解析命令行参数
@@ -158,6 +160,8 @@ if device.type == "cuda":
 
 # 运行控制
 SAMPLE_LIMIT = int(os.environ.get("SAMPLE_LIMIT", 0))
+# Batch size for processing (command line > env var > default=1)
+_env_batch_size = int(os.environ.get("BATCH_SIZE", 1))
 # 若 >0 则强制使用该值；=0 表示按时长动态估算（推荐）
 MAX_NEW_TOKENS_ENV = int(os.environ.get("MAX_NEW_TOKENS", 0))
 ENABLE_CHUNKING = os.environ.get("ENABLE_CHUNKING", "1") == "1"  # 默认开启
@@ -225,6 +229,7 @@ if args.output_dir:
     output_file = f'{result_dir}/CoVoST2_{COVOST2_DIRECTION.upper()}_results_gemma.json'
     if args.timing_output_file:
         timing_output_file = args.timing_output_file
+
     else:
         timing_output_file = f'{result_dir}/timing_stats_gemma_{COVOST2_DIRECTION}.json'
 elif os.environ.get("RESULTS_DIR", None):
@@ -453,6 +458,7 @@ def convert_numpy_types(obj):
         return [convert_numpy_types(item) for item in obj]
     elif isinstance(obj, tuple):
         return tuple(convert_numpy_types(item) for item in obj)
+
     else:
         return obj
 
@@ -860,6 +866,7 @@ def covost2_doc_to_audio(doc):
         # List or tuple of audio data
         audio_np = np.array(audio_data, dtype=np.float32)
         return audio_np, 16000
+
     else:
         print(f"Unknown audio format: {type(audio_data)}")
         return None
@@ -1047,12 +1054,12 @@ def init_model():
             # Prepare SparseMM config
             # Handle budget as ratio vs absolute value
             if ENV_BUDGET_IS_RATIO:
-                # For ratio mode, we need to compute budget based on expected sequence length
-                # Use a reasonable default sequence length estimate for audio (e.g., 1024 tokens)
-                # The actual budget will be dynamically adjusted in update_kv based on real seq_len
-                estimated_seq_len = 1024  # Reasonable estimate for audio ST
-                budget_value = max(64, int(estimated_seq_len * ENV_BUDGET))
-                print(f"[SparseMM] Budget ratio mode: {ENV_BUDGET} -> estimated budget: {budget_value}")
+                # For ratio mode, use a placeholder budget for initialization.
+                # The actual budget will be dynamically adjusted by update_sparsemm_budget()
+                # BEFORE each inference based on actual prefill token count.
+                placeholder_budget = 4096  # Placeholder, will be updated before inference
+                budget_value = placeholder_budget
+                print(f"[SparseMM] Budget ratio mode: {ENV_BUDGET:.2%} (will be dynamically adjusted per sample)")
             else:
                 budget_value = int(ENV_BUDGET)
                 print(f"[SparseMM] Budget absolute mode: {budget_value}")
@@ -1123,6 +1130,7 @@ def update_sparsemm_budget(model, prefill_token_count):
     if not ENV_BUDGET_IS_RATIO:
         # Use absolute budget value, but still need to update it for AdaKV and other methods
         actual_budget = int(ENV_BUDGET)
+
     else:
         # Calculate budget as ratio of prefill tokens
         budget_ratio = ENV_BUDGET
@@ -1283,6 +1291,7 @@ def _merge_with_overlap_soft(prev_text: str, new_text: str, max_overlap_words: i
         if not trimmed:
             return prev_text.strip()
         return (prev_text.strip() + ' ' + trimmed.strip()).strip()
+
     else:
         return (prev_text.strip() + ' ' + new_clean.strip()).strip()
 
@@ -1782,6 +1791,7 @@ def _generate_text(processor, model, messages: List[Dict], max_new_tokens: int,
             return_tensors="pt",
             padding=False
         )
+
     else:
         # 纯文本输入
         model_inputs = processor(
@@ -1793,15 +1803,19 @@ def _generate_text(processor, model, messages: List[Dict], max_new_tokens: int,
     float_dtype = getattr(model, "dtype", None) or _preferred_dtype()
     model_inputs = _move_to_device_safely(model_inputs, device, float_dtype)
 
-    # Update KV compression budget based on prefill token count
-    # For ratio budgets, calculate based on prefill tokens; for absolute budgets, use the value directly
-    if sparsem_enabled:
-        if hasattr(model_inputs, 'input_ids'):
-            prefill_token_count = model_inputs.input_ids.shape[1] if len(model_inputs.input_ids.shape) > 1 else model_inputs.input_ids.shape[0]
-        elif 'input_ids' in model_inputs:
-            prefill_token_count = model_inputs['input_ids'].shape[1] if len(model_inputs['input_ids'].shape) > 1 else model_inputs['input_ids'].shape[0]
-        else:
-            prefill_token_count = 1024  # Default estimate
+    # Debug: Print input token counts including audio tokens
+    prefill_token_count = 0
+    if hasattr(model_inputs, 'input_ids') or 'input_ids' in model_inputs:
+        input_ids = model_inputs.input_ids if hasattr(model_inputs, 'input_ids') else model_inputs['input_ids']
+        prefill_token_count = input_ids.shape[1] if len(input_ids.shape) > 1 else input_ids.shape[0]
+        # Count audio soft tokens (audio_token_id = 262273 for Gemma-3n)
+        audio_token_id = getattr(model.config, 'audio_token_id', 262273)
+        audio_token_count = (input_ids == audio_token_id).sum().item()
+        print(f"[DEBUG] Processor output: total_input_tokens={prefill_token_count}, audio_tokens={audio_token_count}")
+
+    # CRITICAL: Update KV cache budget based on actual prefill token count
+    # This ensures budget ratio (e.g., 0.99) is applied to actual sequence length
+    if sparsem_enabled and ENV_BUDGET_IS_RATIO and prefill_token_count > 0:
         update_sparsemm_budget(model, prefill_token_count)
 
     terminators = None
@@ -1817,11 +1831,17 @@ def _generate_text(processor, model, messages: List[Dict], max_new_tokens: int,
         "max_new_tokens": max_new_tokens,
         "eos_token_id": terminators if terminators else processor.tokenizer.eos_token_id,
         "pad_token_id": processor.tokenizer.pad_token_id,
-        "use_cache": True,
     }
     
     if sparsem_enabled:
-        generate_kwargs["past_key_values"] = DynamicCacheSplitHeadFlatten()
+        # SnapKV and PyramidKV use uniform compression (all heads same length)
+        # so they should use standard DynamicCache, not DynamicCacheSplitHeadFlatten
+        # Only AdaKV, SparseMM, and MixKV use variable-length heads
+        if KV_METHOD in ("snapkv", "pyramidkv"):
+            from transformers import DynamicCache
+            generate_kwargs["past_key_values"] = DynamicCache()
+        else:
+            generate_kwargs["past_key_values"] = DynamicCacheSplitHeadFlatten()
     elif ENV_BUDGET_RAW != "4096" or ENV_BUDGET != 4096.0:
         generate_kwargs["past_key_values"] = BudgetLimitedKVCache(budget=ENV_BUDGET, seed=42)
     
@@ -1841,6 +1861,7 @@ def _generate_text(processor, model, messages: List[Dict], max_new_tokens: int,
         new_ids = gen[:, model_inputs["input_ids"].shape[-1]:]
     elif isinstance(gen, torch.Tensor):
         new_ids = gen
+
     else:
         try:
             new_ids = gen
@@ -1950,6 +1971,228 @@ def st_translate_with_overlap(processor, model, audio_np: np.ndarray, sr: int, s
             assembled = _merge_with_overlap_soft(assembled, txt, max_overlap_words=20)
     return re.sub(r"\s+", " ", assembled).strip(), diag
 
+
+# ------------------------------
+# 批量处理辅助函数
+# ------------------------------
+
+def process_batch(processor, model, batch_docs: List[Dict], sparsem_enabled: bool = False, 
+                  direction: str = None, enable_chunking: bool = True) -> List[Dict]:
+    """
+    批量处理多个样本（优化版本）
+    
+    Args:
+        processor: 处理器
+        model: 模型
+        batch_docs: 批量文档列表
+        sparsem_enabled: 是否启用 SparseMM
+        direction: 翻译方向
+        enable_chunking: 是否启用分片
+    
+    Returns:
+        List[Dict]: 每个样本的处理结果
+    """
+    if direction is None:
+        direction = COVOST2_DIRECTION
+    
+    batch_results = []
+    
+    for doc in batch_docs:
+        result = {
+            "id": doc.get("id", "unknown"),
+            "reference": doc.get("answer", doc.get("reference", "")),
+            "prediction": "",
+            "cer": 100.0,
+            "bleu": 0.0,
+            "chrf": 0.0,
+            "duration": 0.0,
+            "response_time": 0.0,
+            "error": None,
+            "diag": {}
+        }
+        
+        try:
+            # 加载音频
+            audio_data_result = covost2_doc_to_audio(doc)
+            if audio_data_result is None:
+                result["error"] = "Failed to load audio"
+                batch_results.append(result)
+                continue
+            
+            audio_np, sr = audio_data_result
+            result["duration"] = len(audio_np) / float(sr)
+            
+            # 翻译
+            start = time.time()
+            if enable_chunking:
+                pred_text, diag = st_translate_with_overlap(
+                    processor, model, audio_np, sr, sparsem_enabled, direction=direction
+                )
+            else:
+                dur = len(audio_np) / float(sr)
+                dyn_max = MAX_NEW_TOKENS_ENV if MAX_NEW_TOKENS_ENV > 0 else estimate_tokens(dur)
+                pred_text, diag = st_translate(
+                    processor, model, audio_np, sr, dyn_max, sparsem_enabled, direction=direction
+                )
+            result["response_time"] = time.time() - start
+            result["prediction"] = pred_text
+            result["diag"] = diag
+            
+            # 计算指标
+            reference = result["reference"]
+            result["cer"] = calculate_cer(reference, pred_text)
+            result["bleu"] = calculate_bleu_score([pred_text], [reference], direction)
+            result["chrf"] = calculate_chrf_score([pred_text], [reference])
+            
+        except Exception as e:
+            result["error"] = str(e)
+            traceback.print_exc()
+        
+        batch_results.append(result)
+    
+    return batch_results
+
+
+def create_batches(dataset, batch_size: int) -> List[List[Dict]]:
+    """
+    将数据集分割为多个批次
+    
+    Args:
+        dataset: 数据集
+        batch_size: 批次大小
+    
+    Returns:
+        List[List[Dict]]: 批次列表
+    """
+    batches = []
+    current_batch = []
+    
+    for i, doc in enumerate(dataset):
+        if not isinstance(doc, dict):
+            continue
+        current_batch.append(doc)
+        
+        if len(current_batch) >= batch_size:
+            batches.append(current_batch)
+            current_batch = []
+    
+    # 添加最后一个不完整的批次
+    if current_batch:
+        batches.append(current_batch)
+    
+    return batches
+
+
+# ------------------------------
+# 批量处理辅助函数
+# ------------------------------
+
+def process_batch(processor, model, batch_docs: List[Dict], sparsem_enabled: bool = False, 
+                  direction: str = None, enable_chunking: bool = True) -> List[Dict]:
+    """
+    批量处理多个样本（优化版本）
+    
+    Args:
+        processor: 处理器
+        model: 模型
+        batch_docs: 批量文档列表
+        sparsem_enabled: 是否启用 SparseMM
+        direction: 翻译方向
+        enable_chunking: 是否启用分片
+    
+    Returns:
+        List[Dict]: 每个样本的处理结果
+    """
+    if direction is None:
+        direction = COVOST2_DIRECTION
+    
+    batch_results = []
+    
+    for doc in batch_docs:
+        result = {
+            "id": doc.get("id", "unknown"),
+            "reference": doc.get("answer", doc.get("reference", "")),
+            "prediction": "",
+            "cer": 100.0,
+            "bleu": 0.0,
+            "chrf": 0.0,
+            "duration": 0.0,
+            "response_time": 0.0,
+            "error": None,
+            "diag": {}
+        }
+        
+        try:
+            # 加载音频
+            audio_data_result = covost2_doc_to_audio(doc)
+            if audio_data_result is None:
+                result["error"] = "Failed to load audio"
+                batch_results.append(result)
+                continue
+            
+            audio_np, sr = audio_data_result
+            result["duration"] = len(audio_np) / float(sr)
+            
+            # 翻译
+            start = time.time()
+            if enable_chunking:
+                pred_text, diag = st_translate_with_overlap(
+                    processor, model, audio_np, sr, sparsem_enabled, direction=direction
+                )
+            else:
+                dur = len(audio_np) / float(sr)
+                dyn_max = MAX_NEW_TOKENS_ENV if MAX_NEW_TOKENS_ENV > 0 else estimate_tokens(dur)
+                pred_text, diag = st_translate(
+                    processor, model, audio_np, sr, dyn_max, sparsem_enabled, direction=direction
+                )
+            result["response_time"] = time.time() - start
+            result["prediction"] = pred_text
+            result["diag"] = diag
+            
+            # 计算指标
+            reference = result["reference"]
+            result["cer"] = calculate_cer(reference, pred_text)
+            result["bleu"] = calculate_bleu_score([pred_text], [reference], direction)
+            result["chrf"] = calculate_chrf_score([pred_text], [reference])
+            
+        except Exception as e:
+            result["error"] = str(e)
+            traceback.print_exc()
+        
+        batch_results.append(result)
+    
+    return batch_results
+
+
+def create_batches(dataset, batch_size: int) -> List[List[Dict]]:
+    """
+    将数据集分割为多个批次
+    
+    Args:
+        dataset: 数据集
+        batch_size: 批次大小
+    
+    Returns:
+        List[List[Dict]]: 批次列表
+    """
+    batches = []
+    current_batch = []
+    
+    for i, doc in enumerate(dataset):
+        if not isinstance(doc, dict):
+            continue
+        current_batch.append(doc)
+        
+        if len(current_batch) >= batch_size:
+            batches.append(current_batch)
+            current_batch = []
+    
+    # 添加最后一个不完整的批次
+    if current_batch:
+        batches.append(current_batch)
+    
+    return batches
+
 # ------------------------------
 # 主流程
 # ------------------------------
@@ -1962,6 +2205,7 @@ def main():
     # Determine dataset path
     if COVOST2_DATASET_PATH:
         dataset_path = COVOST2_DATASET_PATH
+
     else:
         # Auto-detect based on direction
         base_datasets_dir = "/mnt/users/wangyuxuan-20250915/Audio/Datasets"
@@ -2012,6 +2256,11 @@ def main():
         else:
             dataset = dataset[:SAMPLE_LIMIT]
         print(f"⚠️  应用样本限制，将处理 {len(dataset)} 个样本")
+    
+    # Get batch size from command line args or environment variable
+    batch_size = args.batch_size if args.batch_size > 1 else _env_batch_size
+    if batch_size > 1:
+        print(f"📦 批量处理模式: batch_size={batch_size}")
     
     print(f"✓ 数据集加载完成: {len(dataset)} 个样本")
 
@@ -2071,159 +2320,236 @@ def main():
     set_f1_list = []
 
     print(f"\n开始处理 {len(dataset)} 个样本...")
+    if batch_size > 1:
+        print(f"批量处理模式: batch_size={batch_size}")
     print("=" * 80)
     
-    with tqdm(total=len(dataset), desc=f"处理 CoVoST2-{COVOST2_DIRECTION.upper()} 样本", position=0, leave=True, **tqdm_kwargs) as pbar:
-        for i, doc in enumerate(dataset):
-            # Check if doc is a dictionary
-            if not isinstance(doc, dict):
-                print(f"Warning: Sample {i} is not a dictionary (type: {type(doc)}), skipping...")
-                if isinstance(doc, str):
-                    print(f"  Content (first 100 chars): {doc[:100]}")
-                continue
-            
-            # Get reference translation
-            reference = doc.get("answer", "")
-            if not reference:
-                reference = doc.get("reference", "")
-            
-            audio_data_result = covost2_doc_to_audio(doc)
-            if audio_data_result is None:
-                continue
-            
-            audio_np, sr = audio_data_result
-            duration = len(audio_np) / float(sr) if audio_np is not None else 0.0
-
-            pred_text = ""
-            cer = 100.0  # CER is percentage (0-100)
-            resp_time = 0.0
-            bleu_score = 0.0
-            chrf_score = 0.0
-
-            # 打印当前样本信息
-            sample_id = doc.get("id", f"sample_{i}")
-            print(f"\n[{i+1}/{len(dataset)}] 处理样本: {sample_id}")
-            print(f"  时长: {duration:.2f}s")
-            if len(reference) > 100:
-                print(f"  参考文本: {reference[:100]}...")
-            else:
-                print(f"  参考文本: {reference}")
-
-            try:
-                start = time.time()
-                if ENABLE_CHUNKING:
-                    pred_text, diag = st_translate_with_overlap(processor, model, audio_np, sr, sparsem_enabled, direction=COVOST2_DIRECTION)
-                    # 统计截断
-                    results["summary"]["total_chunks"] += len(diag.get("chunks", []))
-                    results["summary"]["truncated_chunks"] += sum(1 for c in diag.get("chunks", []) if c.get("truncated"))
-                else:
-                    dur = len(audio_np) / float(sr) if audio_np is not None else 0.0
-                    dyn_max = MAX_NEW_TOKENS_ENV if MAX_NEW_TOKENS_ENV > 0 else estimate_tokens(dur)
-                    pred_text, diag_single = st_translate(processor, model, audio_np, sr, dyn_max, sparsem_enabled, direction=COVOST2_DIRECTION)
-                    results["summary"]["total_chunks"] += 1
-                    results["summary"]["truncated_chunks"] += 1 if diag_single.get("truncated") else 0
-                resp_time = time.time() - start
-
-                cer = calculate_cer(reference, pred_text)
-                set_f1 = set_f1_per_sample(reference, pred_text)
-                set_f1_list.append(set_f1)
+    # 批量处理模式
+    if batch_size > 1:
+        batches = create_batches(dataset, batch_size)
+        total_processed = 0
+        
+        with tqdm(total=len(dataset), desc=f"处理 CoVoST2-{COVOST2_DIRECTION.upper()} 样本", position=0, leave=True, **tqdm_kwargs) as pbar:
+            for batch_idx, batch_docs in enumerate(batches):
+                print(f"\n[批次 {batch_idx+1}/{len(batches)}] 处理 {len(batch_docs)} 个样本...")
                 
-                # Calculate BLEU and chrF for this sample
-                bleu_score = calculate_bleu_score([pred_text], [reference], COVOST2_DIRECTION)
-                chrf_score = calculate_chrf_score([pred_text], [reference])
-
-                # 打印翻译结果
-                print(f"  翻译结果: {pred_text[:200]}{'...' if len(pred_text) > 200 else ''}")
-                print(f"  处理时间: {resp_time:.3f}s | CER: {cer:.2f}% | BLEU: {bleu_score:.2f} | chrF: {chrf_score:.2f}")
-                if ENABLE_CHUNKING and 'chunks' in diag:
-                    num_chunks = len(diag.get("chunks", []))
-                    truncated = sum(1 for c in diag.get("chunks", []) if c.get("truncated"))
-                    print(f"  分片数: {num_chunks} | 截断分片: {truncated}")
-
-                results["summary"]["total_samples"] += 1
-                results["summary"]["total_cer"] += cer
-                results["summary"]["timing"]["total_response_time"] += resp_time
-                
-                # Add timing statistics (skip first sample)
-                timing_stats.add_sample(
-                    wall_time=resp_time,
-                    total_gpu_time=resp_time,
-                    decode_time=resp_time,  # For Gemma, we don't separate prefill/decode, so use total time
-                    decode_token_count=None  # We don't track token count in current implementation
+                batch_results = process_batch(
+                    processor, model, batch_docs, 
+                    sparsem_enabled=sparsem_enabled,
+                    direction=COVOST2_DIRECTION,
+                    enable_chunking=ENABLE_CHUNKING
                 )
+                
+                for br in batch_results:
+                    sample_id = br["id"]
+                    reference = br["reference"]
+                    pred_text = br["prediction"]
+                    cer = br["cer"]
+                    bleu_score = br["bleu"]
+                    chrf_score = br["chrf"]
+                    resp_time = br["response_time"]
+                    duration = br["duration"]
+                    
+                    # 更新统计
+                    results["summary"]["total_samples"] += 1
+                    results["summary"]["total_cer"] += cer
+                    results["summary"]["timing"]["total_response_time"] += resp_time
+                    
+                    if br.get("diag"):
+                        diag = br["diag"]
+                        if "chunks" in diag:
+                            results["summary"]["total_chunks"] += len(diag.get("chunks", []))
+                            results["summary"]["truncated_chunks"] += sum(1 for c in diag.get("chunks", []) if c.get("truncated"))
+                    
+                    set_f1_list.append(set_f1_per_sample(reference, pred_text) if br["error"] is None else 0.0)
+                    
+                    timing_stats.add_sample(
+                        wall_time=resp_time,
+                        total_gpu_time=resp_time,
+                        decode_time=resp_time,
+                        decode_token_count=None
+                    )
+                    
+                    results["samples"].append({
+                        "id": sample_id,
+                        "duration": duration,
+                        "ground_truth": reference,
+                        "prediction": pred_text,
+                        "cer": cer,
+                        "bleu": bleu_score,
+                        "chrf": chrf_score,
+                        "response_time": resp_time,
+                        "error": br.get("error")
+                    })
+                    
+                    total_processed += 1
+                    pbar.update(1)
+                    
+                    # 显示简要信息
+                    if br["error"]:
+                        print(f"  [{total_processed}] {sample_id}: ❌ {br['error']}")
+                    else:
+                        print(f"  [{total_processed}] {sample_id}: CER={cer:.2f}% | BLEU={bleu_score:.2f} | time={resp_time:.2f}s")
+                        print(f"  [{total_processed}] {sample_id}: CER={cer:.2f}% | BLEU={bleu_score:.2f} | time={resp_time:.2f}s")
+                        print(f"  [{total_processed}] {sample_id}: CER={cer:.2f}% | BLEU={bleu_score:.2f} | time={resp_time:.2f}s")
+                
+                # 实时保存结果
+                save_results_realtime(output_file, results, timing_stats, len(dataset))
+    
 
-            except Exception as e:
-                print(f"  ❌ 处理错误: {e}")
-                traceback.print_exc()
-                pred_text = "ERROR"
+    else:
+        # 单样本处理模式（原有逻辑）
+        with tqdm(total=len(dataset), desc=f"处理 CoVoST2-{COVOST2_DIRECTION.upper()} 样本", position=0, leave=True, **tqdm_kwargs) as pbar:
+            for i, doc in enumerate(dataset):
+                # Check if doc is a dictionary
+                if not isinstance(doc, dict):
+                    print(f"Warning: Sample {i} is not a dictionary (type: {type(doc)}), skipping...")
+                    if isinstance(doc, str):
+                        print(f"  Content (first 100 chars): {doc[:100]}")
+                    continue
+                
+                # Get reference translation
+                reference = doc.get("answer", "")
+                if not reference:
+                    reference = doc.get("reference", "")
+                
+                audio_data_result = covost2_doc_to_audio(doc)
+                if audio_data_result is None:
+                    continue
+                
+                audio_np, sr = audio_data_result
+                duration = len(audio_np) / float(sr) if audio_np is not None else 0.0
+
+                pred_text = ""
                 cer = 100.0  # CER is percentage (0-100)
                 resp_time = 0.0
                 bleu_score = 0.0
                 chrf_score = 0.0
-                set_f1_list.append(0.0)
 
-            results["samples"].append({
-                "id": sample_id,
-                "duration": duration,
-                "ground_truth": reference,
-                "prediction": pred_text,
-                "cer": cer,
-                "bleu": bleu_score,
-                "chrf": chrf_score,
-                "response_time": resp_time
-            })
+                # 打印当前样本信息
+                sample_id = doc.get("id", f"sample_{i}")
+                print(f"\n[{i+1}/{len(dataset)}] 处理样本: {sample_id}")
+                print(f"  时长: {duration:.2f}s")
+                if len(reference) > 100:
+                    print(f"  参考文本: {reference[:100]}...")
+                else:
+                    print(f"  参考文本: {reference}")
 
-            # 进度显示
-            cnt = i + 1
-            # Calculate from actual samples to avoid double counting
-            if cnt > 0:
-                cer_scores = [r["cer"] for r in results["samples"] if "cer" in r]
-                bleu_scores = [r["bleu"] for r in results["samples"] if "bleu" in r]
-                chrf_scores = [r["chrf"] for r in results["samples"] if "chrf" in r]
-                if len(cer_scores) > 0:
-                    cur_avg_cer = np.mean(cer_scores)
+                try:
+                    start = time.time()
+                    if ENABLE_CHUNKING:
+                        pred_text, diag = st_translate_with_overlap(processor, model, audio_np, sr, sparsem_enabled, direction=COVOST2_DIRECTION)
+                        # 统计截断
+                        results["summary"]["total_chunks"] += len(diag.get("chunks", []))
+                        results["summary"]["truncated_chunks"] += sum(1 for c in diag.get("chunks", []) if c.get("truncated"))
+                    else:
+                        dur = len(audio_np) / float(sr) if audio_np is not None else 0.0
+                        dyn_max = MAX_NEW_TOKENS_ENV if MAX_NEW_TOKENS_ENV > 0 else estimate_tokens(dur)
+                        pred_text, diag_single = st_translate(processor, model, audio_np, sr, dyn_max, sparsem_enabled, direction=COVOST2_DIRECTION)
+                        results["summary"]["total_chunks"] += 1
+                        results["summary"]["truncated_chunks"] += 1 if diag_single.get("truncated") else 0
+                    resp_time = time.time() - start
+
+                    cer = calculate_cer(reference, pred_text)
+                    set_f1 = set_f1_per_sample(reference, pred_text)
+                    set_f1_list.append(set_f1)
+                    
+                    # Calculate BLEU and chrF for this sample
+                    bleu_score = calculate_bleu_score([pred_text], [reference], COVOST2_DIRECTION)
+                    chrf_score = calculate_chrf_score([pred_text], [reference])
+
+                    # 打印翻译结果
+                    print(f"  翻译结果: {pred_text[:200]}{'...' if len(pred_text) > 200 else ''}")
+                    print(f"  处理时间: {resp_time:.3f}s | CER: {cer:.2f}% | BLEU: {bleu_score:.2f} | chrF: {chrf_score:.2f}")
+                    if ENABLE_CHUNKING and 'chunks' in diag:
+                        num_chunks = len(diag.get("chunks", []))
+                        truncated = sum(1 for c in diag.get("chunks", []) if c.get("truncated"))
+                        print(f"  分片数: {num_chunks} | 截断分片: {truncated}")
+
+                    results["summary"]["total_samples"] += 1
+                    results["summary"]["total_cer"] += cer
+                    results["summary"]["timing"]["total_response_time"] += resp_time
+                    
+                    # Add timing statistics (skip first sample)
+                    timing_stats.add_sample(
+                        wall_time=resp_time,
+                        total_gpu_time=resp_time,
+                        decode_time=resp_time,  # For Gemma, we don't separate prefill/decode, so use total time
+                        decode_token_count=None  # We don't track token count in current implementation
+                    )
+
+                except Exception as e:
+                    print(f"  ❌ 处理错误: {e}")
+                    traceback.print_exc()
+                    pred_text = "ERROR"
+                    cer = 100.0  # CER is percentage (0-100)
+                    resp_time = 0.0
+                    bleu_score = 0.0
+                    chrf_score = 0.0
+                    set_f1_list.append(0.0)
+
+                results["samples"].append({
+                    "id": sample_id,
+                    "duration": duration,
+                    "ground_truth": reference,
+                    "prediction": pred_text,
+                    "cer": cer,
+                    "bleu": bleu_score,
+                    "chrf": chrf_score,
+                    "response_time": resp_time
+                })
+
+                # 进度显示
+                cnt = i + 1
+                # Calculate from actual samples to avoid double counting
+                if cnt > 0:
+                    cer_scores = [r["cer"] for r in results["samples"] if "cer" in r]
+                    bleu_scores = [r["bleu"] for r in results["samples"] if "bleu" in r]
+                    chrf_scores = [r["chrf"] for r in results["samples"] if "chrf" in r]
+                    if len(cer_scores) > 0:
+                        cur_avg_cer = np.mean(cer_scores)
+                    else:
+                        cur_avg_cer = 100.0
+                    if len(bleu_scores) > 0:
+                        cur_avg_bleu = np.mean(bleu_scores)
+                    else:
+                        cur_avg_bleu = 0.0
+                    if len(chrf_scores) > 0:
+                        cur_avg_chrf = np.mean(chrf_scores)
+                    else:
+                        cur_avg_chrf = 0.0
                 else:
                     cur_avg_cer = 100.0
-                if len(bleu_scores) > 0:
-                    cur_avg_bleu = np.mean(bleu_scores)
-                else:
                     cur_avg_bleu = 0.0
-                if len(chrf_scores) > 0:
-                    cur_avg_chrf = np.mean(chrf_scores)
-                else:
                     cur_avg_chrf = 0.0
-            else:
-                cur_avg_cer = 100.0
-                cur_avg_bleu = 0.0
-                cur_avg_chrf = 0.0
-            pbar.set_postfix_str(f"CER:{cur_avg_cer:.2f}% BLEU:{cur_avg_bleu:.2f} chrF:{cur_avg_chrf:.2f}")
-            
-            # 每10个样本或每个样本输出一次统计信息（根据环境调整）
-            print_interval = 10 if not is_screen_env else 1
-            if cnt % print_interval == 0 or cnt == len(dataset):
-                print(f"\n  📊 当前统计 [{cnt}/{len(dataset)}] ({cnt/len(dataset)*100:.1f}%):")
-                print(f"     平均CER: {cur_avg_cer:.3f}%")
-                print(f"     平均BLEU: {cur_avg_bleu:.2f}")
-                print(f"     平均chrF: {cur_avg_chrf:.2f}")
-                if cnt > 0:
-                    avg_time = results["summary"]["timing"]["total_response_time"] / cnt
-                    print(f"     平均处理时间: {avg_time:.3f}s")
-                print("-" * 80)
-            
-            # Real-time save: Update JSON file after each sample (or every N samples for performance)
-            save_interval = 1  # Save after every sample for real-time monitoring
-            if cnt % save_interval == 0 or cnt == len(dataset):
-                try:
-                    save_results_realtime(output_file, results, timing_stats, len(dataset))
-                    # Also save timing stats periodically
-                    if cnt % save_interval == 0 or cnt == len(dataset):
-                        timing_stats.export_to_json(timing_output_file)
-                    if cnt % 10 == 0 or cnt == len(dataset):
-                        print(f"  💾 结果已保存到: {output_file}")
-                except Exception as e:
-                    print(f"  ⚠️  保存结果时出错: {e}")
-            
-            pbar.update()
+                pbar.set_postfix_str(f"CER:{cur_avg_cer:.2f}% BLEU:{cur_avg_bleu:.2f} chrF:{cur_avg_chrf:.2f}")
+                
+                # 每10个样本或每个样本输出一次统计信息（根据环境调整）
+                print_interval = 10 if not is_screen_env else 1
+                if cnt % print_interval == 0 or cnt == len(dataset):
+                    print(f"\n  📊 当前统计 [{cnt}/{len(dataset)}] ({cnt/len(dataset)*100:.1f}%):")
+                    print(f"     平均CER: {cur_avg_cer:.3f}%")
+                    print(f"     平均BLEU: {cur_avg_bleu:.2f}")
+                    print(f"     平均chrF: {cur_avg_chrf:.2f}")
+                    if cnt > 0:
+                        avg_time = results["summary"]["timing"]["total_response_time"] / cnt
+                        print(f"     平均处理时间: {avg_time:.3f}s")
+                    print("-" * 80)
+                
+                # Real-time save: Update JSON file after each sample (or every N samples for performance)
+                save_interval = 1  # Save after every sample for real-time monitoring
+                if cnt % save_interval == 0 or cnt == len(dataset):
+                    try:
+                        save_results_realtime(output_file, results, timing_stats, len(dataset))
+                        # Also save timing stats periodically
+                        if cnt % save_interval == 0 or cnt == len(dataset):
+                            timing_stats.export_to_json(timing_output_file)
+                        if cnt % 10 == 0 or cnt == len(dataset):
+                            print(f"  💾 结果已保存到: {output_file}")
+                    except Exception as e:
+                        print(f"  ⚠️  保存结果时出错: {e}")
+                
+                pbar.update()
 
     total = results["summary"]["total_samples"]
     if total > 0:

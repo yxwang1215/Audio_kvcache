@@ -48,7 +48,7 @@ def convert_numpy_types(obj):
         return obj
 
 
-# KV cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, none
+# KV cache method selection: sparsekv, snapkv, adakv, pyramidkv, tova, mixkv, none
 # Priority: KV_METHOD > USE_SPARSEKV (for backward compatibility)
 KV_METHOD = os.environ.get("KV_METHOD", None)
 if KV_METHOD is None:

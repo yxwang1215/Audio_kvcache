@@ -72,6 +72,7 @@ else:
         init_adakv, 
         init_pyramidkv, 
         init_snapkv,
+        init_tova,
         init_mixkv,
         init_mixsparsemm,
         DynamicCacheSplitHeadFlatten
@@ -2409,6 +2410,156 @@ class Qwen2_5OmniFlashAttention2PyramidKV(Qwen2_5OmniAttention):
                 cache_key = past_key_value.key_cache[self.layer_idx]
                 total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
                 head_len = total_cache_len // num_kv_heads  # Each head has same length for PyramidKV
+                
+                self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                self.kv_cluster.klen_sum = total_cache_len
+                self.kv_cluster.max_seqlen_k = head_len
+                self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+
+            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+            self.kv_cluster.klen_sum += num_kv_heads
+            self.kv_cluster.max_seqlen_k += 1
+            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+            self.kv_cluster.head_lens.add_(1)
+
+            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+            key_states = key_states.view(-1, 1, self.head_dim)
+            value_states = value_states.view(-1, 1, self.head_dim)
+
+            attn_output = sparsemm_flash_attn_varlen_func(
+                query_states, key_states, value_states,
+                self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                1, self.kv_cluster.max_seqlen_k, causal=True
+            )
+            attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+            attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, self.hidden_size).contiguous()
+
+        attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value, query_states, key_states, value_states
+
+
+class Qwen2_5OmniFlashAttention2TOVA(Qwen2_5OmniAttention):
+    """
+    Qwen2_5Omni flash attention module with TOVA integration.
+    TOVA (Token Omission via Attention) uses the attention weights of the last token 
+    averaged across heads to select important KV pairs.
+    Based on: https://arxiv.org/abs/2401.06104
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ):
+        # Initialize TOVA cluster
+        init_tova(self)
+        
+        bsz, q_len, _ = hidden_states.size()
+        is_prefill = q_len != 1
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            if self.layer_idx is None:
+                raise ValueError(
+                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                    "with a layer index."
+                )
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
+
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+        )
+
+        if past_key_value is not None:
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+
+        if is_prefill:
+            # Prefill phase: compress and store, use original for attention
+            if past_key_value is not None:
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_value.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            # Use original KV for attention computation
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
+
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
+
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
+            else:
+                sliding_window = None
+
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        else:
+            # Decode phase: use flattened cache with varlen attention
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            # Initialize head metadata if needed - get actual length from cache
+            if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                # Get actual KV length from cache (prefill already stored compressed KV)
+                cache_key = past_key_value.key_cache[self.layer_idx]
+                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                head_len = total_cache_len // num_kv_heads  # Each head has same length for TOVA
                 
                 self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
                 self.kv_cluster.klen_sum = total_cache_len
@@ -5520,7 +5671,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         Enable KV cache compression with the specified method.
         
         Args:
-            method: KV compression method ('sparsekv', 'snapkv', 'adakv', 'pyramidkv', 'mixkv', 'none')
+            method: KV compression method ('sparsekv', 'snapkv', 'adakv', 'pyramidkv', 'tova', 'mixkv', 'none')
             kv_config: Dictionary containing KV compression configuration:
                 - 'budget': KV cache budget
                 - 'ratio': Compression ratio
@@ -5610,6 +5761,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             'snapkv': Qwen2_5OmniFlashAttention2SnapKV,
             'adakv': Qwen2_5OmniFlashAttention2AdaKV,
             'pyramidkv': Qwen2_5OmniFlashAttention2PyramidKV,
+            'tova': Qwen2_5OmniFlashAttention2TOVA,
             'mixkv': Qwen2_5OmniFlashAttention2MixKV,
         }
         
@@ -5617,6 +5769,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             'snapkv': init_snapkv,
             'adakv': init_adakv,
             'pyramidkv': init_pyramidkv,
+            'tova': init_tova,
             'mixkv': init_mixkv,
         }
         
