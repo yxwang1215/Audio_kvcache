@@ -109,6 +109,7 @@ if USE_SPARSEKV:
         Gemma3nTextAttentionSnapKV,
         Gemma3nTextAttentionAdaKV,
         Gemma3nTextAttentionPyramidKV,
+        Gemma3nTextAttentionTOVA,
         Gemma3nTextAttentionMixKV
     )
     print(f"Using sparsekv version of the model (KV_METHOD={KV_METHOD})")
@@ -2225,6 +2226,14 @@ def main():
             elif KV_METHOD == "pyramidkv":
                 model.enable_pyramidkv_attention(sparsemm_config)
                 print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "tova":
+                result = model.enable_tova_attention(sparsemm_config)
+                if not result:
+                    print(f"[TOVA] ERROR: Failed to enable TOVA method!")
+                    print(f"[TOVA] Please check if the method name is correct and all dependencies are available.")
+                    SPARSEM_ENABLED = False
+                else:
+                    print("[TOVA] TOVA attention enabled successfully")
             elif KV_METHOD == "mixkv":
                 select_method = os.environ.get("SELECT_METHOD", "mixkv")
                 sparsemm_config['select_method'] = select_method
@@ -2432,9 +2441,11 @@ def main():
             # - AdaKV/SparseMM/PyramidKV/MixKV: uses DynamicCacheSplitHeadFlatten (variable-length per head)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                if KV_METHOD == "snapkv":
+                if KV_METHOD in ("snapkv", "tova"):
+                    # SnapKV and TOVA use standard DynamicCache because all heads have the same compressed length
                     past_key_values = DynamicCache()
                 else:
+                    # AdaKV, SparseMM, PyramidKV, MixKV use DynamicCacheSplitHeadFlatten
                     past_key_values = DynamicCacheSplitHeadFlatten()
             
             # Measure prefill time: generate only 1 token to measure prefill phase
@@ -2458,8 +2469,9 @@ def main():
             if USE_SPARSEKV and sparsemm_enabled:
                 reset_sparsemm_state(model)
                 clear_model_cache(model)  # Clear model cache to prevent state leakage
-                if KV_METHOD == "snapkv":
-                    past_key_values = DynamicCache()
+                if KV_METHOD in ("snapkv", "tova"):
+                    # SnapKV and TOVA use standard DynamicCache
+                    past_key_values = DynamicCache()  # Create fresh cache
                 else:
                     past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
             # Measure decode time: generate full output

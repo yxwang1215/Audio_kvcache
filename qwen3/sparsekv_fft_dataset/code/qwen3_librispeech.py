@@ -146,9 +146,11 @@ from model.sparsemm_utils import (
     init_snapkv,
     init_adakv,
     init_pyramidkv,
+    init_tova,
     init_mixkv,
     SnapKVCluster,
     AdaKVCluster,
+    TOVACluster,
     MixKVCluster
 )
 from transformers.cache_utils import DynamicCache
@@ -1274,6 +1276,25 @@ def main():
             elif KV_METHOD == "pyramidkv":
                 model.enable_pyramidkv_attention(sparsemm_config)
                 print(f"[PyramidKV] PyramidKV enabled successfully")
+            elif KV_METHOD == "tova":
+                result = model.enable_tova_attention(sparsemm_config)
+                if not result:
+                    print(f"[TOVA] ERROR: Failed to enable TOVA method!")
+                    print(f"[TOVA] Please check if the method name is correct and all dependencies are available.")
+                    sparsemm_enabled = False
+                else:
+                    print(f"[TOVA] TOVA enabled successfully")
+                    sparsemm_enabled = True  # CRITICAL: Enable sparsemm_enabled for TOVA!
+                    # Verify that the method was actually applied
+                    if hasattr(model, 'thinker') and hasattr(model.thinker, 'model'):
+                        base_model = model.thinker.model
+                        if hasattr(base_model, 'layers') and len(base_model.layers) > 0:
+                            first_layer_attn = base_model.layers[0].self_attn
+                            actual_class_name = first_layer_attn.__class__.__name__
+                            print(f"[TOVA] Verification: First layer attention class = {actual_class_name}")
+                            if 'TOVA' not in actual_class_name:
+                                print(f"[TOVA] WARNING: Expected TOVA attention class but got {actual_class_name}!")
+                                print(f"[TOVA] TOVA may not be properly enabled!")
             elif KV_METHOD == "mixkv":
                 select_method = os.environ.get("SELECT_METHOD", "mixkv")
                 sparsemm_config['select_method'] = select_method

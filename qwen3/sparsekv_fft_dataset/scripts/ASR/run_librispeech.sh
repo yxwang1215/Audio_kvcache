@@ -1,17 +1,19 @@
 #!/bin/bash
 # LibriSpeech ASR Evaluation with Qwen3-Omni
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=6
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 
 # KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
-export KV_METHOD="adakv"
+export KV_METHOD="tova"
+export TOVA_DECODE_COMPRESSION="true"
+export TOVA_DECODE_COMPRESSION_INTERVAL="256"  # 每256个token压缩一次
 # export KV_METHOD="sparsekv"
 # export KV_METHOD="mixkv"
 # export SELECT_METHOD="headwisemixkv"
 # export METHOD="mixsparsemm"
-export BUDGET=0.6
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32  
 export KERNEL_SIZE=5
@@ -33,5 +35,5 @@ conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
 python code/qwen3_librispeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/LibriSpeech_Results/AdaKV/budget0.6 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/LibriSpeech_Results/AdaKV/budget0.6/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/LibriSpeech_Results/ToVA/budget0.8 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/LibriSpeech_Results/ToVA/budget0.8/timing_stats.json

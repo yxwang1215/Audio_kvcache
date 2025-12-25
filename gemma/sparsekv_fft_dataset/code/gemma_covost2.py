@@ -43,6 +43,7 @@ if USE_SPARSEKV:
         Gemma3nTextAttentionSnapKV,
         Gemma3nTextAttentionAdaKV,
         Gemma3nTextAttentionPyramidKV,
+        Gemma3nTextAttentionTOVA,
         Gemma3nTextAttentionMixKV
     )
     print(f"Using sparsekv version of the model (KV_METHOD={KV_METHOD})")
@@ -1086,6 +1087,14 @@ def init_model():
             elif KV_METHOD == "pyramidkv":
                 model.enable_pyramidkv_attention(sparsemm_config)
                 print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "tova":
+                result = model.enable_tova_attention(sparsemm_config)
+                if not result:
+                    print(f"[TOVA] ERROR: Failed to enable TOVA method!")
+                    print(f"[TOVA] Please check if the method name is correct and all dependencies are available.")
+                    SPARSEM_ENABLED = False
+                else:
+                    print("[TOVA] TOVA attention enabled successfully")
             elif KV_METHOD == "mixkv":
                 select_method = os.environ.get("SELECT_METHOD", "mixkv")
                 sparsemm_config['select_method'] = select_method
@@ -1836,8 +1845,9 @@ def _generate_text(processor, model, messages: List[Dict], max_new_tokens: int,
     if sparsem_enabled:
         # SnapKV and PyramidKV use uniform compression (all heads same length)
         # so they should use standard DynamicCache, not DynamicCacheSplitHeadFlatten
-        # Only AdaKV, SparseMM, and MixKV use variable-length heads
-        if KV_METHOD in ("snapkv", "pyramidkv"):
+        # SnapKV, TOVA, and PyramidKV use standard DynamicCache (uniform compression, all heads same length)
+        # AdaKV, SparseMM, and MixKV use DynamicCacheSplitHeadFlatten (variable-length per head)
+        if KV_METHOD in ("snapkv", "tova", "pyramidkv"):
             from transformers import DynamicCache
             generate_kwargs["past_key_values"] = DynamicCache()
         else:

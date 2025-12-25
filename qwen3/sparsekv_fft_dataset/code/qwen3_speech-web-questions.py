@@ -2091,6 +2091,9 @@ def main():
             elif KV_METHOD == "pyramidkv":
                 model.enable_pyramidkv_attention(sparsemm_config)
                 print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "tova":
+                model.enable_tova_attention(sparsemm_config)
+                print("[TOVA] TOVA attention enabled successfully")
             elif KV_METHOD == "mixkv":
                 select_method = os.environ.get("SELECT_METHOD", "mixkv")
                 sparsemm_config['select_method'] = select_method

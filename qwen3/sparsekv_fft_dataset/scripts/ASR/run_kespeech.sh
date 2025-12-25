@@ -1,21 +1,22 @@
 #!/bin/bash
 # KeSpeech ASR Evaluation with Qwen2.5-Omni
 
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=0
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 
 # KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
-export KV_METHOD="sparsekv"
+export KV_METHOD="tova"
+export TOVA_DECODE_COMPRESSION="true"
+export TOVA_DECODE_COMPRESSION_INTERVAL="256"  # 每256个token压缩一次
 # export METHOD="mixsparsemm"
 # export SELECT_METHOD="headwisemixkv"
-export BUDGET=0.6
+export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/head_score/audio_head_scores_topk16_alpha1_beta1_gamma1.json"
-export HEAD_SCORE_FILE="uniform"
+export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/head_score/audio_head_scores_topk16_alpha1_beta1_gamma1.json"
 # export HEAD_SCORE_FILE="uniform"
 
 export USE_FFT_FILTER="true"
@@ -30,5 +31,5 @@ conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
 python code/qwen3_kespeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/KeSpeech_Results/SparseKV_FFT/budget0.6 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/KeSpeech_Results/SparseKV_FFT/budget0.6/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/KeSpeech_Results/ToVA/budget0.8 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/KeSpeech_Results/ToVA/budget0.8/timing_stats.json

@@ -34,6 +34,7 @@ if USE_SPARSEKV:
         Gemma3nTextAttentionSnapKV,
         Gemma3nTextAttentionAdaKV,
         Gemma3nTextAttentionPyramidKV,
+        Gemma3nTextAttentionTOVA,
         Gemma3nTextAttentionMixKV
     )
     print(f"Using sparsekv version of the model with KV_METHOD={KV_METHOD}")
@@ -1008,6 +1009,14 @@ def init_model():
             elif KV_METHOD == "pyramidkv":
                 model.enable_pyramidkv_attention(sparsemm_config)
                 print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "tova":
+                result = model.enable_tova_attention(sparsemm_config)
+                if not result:
+                    print(f"[TOVA] ERROR: Failed to enable TOVA method!")
+                    print(f"[TOVA] Please check if the method name is correct and all dependencies are available.")
+                    SPARSEM_ENABLED = False
+                else:
+                    print("[TOVA] TOVA attention enabled successfully")
             elif KV_METHOD == "mixkv":
                 # Add select_method for MixKV
                 select_method = os.environ.get("SELECT_METHOD", "mixkv")
@@ -1363,9 +1372,11 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
     # - SnapKV: uses standard DynamicCache (uniform compression, all heads same length)
     # - AdaKV/SparseMM/PyramidKV/MixKV: uses DynamicCacheSplitHeadFlatten (variable-length per head)
     if sparsem_enabled:
-        if KV_METHOD == "snapkv":
+        if KV_METHOD in ("snapkv", "tova"):
+            # SnapKV and TOVA use standard DynamicCache because all heads have the same compressed length
             generate_kwargs["past_key_values"] = DynamicCache()
         else:
+            # AdaKV, SparseMM, PyramidKV, MixKV use DynamicCacheSplitHeadFlatten
             generate_kwargs["past_key_values"] = DynamicCacheSplitHeadFlatten()
     elif ENV_BUDGET_RAW != "4096" or ENV_BUDGET != 4096.0:
         generate_kwargs["past_key_values"] = BudgetLimitedKVCache(budget=ENV_BUDGET, seed=42)

@@ -2168,6 +2168,207 @@ class MixKVCluster():
         return heads_key_states, heads_value_states
 
 
+class TOVACluster():
+    """
+    TOVA (Token Omission via Attention) KV cache compression.
+    Uses the attention weights of the last token averaged across heads to select important KV pairs.
+    Based on: https://arxiv.org/abs/2401.06104
+    
+    Supports both prefill and decode phase compression:
+    - Prefill: compress KV using TOVA scoring
+    - Decode: periodically compress accumulated KV cache based on compression_interval
+    """
+    def __init__(self, max_capacity_prompt=256, layer_idx=None, num_hidden_layers=None, 
+                 num_key_value_groups=1, gqa_func='mean', config=None):
+        self.max_capacity_prompt = max_capacity_prompt
+        self.layer_idx = layer_idx
+        self.num_hidden_layers = num_hidden_layers
+        self.num_key_value_groups = num_key_value_groups
+        self.gqa_func = gqa_func
+        self.config = config
+        
+        # Metadata for decode phase
+        self.head_lens = None
+        self.max_seqlen_k = 0
+        self.klen_sum = 0
+        self.cu_klen = None
+        self.cu_qlen = None
+        self.cu_offset = None
+        
+        # Decode phase compression parameters (based on kvpress DecodingPress)
+        self.decode_compression_interval = int(os.getenv('TOVA_DECODE_COMPRESSION_INTERVAL', '512'))
+        self.decode_target_size = int(os.getenv('TOVA_DECODE_TARGET_SIZE', '0'))  # 0 means use max_capacity_prompt
+        self.decode_step_count = 0
+        self.decode_compression_enabled = os.getenv('TOVA_DECODE_COMPRESSION', 'false').lower() == 'true'
+
+    def update_budget(self, new_budget):
+        """Update max_capacity_prompt budget for dynamic budget adjustment."""
+        self.max_capacity_prompt = new_budget
+
+    def reset_decode_state(self):
+        """Reset decode phase state for new generation."""
+        self.decode_step_count = 0
+        self.head_lens = None
+        self.max_seqlen_k = 0
+        self.klen_sum = 0
+        self.cu_klen = None
+        self.cu_qlen = None
+        self.cu_offset = None
+
+    def should_compress_decode(self, current_seq_len):
+        """Check if decode compression should be applied."""
+        if not self.decode_compression_enabled:
+            return False
+        target_size = self.decode_target_size if self.decode_target_size > 0 else self.max_capacity_prompt
+        # Compress if we've reached the compression interval or cache size exceeds target
+        # Similar to kvpress DecodingPress: (step_count >= interval) or (seq_len >= target_size)
+        return (self.decode_step_count >= self.decode_compression_interval) or (current_seq_len >= target_size)
+
+    def update_kv_decode(self, origin_key_states, query_states, origin_value_states):
+        """
+        Update KV cache during decode phase with TOVA compression.
+        Similar to prefill compression but designed for incremental decoding.
+        
+        Args:
+            origin_key_states: Current KV cache keys [bsz, num_kv_heads, seq_len, head_dim]
+            query_states: Current query [bsz, num_heads, 1, head_dim]
+            origin_value_states: Current KV cache values [bsz, num_kv_heads, seq_len, head_dim]
+        
+        Returns:
+            Compressed (key_states, value_states, compressed_flag) if compression applied, else original
+        """
+        self.decode_step_count += 1
+        
+        bsz, num_kv_heads, seq_len, head_dim = origin_key_states.shape
+        target_size = self.decode_target_size if self.decode_target_size > 0 else self.max_capacity_prompt
+        
+        # Check if compression should be applied
+        if not self.should_compress_decode(seq_len):
+            return origin_key_states, origin_value_states, False
+        
+        # Apply TOVA compression
+        key_states_compress, value_states_compress = self._tova_compress(
+            origin_key_states, query_states, origin_value_states, target_size
+        )
+        
+        # Reset step count after compression
+        self.decode_step_count = 0
+        
+        return key_states_compress, value_states_compress, True
+
+    def _tova_compress(self, origin_key_states, query_states, origin_value_states, target_capacity):
+        """
+        Core TOVA compression logic shared by prefill and decode.
+        
+        Args:
+            origin_key_states: Keys to compress [bsz, num_kv_heads, seq_len, head_dim]
+            query_states: Query states [bsz, num_heads, q_len, head_dim]
+            origin_value_states: Values to compress [bsz, num_kv_heads, seq_len, head_dim]
+            target_capacity: Target number of tokens to keep
+        
+        Returns:
+            Compressed (key_states, value_states)
+        """
+        # Support GQA
+        key_states = repeat_kv(origin_key_states, self.num_key_value_groups)
+        value_states = repeat_kv(origin_value_states, self.num_key_value_groups)
+        
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        B, num_kv_heads, N, D = origin_key_states.shape
+        
+        if N <= target_capacity:
+            return origin_key_states, origin_value_states
+        
+        # TOVA: Use the last token's attention weights
+        last_query = query_states[..., -1:, :]  # (bsz, num_heads, 1, head_dim)
+        
+        # Compute attention scores
+        attn_weights = torch.matmul(last_query, key_states.transpose(2, 3)) / math.sqrt(head_dim)
+        attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        
+        # Handle GQA by reshaping
+        attn_weights = attn_weights.view(bsz, num_heads // self.num_key_value_groups, self.num_key_value_groups, 1, N)
+        if self.gqa_func == 'max':
+            attn_weights = attn_weights.max(dim=-3).values
+        elif self.gqa_func == 'mean':
+            attn_weights = attn_weights.mean(dim=-3)
+        else:
+            raise ValueError('gqa_func not supported')
+        
+        # Average across KV heads
+        attn_weights_mean = attn_weights.mean(dim=1)
+        scores = attn_weights_mean.squeeze(1)
+        
+        # Ensure last token is not pruned
+        scores_except_last = scores[..., :-1]
+        max_score = scores_except_last.max(dim=-1, keepdim=True)[0]
+        scores = torch.cat([scores_except_last, max_score], dim=-1)
+        
+        # Select top-k tokens
+        _, indices = scores.topk(target_capacity, dim=-1)
+        
+        # Expand indices for gathering
+        indices = indices.unsqueeze(1).unsqueeze(-1)
+        indices = indices.expand(bsz, num_kv_heads, target_capacity, D)
+        
+        # Select KV pairs
+        k_compress = origin_key_states.gather(dim=2, index=indices)
+        v_compress = origin_value_states.gather(dim=2, index=indices)
+        
+        return k_compress, v_compress
+
+    def update_kv(self, origin_key_states, query_states, origin_value_states):
+        """Update KV cache using TOVA scoring method (prefill phase)."""
+        # Support GQA
+        key_states = repeat_kv(origin_key_states, self.num_key_value_groups)
+        value_states = repeat_kv(origin_value_states, self.num_key_value_groups)
+        assert key_states.shape[-2] == query_states.shape[-2]
+        
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        B, num_kv_heads, N, D = origin_key_states.shape
+        
+        if q_len < self.max_capacity_prompt:
+            return origin_key_states, origin_value_states
+        
+        # Use shared TOVA compression logic
+        return self._tova_compress(origin_key_states, query_states, origin_value_states, self.max_capacity_prompt)
+
+
+def init_tova(self):
+    """Initialize TOVA cluster for Token Omission via Attention KV cache compression."""
+    if not hasattr(self, "kv_cluster"):
+        if not hasattr(self.config, 'max_capacity_prompt'):
+            # Handle budget as ratio or absolute value
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                # If budget is a ratio (< 1.0), use placeholder for initialization
+                # The actual budget will be updated later in update_sparsemm_budget()
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096  # Placeholder for ratio-based budget
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096  # Default fallback
+        if not hasattr(self.config, 'num_hidden_layers'):
+            raise ValueError('num_hidden_layers should be set')
+        if not hasattr(self.config, 'gqa_func'):
+            if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type or \
+                'gemma' in self.config.model_type:
+                self.config.gqa_func = 'mean'
+
+    if not hasattr(self, "kv_cluster"):
+        self.kv_cluster = TOVACluster(
+            max_capacity_prompt=self.config.max_capacity_prompt,
+            layer_idx=self.layer_idx,
+            num_hidden_layers=self.config.num_hidden_layers,
+            num_key_value_groups=self.config.num_attention_heads // self.config.num_key_value_heads,
+            gqa_func=self.config.gqa_func,
+            config=self.config
+        )
+
+
 def init_mixkv(self):
     """Initialize MixKV cluster for head-wise mixed scoring KV cache compression."""
     if not hasattr(self, "kv_cluster"):

@@ -49,7 +49,7 @@ def convert_numpy_types(obj):
         return obj
 
 
-# KV cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, none, vanilla
+# KV cache method selection: sparsekv, snapkv, adakv, pyramidkv, tova, mixkv, none, vanilla
 # Priority: KV_METHOD > USE_SPARSEKV (for backward compatibility)
 # "none" and "vanilla" both mean no KV cache compression (full cache)
 KV_METHOD = os.environ.get("KV_METHOD", None)
@@ -385,7 +385,7 @@ def update_sparsemm_budget(model, prefill_token_count):
                 if hasattr(kv_cluster, 'update_budget'):
                     kv_cluster.update_budget(actual_budget)
                 elif hasattr(kv_cluster, 'max_capacity_prompt'):
-                    # For SnapKVCluster (used by pyramidkv, snapkv, and mixkv)
+                    # For SnapKVCluster (used by pyramidkv, snapkv, mixkv) and TOVACluster
                     kv_cluster.max_capacity_prompt = actual_budget
                     # Reset pyram_init so pyramid mode recalculates with new budget
                     if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
@@ -1180,7 +1180,7 @@ def main():
                 'pooling': ENV_POOLING
             }
             
-            # Load head score for sparsekv method
+            # Load head score for sparsekv method (tova, snapkv, adakv, pyramidkv, mixkv don't need head scores)
             head_score_data = None
             if KV_METHOD == 'sparsekv':
                 # Load head score file
@@ -1473,9 +1473,14 @@ def main():
                 print("[SparseMM] Prefill input tokens: unable to determine token count")
             
             # Initialize cache for SparseMM if enabled
+            # SnapKV and TOVA use standard DynamicCache (uniform compression, all heads same length)
+            # Other methods (SparseMM, AdaKV, PyramidKV, MixKV) use DynamicCacheSplitHeadFlatten (variable-length per head)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                past_key_values = DynamicCacheSplitHeadFlatten()
+                if KV_METHOD in ("snapkv", "tova"):
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()
             
             # Measure prefill time: generate only 1 token to measure prefill phase
             prefill_start_event = torch.cuda.Event(enable_timing=True)
@@ -1500,7 +1505,11 @@ def main():
             # The first generate call pollutes the cache state, so we MUST reset before the actual generation
             if USE_SPARSEKV and sparsemm_enabled:
                 reset_sparsemm_state(model)
-                past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
+                # SnapKV and TOVA use DynamicCache, others use DynamicCacheSplitHeadFlatten
+                if KV_METHOD in ("snapkv", "tova"):
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()
             # Measure decode time: generate full output
             # Use language-specific max_new_tokens (German words are longer, need more tokens)
             max_new_tokens = LANGUAGE_MAX_NEW_TOKENS.get(language.lower(), DEFAULT_MAX_NEW_TOKENS)

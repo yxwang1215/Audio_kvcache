@@ -35,6 +35,7 @@ try:
         init_adakv, 
         init_pyramidkv, 
         init_snapkv,
+        init_tova,
         init_mixkv, 
         DynamicCacheSplitHeadFlatten, 
         repeat_kv
@@ -46,6 +47,7 @@ except ImportError:
     init_adakv = None
     init_pyramidkv = None
     init_snapkv = None
+    init_tova = None
     init_mixkv = None
     print("[WARNING] sparsemm_utils not available, SparseMM features will be disabled")
 
@@ -2428,8 +2430,12 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
                 
                 # Initialize head metadata if needed - get actual length from cache
                 if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
-                    cache_key = past_key_values.key_cache[self.layer_idx]
-                    total_cache_len = cache_key.shape[0]
+                    if hasattr(past_key_values, 'key_cache') and len(past_key_values.key_cache) > self.layer_idx:
+                        cache_key = past_key_values.key_cache[self.layer_idx]
+                        total_cache_len = cache_key.shape[0]
+                    else:
+                        # Fallback for standard DynamicCache
+                        total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
                     head_len = total_cache_len // num_kv_heads
                     
                     self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
@@ -2490,6 +2496,302 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
             # No cache or DynamicCacheSplitHeadFlatten that wasn't handled above - use original KV
             key_states_attn = key_states
             value_states_attn = value_states
+
+        # Standard attention for prefill (or no cache case)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states_attn,
+            value_states_attn,
+            attention_mask,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=1.0,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Gemma3nTextAttentionTOVA(Gemma3nTextAttention):
+    """
+    Gemma3n text attention module with TOVA integration.
+    TOVA (Token Omission via Attention) uses the attention weights of the last token 
+    averaged across heads to select important KV pairs.
+    Based on: https://arxiv.org/abs/2401.06104
+    
+    TOVA uses standard DynamicCache because all heads are compressed to the same length.
+    - Prefill: compress KV using TOVA scoring and store to cache, use original KV for attention
+    - Decode: use compressed KV from cache with standard attention
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.config.head_dim)
+
+        cos, sin = position_embeddings
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_norm(query_states)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        query_states = query_states.transpose(1, 2)
+
+        # CRITICAL: Handle KV shared layers (Gemma3n specific)
+        # For layers with shared KV, reuse KV from previous non-shared layer
+        if self.is_kv_shared_layer and past_key_values is not None:
+            if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                key_states = key_states.to(query_states.device)
+                value_states = value_states.to(query_states.device)
+            else:
+                # Fallback: compute KV normally if shared layer data not available
+                key_states = self.k_proj(hidden_states).view(hidden_shape)
+                key_states = self.k_norm(key_states)
+                key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+                key_states = key_states.transpose(1, 2)
+                value_states = self.v_proj(hidden_states).view(hidden_shape)
+                value_states = self.v_norm(value_states)
+                value_states = value_states.transpose(1, 2)
+        else:
+            key_states = self.k_proj(hidden_states).view(hidden_shape)
+            key_states = self.k_norm(key_states)
+            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+            key_states = key_states.transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(hidden_shape)
+            value_states = self.v_norm(value_states)
+            value_states = value_states.transpose(1, 2)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        num_kv_heads = self.config.num_key_value_heads
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
+
+        # Initialize TOVA cluster (only for non-shared layers)
+        if not self.is_kv_shared_layer:
+            if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+                init_tova(self)
+
+        is_prefill = q_len != 1
+
+        # Check cache type - TOVA uses standard DynamicCache (not DynamicCacheSplitHeadFlatten)
+        is_dynamic_cache = (
+            past_key_values is not None and (
+                isinstance(past_key_values, DynamicCache) or
+                type(past_key_values).__name__ == "DynamicCache"
+            )
+        )
+        
+        # Also check for DynamicCacheSplitHeadFlatten (for backward compatibility)
+        is_split_head_flatten_cache = (
+            past_key_values is not None and (
+                isinstance(past_key_values, DynamicCacheSplitHeadFlatten) or
+                type(past_key_values).__name__ == "DynamicCacheSplitHeadFlatten"
+            )
+        )
+
+        # TOVA with standard DynamicCache
+        if is_dynamic_cache and not is_split_head_flatten_cache:
+            # Handle KV shared layers
+            if self.is_kv_shared_layer:
+                # For KV shared layers: use shared_layers KV directly, no compression
+                if not is_prefill:
+                    # DECODE PHASE for KV shared layers
+                    if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                        key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                        key_states = key_states.to(query_states.device)
+                        value_states = value_states.to(query_states.device)
+                
+                # Repeat KV for GQA
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            elif is_prefill:
+                # PREFILL PHASE for non-shared layers with TOVA compression
+                
+                # Store full-length KV for shared layers BEFORE compression
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                # Compress KV using TOVA and store to cache
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+                
+                # Use original (uncompressed) KV for attention computation during prefill
+                # CRITICAL: Must repeat_kv for GQA!
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            else:
+                # DECODE PHASE for non-shared layers
+                # Update cache with new token
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                
+                # Apply decode phase compression if enabled (based on kvpress DecodingPress)
+                if self.kv_cluster.decode_compression_enabled:
+                    key_states_compress, value_states_compress, compressed = self.kv_cluster.update_kv_decode(
+                        key_states, query_states, value_states
+                    )
+                    if compressed:
+                        # Update cache with compressed KV
+                        if hasattr(past_key_values, 'key_cache') and hasattr(past_key_values, 'value_cache'):
+                            past_key_values.key_cache[self.layer_idx] = key_states_compress
+                            past_key_values.value_cache[self.layer_idx] = value_states_compress
+                        key_states = key_states_compress
+                        value_states = value_states_compress
+                
+                # Update shared_layers for store_full_length_kv layers
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    # For decode, we need to update the shared_layers with the new token
+                    # The cache already contains the updated KV, so we use it directly
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                # Repeat KV for GQA
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+        elif is_split_head_flatten_cache:
+            # Handle DynamicCacheSplitHeadFlatten (variable-length per head)
+            # This branch is for backward compatibility if someone uses DynamicCacheSplitHeadFlatten with TOVA
+            if self.is_kv_shared_layer:
+                # For KV shared layers: use shared_layers KV directly
+                if not is_prefill:
+                    # DECODE PHASE for KV shared layers
+                    if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                        key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                        key_states = key_states.to(query_states.device)
+                        value_states = value_states.to(query_states.device)
+                
+                # Repeat KV for GQA and set key_states_attn/value_states_attn for attention computation
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                # Skip TOVA processing - use standard attention below
+            elif is_prefill:
+                # PREFILL PHASE for non-shared layers
+                
+                # IMPORTANT: For layers that provide KV for sharing, store full-length KV BEFORE compression
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                # Compress KV and store to cache
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+                
+                # Use original (uncompressed) KV for attention computation during prefill
+                # CRITICAL: Must repeat_kv for GQA!
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            else:
+                # DECODE PHASE for non-shared layers
+                device = key_states.device
+                
+                # Initialize head metadata if needed - get actual length from cache
+                if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                    if hasattr(past_key_values, 'key_cache') and len(past_key_values.key_cache) > self.layer_idx:
+                        cache_key = past_key_values.key_cache[self.layer_idx]
+                        total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                    else:
+                        # Fallback for standard DynamicCache
+                        total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
+                    head_len = total_cache_len // num_kv_heads  # Each head has same length for TOVA
+                    
+                    self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                    self.kv_cluster.klen_sum = total_cache_len
+                    self.kv_cluster.max_seqlen_k = head_len
+                    self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                    self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                    self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+
+                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                key_states_updated, value_states_updated = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+                # CRITICAL FIX: Update shared_layers in decode phase for store_full_length_kv layers
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    if self.layer_idx in past_key_values.shared_layers:
+                        prev_key, prev_value = past_key_values.shared_layers[self.layer_idx]
+                        prev_key = prev_key.to(key_states.device)
+                        prev_value = prev_value.to(value_states.device)
+                        updated_key = torch.cat([prev_key, key_states], dim=2)
+                        updated_value = torch.cat([prev_value, value_states], dim=2)
+                        past_key_values.shared_layers[self.layer_idx] = (updated_key, updated_value)
+                    else:
+                        past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+
+                self.kv_cluster.klen_sum += num_kv_heads
+                self.kv_cluster.max_seqlen_k += 1
+                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+                self.kv_cluster.head_lens.add_(1)
+
+                num_key_value_groups = num_heads // num_kv_heads
+                query_states_varlen = query_states.view(-1, num_key_value_groups, head_dim)
+                key_states_varlen = key_states_updated.view(-1, 1, head_dim)
+                value_states_varlen = value_states_updated.view(-1, 1, head_dim)
+
+                if SPARSEM_AVAILABLE and FLASH_ATTN_VARLEN_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
+                    # CRITICAL: Gemma uses scaling=1.0 because Q and K are already normalized
+                    # by q_norm and k_norm. We must pass softmax_scale=1.0 to match this behavior.
+                    attn_output = sparsemm_flash_attn_varlen_func(
+                        query_states_varlen, key_states_varlen, value_states_varlen,
+                        self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                        1, self.kv_cluster.max_seqlen_k, causal=True,
+                        softmax_scale=1.0
+                    )
+                    attn_output = attn_output.reshape(bsz, num_heads, q_len, head_dim)
+                    attn_output = attn_output.transpose(1, 2).reshape(*input_shape, -1).contiguous()
+                    attn_output = self.o_proj(attn_output)
+                    return attn_output, None
+                else:
+                    # Fallback to standard attention if SparseMM not available
+                    key_states_attn = repeat_kv(key_states_updated, self.num_key_value_groups)
+                    value_states_attn = repeat_kv(value_states_updated, self.num_key_value_groups)
+                    attention_interface: Callable = eager_attention_forward
+                    if self.config._attn_implementation != "eager":
+                        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                    attn_output, attn_weights = attention_interface(
+                        self,
+                        query_states,
+                        key_states_attn,
+                        value_states_attn,
+                        attention_mask,
+                        dropout=0.0 if not self.training else self.attention_dropout,
+                        scaling=1.0,
+                        sliding_window=self.sliding_window,
+                        **kwargs,
+                    )
+                    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+                    attn_output = self.o_proj(attn_output)
+                    return attn_output, attn_weights
+        elif past_key_values is not None:
+            # Other cache types - fallback to standard behavior
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+        else:
+            # No cache - use original KV with repeat_kv for GQA
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
 
         # Standard attention for prefill (or no cache case)
         attention_interface: Callable = eager_attention_forward
@@ -2653,8 +2955,12 @@ class Gemma3nTextAttentionMixKV(Gemma3nTextAttention):
                 
                 # Initialize head metadata if needed
                 if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
-                    cache_key = past_key_values.key_cache[self.layer_idx]
-                    total_cache_len = cache_key.shape[0]
+                    if hasattr(past_key_values, 'key_cache') and len(past_key_values.key_cache) > self.layer_idx:
+                        cache_key = past_key_values.key_cache[self.layer_idx]
+                        total_cache_len = cache_key.shape[0]
+                    else:
+                        # Fallback for standard DynamicCache
+                        total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
                     head_len = total_cache_len // num_kv_heads
                     
                     self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
@@ -4032,6 +4338,60 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             patched_count += 1
         
         print(f"[PyramidKV] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_tova_attention(
+        self,
+        sparsemm_config: Dict[str, Any]
+    ):
+        """
+        Replace attention modules with TOVA version for Token Omission via Attention KVCache compression.
+        
+        Args:
+            sparsemm_config: Dictionary containing configuration:
+                - 'budget': KV cache budget
+                - 'budget_ratio': Budget ratio for dynamic adjustment (optional)
+        """
+        if not SPARSEM_AVAILABLE:
+            raise ImportError("sparsemm_utils is not available.")
+        
+        base_model = self.model.language_model
+        model_config = base_model.config
+        
+        # Apply configuration to model config
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        # CRITICAL: Store budget_ratio for dynamic adjustment
+        budget_ratio = sparsemm_config.get('budget_ratio', None)
+        model_config.budget_ratio = budget_ratio
+        
+        if budget_ratio is not None:
+            print(f"[TOVA] budget_ratio={budget_ratio} enabled for dynamic budget adjustment")
+        # add
+        if not hasattr(model_config, 'gqa_func'):
+            model_config.gqa_func = 'mean'
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Gemma3nTextAttentionTOVA(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            # Copy weights
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            new_attn.v_norm.load_state_dict(old_attn.v_norm.state_dict())
+            
+            init_tova(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[TOVA] Total layers patched: {patched_count}/{len(base_model.layers)}")
         return True
 
     def enable_mixkv_attention(

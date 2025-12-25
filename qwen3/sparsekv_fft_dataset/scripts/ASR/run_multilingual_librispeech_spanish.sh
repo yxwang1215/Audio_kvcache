@@ -1,14 +1,16 @@
 #!/bin/bash
 # Multilingual LibriSpeech ASR Evaluation with Qwen2.5-Omni - Spanish
 
-export CUDA_VISIBLE_DEVICES=4
+export CUDA_VISIBLE_DEVICES=5
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 
 # KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
-# export KV_METHOD="pyramidkv"
+export KV_METHOD="tova"
+export TOVA_DECODE_COMPRESSION="true"
+export TOVA_DECODE_COMPRESSION_INTERVAL="256"  # 每256个token压缩一次
 # export KV_METHOD="mixkv"
-export KV_METHOD="adakv"
+# export KV_METHOD="sparsekv"
 # export METHOD="mixsparsemm"
 # export SELECT_METHOD="headwisemixkv"
 export BUDGET=0.6
@@ -33,5 +35,5 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset
 python code/qwen3_multilingual_librispeech.py \
     --model-path "${MODEL_PATH}" \
     --languages spanish \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/Spanish/AdaKV/budget0.6 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/Spanish/AdaKV/budget0.6/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/Spanish/ToVA/budget0.6 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/MultilingualLibriSpeech/Spanish/ToVA/budget0.6/timing_stats.json

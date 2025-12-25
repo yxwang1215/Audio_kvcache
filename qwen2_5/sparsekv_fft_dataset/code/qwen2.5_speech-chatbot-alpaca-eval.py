@@ -2550,9 +2550,14 @@ def main():
             
             # Initialize cache for SparseMM if enabled
             # NOTE: Create fresh cache for each sample to avoid state leakage
+            # SnapKV and TOVA use standard DynamicCache (uniform compression, all heads same length)
+            # Other methods (SparseMM, AdaKV, PyramidKV, MixKV) use DynamicCacheSplitHeadFlatten (variable-length per head)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                past_key_values = DynamicCacheSplitHeadFlatten()
+                if KV_METHOD in ("snapkv", "tova"):
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()
             
             # Measure prefill time: generate only 1 token to measure prefill phase
             prefill_start_event = torch.cuda.Event(enable_timing=True)
@@ -2577,7 +2582,11 @@ def main():
             # The first generate call pollutes the cache state, so we MUST reset before the actual generation
             if USE_SPARSEKV and sparsemm_enabled:
                 reset_sparsemm_state(model)
-                past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
+                # SnapKV and TOVA use DynamicCache, others use DynamicCacheSplitHeadFlatten
+                if KV_METHOD in ("snapkv", "tova"):
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()
             # Measure decode time: generate full output
             decode_start_event = torch.cuda.Event(enable_timing=True)
             decode_end_event = torch.cuda.Event(enable_timing=True)

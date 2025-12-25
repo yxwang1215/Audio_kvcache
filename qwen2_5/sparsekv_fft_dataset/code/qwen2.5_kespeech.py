@@ -48,7 +48,7 @@ def convert_numpy_types(obj):
         return obj
 
 
-# KV cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, none
+# KV cache method selection: sparsekv, snapkv, adakv, pyramidkv, tova, mixkv, none
 # Priority: KV_METHOD > USE_SPARSEKV (for backward compatibility)
 KV_METHOD = os.environ.get("KV_METHOD", None)
 if KV_METHOD is None:
@@ -122,8 +122,16 @@ sys.path.insert(0, parent_dir)  # Add parent directory to path for model imports
 
 # Import model modules after setting up path
 if USE_SPARSEKV:
-    # Import from model directory
-    from model.modeling_qwen2_5_omni_sparsekv import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniFlashAttention2SparseMM
+    # Import from model directory using relative import
+    from model.modeling_qwen2_5_omni_sparsekv import (
+        Qwen2_5OmniForConditionalGeneration, 
+        Qwen2_5OmniFlashAttention2SparseMM,
+        Qwen2_5OmniFlashAttention2SnapKV,
+        Qwen2_5OmniFlashAttention2AdaKV,
+        Qwen2_5OmniFlashAttention2PyramidKV,
+        Qwen2_5OmniFlashAttention2TOVA,
+        Qwen2_5OmniFlashAttention2MixKV
+    )
     print("Using sparsekv version of the model")
 else:
     # Try importing from transformers first, then fallback to local file
@@ -145,12 +153,35 @@ else:
 
 from model.processing_qwen2_5_omni import Qwen2_5OmniProcessor
 from qwen_omni_utils import process_mm_info
+
+# Check if optimized SparseMM should be used
+USE_OPTIMIZED_SPARSEMM = os.environ.get("USE_OPTIMIZED_SPARSEMM", "false").lower() == "true"
+
 # Import SparseMM utilities from model directory
-from model.sparsemm_utils import (
-    SparseMM,
-    DynamicCacheSplitHeadFlatten,
-    init_sparsemm
-)
+if USE_OPTIMIZED_SPARSEMM:
+    from model.sparsemm_utils_optimized import (
+        SparseMM_Optimized as SparseMM,
+        DynamicCacheSplitHeadFlattenOptimized as DynamicCacheSplitHeadFlatten,
+        init_sparsemm_optimized as init_sparsemm
+    )
+    print("Using OPTIMIZED SparseMM implementation for better performance")
+else:
+    from model.sparsemm_utils import (
+        SparseMM,
+        SnapKVCluster,
+        AdaKVCluster,
+        TOVACluster,
+        MixKVCluster,
+        DynamicCacheSplitHeadFlatten,
+        init_sparsemm,
+        init_snapkv,
+        init_adakv,
+        init_pyramidkv,
+        init_tova,
+        init_mixkv
+    )
+    print(f"Using standard SparseMM implementation with KV_METHOD={KV_METHOD}")
+    
 from transformers.cache_utils import DynamicCache
 
 # Import audio head utilities for SparseMM
@@ -298,7 +329,7 @@ def update_sparsemm_budget(model, prefill_token_count):
                 if hasattr(kv_cluster, 'update_budget'):
                     kv_cluster.update_budget(actual_budget)
                 elif hasattr(kv_cluster, 'max_capacity_prompt'):
-                    # For SnapKVCluster (used by pyramidkv, snapkv, and mixkv)
+                    # For SnapKVCluster (used by pyramidkv, snapkv, mixkv) and TOVACluster
                     kv_cluster.max_capacity_prompt = actual_budget
                     # Reset pyram_init so pyramid mode recalculates with new budget
                     if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
@@ -1385,7 +1416,7 @@ def main():
                 'pooling': ENV_POOLING
             }
             
-            # Load head score for sparsekv method
+            # Load head score for sparsekv method (tova, snapkv, adakv, pyramidkv, mixkv don't need head scores)
             head_score_data = None
             if KV_METHOD == 'sparsekv':
                 # Load head score file
@@ -1447,15 +1478,39 @@ def main():
             
             # Use the unified enable_kv_compression method if available
             if hasattr(model, 'enable_kv_compression'):
-                model.enable_kv_compression(KV_METHOD, kv_config, head_score_data)
+                result = model.enable_kv_compression(KV_METHOD, kv_config, head_score_data)
+                if not result:
+                    print(f"[KV Compression] ERROR: Failed to enable {KV_METHOD} method!")
+                    print(f"[KV Compression] Please check if the method name is correct and all dependencies are available.")
+                    sparsemm_enabled = False
+                else:
+                    sparsemm_enabled = True
+                    print(f"[KV Compression] {KV_METHOD} enabled successfully")
+                    # Verify that the method was actually applied
+                    if hasattr(model, 'thinker') and hasattr(model.thinker, 'model'):
+                        base_model = model.thinker.model
+                        if hasattr(base_model, 'layers') and len(base_model.layers) > 0:
+                            first_layer_attn = base_model.layers[0].self_attn
+                            expected_class_name = f"Qwen2_5OmniFlashAttention2{KV_METHOD.upper()}" if KV_METHOD != 'sparsekv' else "Qwen2_5OmniFlashAttention2SparseMM"
+                            actual_class_name = first_layer_attn.__class__.__name__
+                            print(f"[KV Compression] Verification: First layer attention class = {actual_class_name}")
+                            if KV_METHOD == 'tova' and 'TOVA' not in actual_class_name:
+                                print(f"[KV Compression] WARNING: Expected TOVA attention class but got {actual_class_name}!")
+                                print(f"[KV Compression] TOVA may not be properly enabled!")
+                            elif KV_METHOD != 'sparsekv' and expected_class_name != actual_class_name:
+                                print(f"[KV Compression] WARNING: Expected {expected_class_name} but got {actual_class_name}!")
             elif KV_METHOD == 'sparsekv' and hasattr(model, 'enable_sparsemm_attention'):
                 # Fallback to legacy method
-                model.enable_sparsemm_attention(head_score_data, kv_config)
+                result = model.enable_sparsemm_attention(head_score_data, kv_config)
+                if result:
+                    sparsemm_enabled = True
+                    print(f"[KV Compression] {KV_METHOD} enabled successfully")
+                else:
+                    sparsemm_enabled = False
+                    print(f"[KV Compression] ERROR: Failed to enable {KV_METHOD} method!")
             else:
                 print(f"[KV Compression] Warning: Model does not support {KV_METHOD} method")
-            
-            sparsemm_enabled = True
-            print(f"[KV Compression] {KV_METHOD} enabled successfully")
+                sparsemm_enabled = False
         else:
             print("[KV Compression] Warning: Cannot find thinker model, skipping initialization")
 
@@ -1666,9 +1721,14 @@ def main():
             
             # Initialize cache for SparseMM if enabled
             # NOTE: Create fresh cache for each sample to avoid state leakage
+            # SnapKV and TOVA use standard DynamicCache (uniform compression, all heads same length)
+            # Other methods (SparseMM, AdaKV, PyramidKV, MixKV) use DynamicCacheSplitHeadFlatten (variable-length per head)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                past_key_values = DynamicCacheSplitHeadFlatten()
+                if KV_METHOD in ("snapkv", "tova"):
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()
             
             # Measure prefill time: generate only 1 token to measure prefill phase
             prefill_start_event = torch.cuda.Event(enable_timing=True)
@@ -1692,7 +1752,11 @@ def main():
             # The first generate call pollutes the cache state, so we MUST reset before the actual generation
             if USE_SPARSEKV and sparsemm_enabled:
                 reset_sparsemm_state(model)
-                past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
+                # SnapKV and TOVA use DynamicCache, others use DynamicCacheSplitHeadFlatten
+                if KV_METHOD in ("snapkv", "tova"):
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()
             
             # Measure decode time: generate full output
             decode_start_event = torch.cuda.Event(enable_timing=True)

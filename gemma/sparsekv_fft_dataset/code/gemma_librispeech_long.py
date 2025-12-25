@@ -43,6 +43,7 @@ if USE_SPARSEKV:
         Gemma3nTextAttentionSnapKV,
         Gemma3nTextAttentionAdaKV,
         Gemma3nTextAttentionPyramidKV,
+        Gemma3nTextAttentionTOVA,
         Gemma3nTextAttentionMixKV
     )
     print(f"Using sparsekv version of the model with KV_METHOD={KV_METHOD}")
@@ -1111,6 +1112,14 @@ def init_model():
             elif KV_METHOD == "pyramidkv":
                 model.enable_pyramidkv_attention(sparsemm_config)
                 print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "tova":
+                result = model.enable_tova_attention(sparsemm_config)
+                if not result:
+                    print(f"[TOVA] ERROR: Failed to enable TOVA method!")
+                    print(f"[TOVA] Please check if the method name is correct and all dependencies are available.")
+                    SPARSEM_ENABLED = False
+                else:
+                    print("[TOVA] TOVA attention enabled successfully")
             elif KV_METHOD == "mixkv":
                 select_method = os.environ.get("SELECT_METHOD", "mixkv")
                 sparsemm_config['select_method'] = select_method
@@ -1410,8 +1419,9 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
         print(f"[DEBUG] Processor output: total_input_tokens={prefill_token_count}, audio_tokens={audio_token_count}")
 
     # CRITICAL: Update KV cache budget based on actual prefill token count
-    # This ensures budget ratio (e.g., 0.99) is applied to actual sequence length
-    if sparsem_enabled and ENV_BUDGET_IS_RATIO and prefill_token_count > 0:
+    # This ensures budget ratio (e.g., 0.8) is applied to actual sequence length
+    # For absolute budget values, we also need to update to ensure proper initialization
+    if sparsem_enabled and prefill_token_count > 0:
         update_sparsemm_budget(model, prefill_token_count)
 
     terminators = None
@@ -1457,19 +1467,24 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
     # Only create custom cache if needed (for performance optimization)
     # - SnapKV: uses standard DynamicCache (uniform compression, all heads same length)
     # - AdaKV/SparseMM/PyramidKV/MixKV: uses DynamicCacheSplitHeadFlatten (variable-length per head)
-    # - If budget is set (and not default), use BudgetLimitedKVCache
+    # - If budget is set (and not default) AND not vanilla mode, use BudgetLimitedKVCache
+    # - Vanilla mode: always use default cache (no KV compression)
     # - Otherwise, let model use default cache (fastest)
     if sparsem_enabled:
         # Determine which cache type to use based on KV_METHOD
-        if KV_METHOD == "snapkv":
-            # SnapKV uses standard DynamicCache because all heads have the same compressed length
+        if KV_METHOD in ("snapkv", "tova"):
+            # SnapKV and TOVA use standard DynamicCache because all heads have the same compressed length
             generate_kwargs["past_key_values"] = DynamicCache()
         else:
             # AdaKV, SparseMM, PyramidKV, MixKV use DynamicCacheSplitHeadFlatten
             # because each head may have different number of tokens
             generate_kwargs["past_key_values"] = DynamicCacheSplitHeadFlatten()
+    elif KV_METHOD == "vanilla":
+        # Vanilla mode: use default cache, ignore BUDGET setting
+        # Don't set past_key_values to use model's default cache
+        pass
     elif ENV_BUDGET_RAW != "4096" or ENV_BUDGET != 4096.0:
-        # Budget is set, use budget-limited cache
+        # Budget is set, use budget-limited cache (only if not vanilla)
         generate_kwargs["past_key_values"] = BudgetLimitedKVCache(budget=ENV_BUDGET, seed=42)
     # else: use default cache (don't set past_key_values for best performance)
     

@@ -49,6 +49,7 @@ try:
         init_adakv, 
         init_pyramidkv, 
         init_snapkv,
+        init_tova,
         init_mixkv,
         init_mixsparsemm,
         DynamicCacheSplitHeadFlatten
@@ -62,9 +63,55 @@ except ImportError:
     init_adakv = None
     init_pyramidkv = None
     init_snapkv = None
+    init_tova = None
     init_mixkv = None
     init_mixsparsemm = None
     sparsemm_flash_attn_varlen_func = None
+
+
+def _get_cache_kv(past_key_values, layer_idx):
+    """
+    Helper function to get key and value from cache, compatible with both
+    old (key_cache/value_cache) and new (layers) DynamicCache API.
+    
+    Args:
+        past_key_values: The cache object (DynamicCache or similar)
+        layer_idx: The layer index to get cache from
+    
+    Returns:
+        Tuple of (key_states, value_states), or (None, None) if cache is not available
+    """
+    if hasattr(past_key_values, 'key_cache') and len(past_key_values.key_cache) > layer_idx:
+        # Old API: separate key_cache and value_cache lists
+        return past_key_values.key_cache[layer_idx], past_key_values.value_cache[layer_idx]
+    elif hasattr(past_key_values, 'layers') and len(past_key_values.layers) > layer_idx:
+        # New API (transformers >= 4.57): layers list with (key, value) tuples
+        return past_key_values.layers[layer_idx]
+    else:
+        # Fallback: try __getitem__
+        try:
+            return past_key_values[layer_idx]
+        except (IndexError, KeyError, TypeError):
+            return None, None
+
+
+def _set_cache_kv(past_key_values, layer_idx, key_states, value_states):
+    """
+    Helper function to set key and value in cache, compatible with both
+    old (key_cache/value_cache) and new (layers) DynamicCache API.
+    
+    Args:
+        past_key_values: The cache object (DynamicCache or similar)
+        layer_idx: The layer index to set cache for
+        key_states: The key states tensor
+        value_states: The value states tensor
+    """
+    # Only update if key_cache and value_cache attributes exist
+    # This is the safe way that works with all transformers versions
+    if hasattr(past_key_values, 'key_cache') and hasattr(past_key_values, 'value_cache'):
+        past_key_values.key_cache[layer_idx] = key_states
+        past_key_values.value_cache[layer_idx] = value_states
+    # Note: Do NOT set layers directly as it expects DynamicLayerCache objects, not tuples
 
 
 @auto_docstring
@@ -1672,6 +1719,14 @@ class Qwen3OmniMoeThinkerTextAttentionSparseMM(Qwen3OmniMoeThinkerTextAttention)
                 
                 key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+                # Handle DynamicCache: it returns 4D tensor [bsz, num_heads, seq_len, head_dim]
+                # but we need 2D tensor for varlen attention
+                if isinstance(past_key_values, DynamicCache) and key_states.dim() == 4:
+                    # Convert from 4D to 2D: [bsz, num_heads, seq_len, head_dim] -> [total_len, head_dim]
+                    bsz, num_heads_cache, seq_len_cache, head_dim = key_states.shape
+                    key_states = key_states.reshape(bsz * num_heads_cache * seq_len_cache, head_dim)
+                    value_states = value_states.reshape(bsz * num_heads_cache * seq_len_cache, head_dim)
+
                 # Update metadata
                 kv_cluster = self.kv_cluster
                 kv_cluster.klen_sum += self.num_key_value_heads
@@ -1816,8 +1871,39 @@ class Qwen3OmniMoeThinkerTextAttentionSnapKV(Qwen3OmniMoeThinkerTextAttention):
             # Initialize head metadata if needed - get actual length from cache
             if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
                 # Get actual KV length from cache (prefill already stored compressed KV)
-                cache_key = past_key_values.key_cache[self.layer_idx]
-                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                # Handle both DynamicCache (4D: [batch, heads, seq_len, head_dim]) and DynamicCacheSplitHeadFlatten (2D: [total_len, dim])
+                total_cache_len = None
+                if isinstance(past_key_values, DynamicCache):
+                    # DynamicCache stores as 4D tensor: [batch_size, num_heads, seq_len, head_dim]
+                    cache_key, _ = _get_cache_kv(past_key_values, self.layer_idx)
+                    if cache_key is not None:
+                        # Flatten to 2D for compatibility: [total_len, dim]
+                        bsz, num_heads_in_cache, seq_len, head_dim = cache_key.shape
+                        cache_key = cache_key.reshape(bsz * num_heads_in_cache * seq_len, head_dim)
+                        total_cache_len = cache_key.shape[0]
+                    else:
+                        # Fallback: use get_seq_length
+                        total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
+                elif hasattr(past_key_values, 'key_cache') and len(past_key_values.key_cache) > self.layer_idx:
+                    # DynamicCacheSplitHeadFlatten stores as 2D tensor: [total_len, dim]
+                    cache_key = past_key_values.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]
+                else:
+                    # Fallback: try to access via __getitem__ or get_seq_length
+                    try:
+                        cache_key_tuple = past_key_values[self.layer_idx]
+                        cache_key = cache_key_tuple[0]  # Get key from (key, value) tuple
+                        if cache_key.dim() == 4:
+                            # 4D tensor: [batch_size, num_heads, seq_len, head_dim]
+                            bsz, num_heads_in_cache, seq_len, head_dim = cache_key.shape
+                            cache_key = cache_key.reshape(bsz * num_heads_in_cache * seq_len, head_dim)
+                            total_cache_len = cache_key.shape[0]
+                        else:
+                            # 2D tensor: [total_len, dim]
+                            total_cache_len = cache_key.shape[0]
+                    except (IndexError, KeyError, TypeError):
+                        # Ultimate fallback: use get_seq_length
+                        total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
                 head_len = total_cache_len // num_kv_heads  # Each head has same length for SnapKV
                 
                 self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
@@ -1827,40 +1913,23 @@ class Qwen3OmniMoeThinkerTextAttentionSnapKV(Qwen3OmniMoeThinkerTextAttention):
                 self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
                 self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
-            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-            self.kv_cluster.klen_sum += num_kv_heads
-            self.kv_cluster.max_seqlen_k += 1
-            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
-            self.kv_cluster.head_lens.add_(1)
-
-            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
-            key_states = key_states.view(-1, 1, self.head_dim)
-            value_states = value_states.view(-1, 1, self.head_dim)
-
-            if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
-                attn_output = sparsemm_flash_attn_varlen_func(
-                    query_states, key_states, value_states,
-                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
-                    1, self.kv_cluster.max_seqlen_k, causal=True
-                )
-                attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
-                attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
-                attn_weights = None
-            else:
-                # Fallback to standard attention if SparseMM not available
-                key_states = repeat_kv(key_states, self.num_key_value_groups)
-                value_states = repeat_kv(value_states, self.num_key_value_groups)
+            # TOVA uses DynamicCache which stores 4D tensors [bsz, num_heads, seq_len, head_dim]
+            # Use standard attention instead of varlen attention for DynamicCache
+            if isinstance(past_key_values, DynamicCache):
+                # For DynamicCache, use standard attention (not varlen)
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                # key_states and value_states are 4D: [bsz, num_kv_heads, seq_len, head_dim]
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                
                 attention_interface: Callable = eager_attention_forward
                 if self.config._attn_implementation != "eager":
                     attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
                 attn_output, attn_weights = attention_interface(
                     self,
                     query_states,
-                    key_states,
-                    value_states,
+                    key_states_attn,
+                    value_states_attn,
                     attention_mask,
                     dropout=0.0 if not self.training else self.attention_dropout,
                     scaling=self.scaling,
@@ -1868,6 +1937,49 @@ class Qwen3OmniMoeThinkerTextAttentionSnapKV(Qwen3OmniMoeThinkerTextAttention):
                     **kwargs,
                 )
                 attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            else:
+                # For DynamicCacheSplitHeadFlatten, use varlen attention
+                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+                self.kv_cluster.klen_sum += num_kv_heads
+                self.kv_cluster.max_seqlen_k += 1
+                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+                self.kv_cluster.head_lens.add_(1)
+
+                query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+                key_states = key_states.view(-1, 1, self.head_dim)
+                value_states = value_states.view(-1, 1, self.head_dim)
+
+                if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
+                    attn_output = sparsemm_flash_attn_varlen_func(
+                        query_states, key_states, value_states,
+                        self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                        1, self.kv_cluster.max_seqlen_k, causal=True
+                    )
+                    attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+                    attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
+                    attn_weights = None
+                else:
+                    # Fallback to standard attention if SparseMM not available
+                    key_states = repeat_kv(key_states, self.num_key_value_groups)
+                    value_states = repeat_kv(value_states, self.num_key_value_groups)
+                    attention_interface: Callable = eager_attention_forward
+                    if self.config._attn_implementation != "eager":
+                        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                    attn_output, attn_weights = attention_interface(
+                        self,
+                        query_states,
+                        key_states,
+                        value_states,
+                        attention_mask,
+                        dropout=0.0 if not self.training else self.attention_dropout,
+                        scaling=self.scaling,
+                        sliding_window=self.sliding_window,
+                        **kwargs,
+                    )
+                    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
 
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -1957,40 +2069,23 @@ class Qwen3OmniMoeThinkerTextAttentionAdaKV(Qwen3OmniMoeThinkerTextAttention):
                 self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
                 self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
-            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-            self.kv_cluster.klen_sum += num_kv_heads
-            self.kv_cluster.max_seqlen_k += 1
-            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
-            self.kv_cluster.head_lens.add_(1)
-
-            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
-            key_states = key_states.view(-1, 1, self.head_dim)
-            value_states = value_states.view(-1, 1, self.head_dim)
-
-            if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
-                attn_output = sparsemm_flash_attn_varlen_func(
-                    query_states, key_states, value_states,
-                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
-                    1, self.kv_cluster.max_seqlen_k, causal=True
-                )
-                attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
-                attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
-                attn_weights = None
-            else:
-                # Fallback to standard attention if SparseMM not available
-                key_states = repeat_kv(key_states, self.num_key_value_groups)
-                value_states = repeat_kv(value_states, self.num_key_value_groups)
+            # TOVA uses DynamicCache which stores 4D tensors [bsz, num_heads, seq_len, head_dim]
+            # Use standard attention instead of varlen attention for DynamicCache
+            if isinstance(past_key_values, DynamicCache):
+                # For DynamicCache, use standard attention (not varlen)
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                # key_states and value_states are 4D: [bsz, num_kv_heads, seq_len, head_dim]
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                
                 attention_interface: Callable = eager_attention_forward
                 if self.config._attn_implementation != "eager":
                     attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
                 attn_output, attn_weights = attention_interface(
                     self,
                     query_states,
-                    key_states,
-                    value_states,
+                    key_states_attn,
+                    value_states_attn,
                     attention_mask,
                     dropout=0.0 if not self.training else self.attention_dropout,
                     scaling=self.scaling,
@@ -1998,6 +2093,49 @@ class Qwen3OmniMoeThinkerTextAttentionAdaKV(Qwen3OmniMoeThinkerTextAttention):
                     **kwargs,
                 )
                 attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            else:
+                # For DynamicCacheSplitHeadFlatten, use varlen attention
+                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+                self.kv_cluster.klen_sum += num_kv_heads
+                self.kv_cluster.max_seqlen_k += 1
+                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+                self.kv_cluster.head_lens.add_(1)
+
+                query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+                key_states = key_states.view(-1, 1, self.head_dim)
+                value_states = value_states.view(-1, 1, self.head_dim)
+
+                if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
+                    attn_output = sparsemm_flash_attn_varlen_func(
+                        query_states, key_states, value_states,
+                        self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                        1, self.kv_cluster.max_seqlen_k, causal=True
+                    )
+                    attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+                    attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
+                    attn_weights = None
+                else:
+                    # Fallback to standard attention if SparseMM not available
+                    key_states = repeat_kv(key_states, self.num_key_value_groups)
+                    value_states = repeat_kv(value_states, self.num_key_value_groups)
+                    attention_interface: Callable = eager_attention_forward
+                    if self.config._attn_implementation != "eager":
+                        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                    attn_output, attn_weights = attention_interface(
+                        self,
+                        query_states,
+                        key_states,
+                        value_states,
+                        attention_mask,
+                        dropout=0.0 if not self.training else self.attention_dropout,
+                        scaling=self.scaling,
+                        sliding_window=self.sliding_window,
+                        **kwargs,
+                    )
+                    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
 
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -2076,8 +2214,39 @@ class Qwen3OmniMoeThinkerTextAttentionPyramidKV(Qwen3OmniMoeThinkerTextAttention
             # Initialize head metadata if needed - get actual length from cache
             if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
                 # Get actual KV length from cache (prefill already stored compressed KV)
-                cache_key = past_key_values.key_cache[self.layer_idx]
-                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                # Handle both DynamicCache (4D: [batch, heads, seq_len, head_dim]) and DynamicCacheSplitHeadFlatten (2D: [total_len, dim])
+                total_cache_len = None
+                if isinstance(past_key_values, DynamicCache):
+                    # DynamicCache stores as 4D tensor: [batch_size, num_heads, seq_len, head_dim]
+                    cache_key, _ = _get_cache_kv(past_key_values, self.layer_idx)
+                    if cache_key is not None:
+                        # Flatten to 2D for compatibility: [total_len, dim]
+                        bsz, num_heads_in_cache, seq_len, head_dim = cache_key.shape
+                        cache_key = cache_key.reshape(bsz * num_heads_in_cache * seq_len, head_dim)
+                        total_cache_len = cache_key.shape[0]
+                    else:
+                        # Fallback: use get_seq_length
+                        total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
+                elif hasattr(past_key_values, 'key_cache') and len(past_key_values.key_cache) > self.layer_idx:
+                    # DynamicCacheSplitHeadFlatten stores as 2D tensor: [total_len, dim]
+                    cache_key = past_key_values.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]
+                else:
+                    # Fallback: try to access via __getitem__ or get_seq_length
+                    try:
+                        cache_key_tuple = past_key_values[self.layer_idx]
+                        cache_key = cache_key_tuple[0]  # Get key from (key, value) tuple
+                        if cache_key.dim() == 4:
+                            # 4D tensor: [batch_size, num_heads, seq_len, head_dim]
+                            bsz, num_heads_in_cache, seq_len, head_dim = cache_key.shape
+                            cache_key = cache_key.reshape(bsz * num_heads_in_cache * seq_len, head_dim)
+                            total_cache_len = cache_key.shape[0]
+                        else:
+                            # 2D tensor: [total_len, dim]
+                            total_cache_len = cache_key.shape[0]
+                    except (IndexError, KeyError, TypeError):
+                        # Ultimate fallback: use get_seq_length
+                        total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
                 head_len = total_cache_len // num_kv_heads  # Each head has same length for PyramidKV
                 
                 self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
@@ -2087,40 +2256,23 @@ class Qwen3OmniMoeThinkerTextAttentionPyramidKV(Qwen3OmniMoeThinkerTextAttention
                 self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
                 self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
 
-            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
-            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-            self.kv_cluster.klen_sum += num_kv_heads
-            self.kv_cluster.max_seqlen_k += 1
-            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
-            self.kv_cluster.head_lens.add_(1)
-
-            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
-            key_states = key_states.view(-1, 1, self.head_dim)
-            value_states = value_states.view(-1, 1, self.head_dim)
-
-            if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
-                attn_output = sparsemm_flash_attn_varlen_func(
-                    query_states, key_states, value_states,
-                    self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
-                    1, self.kv_cluster.max_seqlen_k, causal=True
-                )
-                attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
-                attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
-                attn_weights = None
-            else:
-                # Fallback to standard attention if SparseMM not available
-                key_states = repeat_kv(key_states, self.num_key_value_groups)
-                value_states = repeat_kv(value_states, self.num_key_value_groups)
+            # TOVA uses DynamicCache which stores 4D tensors [bsz, num_heads, seq_len, head_dim]
+            # Use standard attention instead of varlen attention for DynamicCache
+            if isinstance(past_key_values, DynamicCache):
+                # For DynamicCache, use standard attention (not varlen)
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                # key_states and value_states are 4D: [bsz, num_kv_heads, seq_len, head_dim]
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                
                 attention_interface: Callable = eager_attention_forward
                 if self.config._attn_implementation != "eager":
                     attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
                 attn_output, attn_weights = attention_interface(
                     self,
                     query_states,
-                    key_states,
-                    value_states,
+                    key_states_attn,
+                    value_states_attn,
                     attention_mask,
                     dropout=0.0 if not self.training else self.attention_dropout,
                     scaling=self.scaling,
@@ -2128,6 +2280,243 @@ class Qwen3OmniMoeThinkerTextAttentionPyramidKV(Qwen3OmniMoeThinkerTextAttention
                     **kwargs,
                 )
                 attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            else:
+                # For DynamicCacheSplitHeadFlatten, use varlen attention
+                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+                self.kv_cluster.klen_sum += num_kv_heads
+                self.kv_cluster.max_seqlen_k += 1
+                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+                self.kv_cluster.head_lens.add_(1)
+
+                query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+                key_states = key_states.view(-1, 1, self.head_dim)
+                value_states = value_states.view(-1, 1, self.head_dim)
+
+                if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
+                    attn_output = sparsemm_flash_attn_varlen_func(
+                        query_states, key_states, value_states,
+                        self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                        1, self.kv_cluster.max_seqlen_k, causal=True
+                    )
+                    attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+                    attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
+                    attn_weights = None
+                else:
+                    # Fallback to standard attention if SparseMM not available
+                    key_states = repeat_kv(key_states, self.num_key_value_groups)
+                    value_states = repeat_kv(value_states, self.num_key_value_groups)
+                    attention_interface: Callable = eager_attention_forward
+                    if self.config._attn_implementation != "eager":
+                        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                    attn_output, attn_weights = attention_interface(
+                        self,
+                        query_states,
+                        key_states,
+                        value_states,
+                        attention_mask,
+                        dropout=0.0 if not self.training else self.attention_dropout,
+                        scaling=self.scaling,
+                        sliding_window=self.sliding_window,
+                        **kwargs,
+                    )
+                    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Qwen3OmniMoeThinkerTextAttentionTOVA(Qwen3OmniMoeThinkerTextAttention):
+    """
+    Qwen3OmniMoeThinkerTextAttention with TOVA integration.
+    TOVA (Token Omission via Attention) uses the attention weights of the last token 
+    averaged across heads to select important KV pairs.
+    Based on: https://arxiv.org/abs/2401.06104
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.num_heads = self.config.num_attention_heads
+        self.num_key_value_heads = self.config.num_key_value_heads
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        is_prefill = q_len != 1
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position} if past_key_values is not None else None
+
+        # Initialize TOVA cluster
+        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+            init_tova(self)
+
+        if is_prefill:
+            # Prefill phase: compress and store, use original for attention
+            if past_key_values is not None:
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            # Use original KV for attention computation
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states_attn,
+                value_states_attn,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                sliding_window=self.sliding_window,
+                **kwargs,
+            )
+            attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        else:
+            # Decode phase: use flattened cache with varlen attention
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            # For DynamicCache, we don't need to initialize head_lens (use standard attention)
+            # Only initialize for DynamicCacheSplitHeadFlatten (use varlen attention)
+            if not isinstance(past_key_values, DynamicCache):
+                # Initialize head metadata if needed - get actual length from cache
+                if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                    # Get actual KV length from cache (prefill already stored compressed KV)
+                    # Handle DynamicCacheSplitHeadFlatten (2D: [total_len, dim])
+                    total_cache_len = None
+                    if hasattr(past_key_values, 'key_cache') and len(past_key_values.key_cache) > self.layer_idx:
+                        # DynamicCacheSplitHeadFlatten stores as 2D tensor: [total_len, dim]
+                        cache_key = past_key_values.key_cache[self.layer_idx]
+                        total_cache_len = cache_key.shape[0]
+                    else:
+                        # Fallback: try to access via __getitem__ or get_seq_length
+                        try:
+                            cache_key_tuple = past_key_values[self.layer_idx]
+                            cache_key = cache_key_tuple[0]  # Get key from (key, value) tuple
+                            if cache_key.dim() == 4:
+                                # 4D tensor: [batch_size, num_heads, seq_len, head_dim]
+                                bsz, num_heads_in_cache, seq_len, head_dim = cache_key.shape
+                                cache_key = cache_key.reshape(bsz * num_heads_in_cache * seq_len, head_dim)
+                                total_cache_len = cache_key.shape[0]
+                            else:
+                                # 2D tensor: [total_len, dim]
+                                total_cache_len = cache_key.shape[0]
+                        except (IndexError, KeyError, TypeError):
+                            # Ultimate fallback: use get_seq_length
+                            total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
+                    head_len = total_cache_len // num_kv_heads  # Each head has same length for TOVA
+                    
+                    self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                    self.kv_cluster.klen_sum = total_cache_len
+                    self.kv_cluster.max_seqlen_k = head_len
+                    self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                    self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                    self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+
+            # TOVA uses DynamicCache which stores 4D tensors [bsz, num_heads, seq_len, head_dim]
+            # Use standard attention instead of varlen attention for DynamicCache
+            if isinstance(past_key_values, DynamicCache):
+                # For DynamicCache, use standard attention (not varlen)
+                # First update cache with new token
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                # key_states and value_states are 4D: [bsz, num_kv_heads, seq_len, head_dim]
+                
+                # Apply decode phase compression if enabled (based on kvpress DecodingPress)
+                if self.kv_cluster.decode_compression_enabled:
+                    key_states_compress, value_states_compress, compressed = self.kv_cluster.update_kv_decode(
+                        key_states, query_states, value_states
+                    )
+                    if compressed:
+                        # Update cache with compressed KV
+                        _set_cache_kv(past_key_values, self.layer_idx, key_states_compress, value_states_compress)
+                        key_states = key_states_compress
+                        value_states = value_states_compress
+                
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                
+                attention_interface: Callable = eager_attention_forward
+                if self.config._attn_implementation != "eager":
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attn_output, attn_weights = attention_interface(
+                    self,
+                    query_states,
+                    key_states_attn,
+                    value_states_attn,
+                    attention_mask,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    scaling=self.scaling,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
+                attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            else:
+                # For DynamicCacheSplitHeadFlatten, use varlen attention
+                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+                self.kv_cluster.klen_sum += num_kv_heads
+                self.kv_cluster.max_seqlen_k += 1
+                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+                self.kv_cluster.head_lens.add_(1)
+
+                query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+                key_states = key_states.view(-1, 1, self.head_dim)
+                value_states = value_states.view(-1, 1, self.head_dim)
+
+                if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
+                    attn_output = sparsemm_flash_attn_varlen_func(
+                        query_states, key_states, value_states,
+                        self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                        1, self.kv_cluster.max_seqlen_k, causal=True
+                    )
+                    attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+                    attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
+                    attn_weights = None
+                else:
+                    # Fallback to standard attention if SparseMM not available
+                    key_states = repeat_kv(key_states, self.num_key_value_groups)
+                    value_states = repeat_kv(value_states, self.num_key_value_groups)
+                    attention_interface: Callable = eager_attention_forward
+                    if self.config._attn_implementation != "eager":
+                        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                    attn_output, attn_weights = attention_interface(
+                        self,
+                        query_states,
+                        key_states,
+                        value_states,
+                        attention_mask,
+                        dropout=0.0 if not self.training else self.attention_dropout,
+                        scaling=self.scaling,
+                        sliding_window=self.sliding_window,
+                        **kwargs,
+                    )
+                    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
 
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -2210,8 +2599,39 @@ class Qwen3OmniMoeThinkerTextAttentionMixKV(Qwen3OmniMoeThinkerTextAttention):
             # Initialize head metadata if needed - get actual length from cache
             if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
                 # Get actual KV length from cache (prefill already stored compressed KV)
-                cache_key = past_key_values.key_cache[self.layer_idx]
-                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                # Handle both DynamicCache (4D: [batch, heads, seq_len, head_dim]) and DynamicCacheSplitHeadFlatten (2D: [total_len, dim])
+                total_cache_len = None
+                if isinstance(past_key_values, DynamicCache):
+                    # DynamicCache stores as 4D tensor: [batch_size, num_heads, seq_len, head_dim]
+                    cache_key, _ = _get_cache_kv(past_key_values, self.layer_idx)
+                    if cache_key is not None:
+                        # Flatten to 2D for compatibility: [total_len, dim]
+                        bsz, num_heads_in_cache, seq_len, head_dim = cache_key.shape
+                        cache_key = cache_key.reshape(bsz * num_heads_in_cache * seq_len, head_dim)
+                        total_cache_len = cache_key.shape[0]
+                    else:
+                        # Fallback: use get_seq_length
+                        total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
+                elif hasattr(past_key_values, 'key_cache') and len(past_key_values.key_cache) > self.layer_idx:
+                    # DynamicCacheSplitHeadFlatten stores as 2D tensor: [total_len, dim]
+                    cache_key = past_key_values.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]
+                else:
+                    # Fallback: try to access via __getitem__ or get_seq_length
+                    try:
+                        cache_key_tuple = past_key_values[self.layer_idx]
+                        cache_key = cache_key_tuple[0]  # Get key from (key, value) tuple
+                        if cache_key.dim() == 4:
+                            # 4D tensor: [batch_size, num_heads, seq_len, head_dim]
+                            bsz, num_heads_in_cache, seq_len, head_dim = cache_key.shape
+                            cache_key = cache_key.reshape(bsz * num_heads_in_cache * seq_len, head_dim)
+                            total_cache_len = cache_key.shape[0]
+                        else:
+                            # 2D tensor: [total_len, dim]
+                            total_cache_len = cache_key.shape[0]
+                    except (IndexError, KeyError, TypeError):
+                        # Ultimate fallback: use get_seq_length
+                        total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
                 head_len = total_cache_len // num_kv_heads  # Each head has same length for MixKV
                 
                 self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
@@ -2224,6 +2644,14 @@ class Qwen3OmniMoeThinkerTextAttentionMixKV(Qwen3OmniMoeThinkerTextAttention):
             cache_kwargs["head_lens"] = self.kv_cluster.head_lens
             cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+            # Handle DynamicCache: it returns 4D tensor [bsz, num_heads, seq_len, head_dim]
+            # but we need 2D tensor for varlen attention
+            if isinstance(past_key_values, DynamicCache) and key_states.dim() == 4:
+                # Convert from 4D to 2D: [bsz, num_heads, seq_len, head_dim] -> [total_len, head_dim]
+                bsz, num_heads_cache, seq_len_cache, head_dim = key_states.shape
+                key_states = key_states.reshape(bsz * num_heads_cache * seq_len_cache, head_dim)
+                value_states = value_states.reshape(bsz * num_heads_cache * seq_len_cache, head_dim)
 
             self.kv_cluster.klen_sum += num_kv_heads
             self.kv_cluster.max_seqlen_k += 1
@@ -4825,6 +5253,54 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             patched_count += 1
         
         print(f"[PyramidKV] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_tova_attention(
+        self,
+        sparsemm_config: dict
+    ):
+        """
+        Replace attention modules with TOVA version for Token Omission via Attention KVCache compression.
+        """
+        if not SPARSEM_AVAILABLE:
+            raise RuntimeError("SparseMM is not available.")
+        
+        base_model = self.thinker.model
+        model_config = base_model.config
+        
+        # Store budget value in config - this will be used by init_tova
+        # If budget is a ratio (< 1.0), use placeholder for initialization
+        # The actual budget will be updated later in update_sparsemm_budget()
+        budget_value = sparsemm_config.get('budget', 4096)
+        if isinstance(budget_value, (int, float)) and budget_value < 1.0:
+            # Budget is a ratio, use placeholder for initialization
+            model_config.max_capacity_prompt = 4096  # Placeholder
+            print(f"[TOVA] Budget is a ratio ({budget_value}), using placeholder {4096} for initialization")
+        else:
+            model_config.max_capacity_prompt = int(budget_value)
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Qwen3OmniMoeThinkerTextAttentionTOVA(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            if hasattr(old_attn, 'q_norm'):
+                new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            if hasattr(old_attn, 'k_norm'):
+                new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            
+            init_tova(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[TOVA] Total layers patched: {patched_count}/{len(base_model.layers)}")
         return True
 
     def enable_mixkv_attention(

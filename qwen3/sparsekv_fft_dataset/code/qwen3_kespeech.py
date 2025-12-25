@@ -68,7 +68,7 @@ _AUDIO_EOS_TOKEN_ID = 151648
 ENV_BUDGET_RAW = os.environ.get("BUDGET", "4096")
 try:
     ENV_BUDGET = float(ENV_BUDGET_RAW)
-    ENV_BUDGET_IS_RATIO = (ENV_BUDGET < 1.0)
+    ENV_BUDGET_IS_RATIO = (ENV_BUDGET <= 1.0)  # Fixed: include 1.0 as ratio (100%)
 except ValueError:
     ENV_BUDGET = 4096.0
     ENV_BUDGET_IS_RATIO = False
@@ -153,7 +153,16 @@ from qwen_omni_utils import process_mm_info
 from model.sparsemm_utils import (
     SparseMM,
     DynamicCacheSplitHeadFlatten,
-    init_sparsemm
+    init_sparsemm,
+    init_snapkv,
+    init_adakv,
+    init_pyramidkv,
+    init_tova,
+    init_mixkv,
+    SnapKVCluster,
+    AdaKVCluster,
+    TOVACluster,
+    MixKVCluster
 )
 from transformers.cache_utils import DynamicCache
 
@@ -1487,6 +1496,25 @@ def main():
             elif KV_METHOD == "pyramidkv":
                 model.enable_pyramidkv_attention(sparsemm_config)
                 print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "tova":
+                result = model.enable_tova_attention(sparsemm_config)
+                if not result:
+                    print(f"[TOVA] ERROR: Failed to enable TOVA method!")
+                    print(f"[TOVA] Please check if the method name is correct and all dependencies are available.")
+                    sparsemm_enabled = False
+                else:
+                    print("[TOVA] TOVA attention enabled successfully")
+                    sparsemm_enabled = True  # CRITICAL: Enable sparsemm_enabled for TOVA!
+                    # Verify that the method was actually applied
+                    if hasattr(model, 'thinker') and hasattr(model.thinker, 'model'):
+                        base_model = model.thinker.model
+                        if hasattr(base_model, 'layers') and len(base_model.layers) > 0:
+                            first_layer_attn = base_model.layers[0].self_attn
+                            actual_class_name = first_layer_attn.__class__.__name__
+                            print(f"[TOVA] Verification: First layer attention class = {actual_class_name}")
+                            if 'TOVA' not in actual_class_name:
+                                print(f"[TOVA] WARNING: Expected TOVA attention class but got {actual_class_name}!")
+                                print(f"[TOVA] TOVA may not be properly enabled!")
             elif KV_METHOD == "mixkv":
                 select_method = os.environ.get("SELECT_METHOD", "mixkv")
                 sparsemm_config['select_method'] = select_method
@@ -1495,9 +1523,11 @@ def main():
             else:
                 print(f"[KVCache WARNING] Unknown KV_METHOD '{KV_METHOD}', falling back to SparseMM")
                 model.enable_sparsemm_attention(head_score_data, sparsemm_config)
+                sparsemm_enabled = True
             
-            sparsemm_enabled = True
-            print(f"[KVCache] {KV_METHOD} enabled successfully")
+            # Only print success message if sparsemm_enabled is True
+            if sparsemm_enabled:
+                print(f"[KVCache] {KV_METHOD} enabled successfully")
         else:
             print("[SparseMM] Warning: Cannot find thinker model, skipping SparseMM initialization")
 
@@ -1708,9 +1738,14 @@ def main():
             
             # Initialize cache for SparseMM if enabled
             # NOTE: Create fresh cache for each sample to avoid state leakage
+            # TOVA and SnapKV use DynamicCache (uniform compression, all heads same length)
+            # Other methods use DynamicCacheSplitHeadFlatten (variable-length per head)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                past_key_values = DynamicCacheSplitHeadFlatten()
+                if KV_METHOD in ("snapkv", "tova"):
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()
             
             # Measure prefill time: generate only 1 token to measure prefill phase
             prefill_start_event = torch.cuda.Event(enable_timing=True)
@@ -1734,7 +1769,11 @@ def main():
             # The first generate call pollutes the cache state, so we MUST reset before the actual generation
             if USE_SPARSEKV and sparsemm_enabled:
                 reset_sparsemm_state(model)
-                past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
+                # TOVA and SnapKV use DynamicCache, others use DynamicCacheSplitHeadFlatten
+                if KV_METHOD in ("snapkv", "tova"):
+                    past_key_values = DynamicCache()  # Create fresh cache
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache
             
             # Measure decode time: generate full output
             decode_start_event = torch.cuda.Event(enable_timing=True)

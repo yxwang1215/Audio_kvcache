@@ -926,9 +926,14 @@ def main():
                     update_sparsemm_budget(model, prefill_token_count)
             
             # Initialize cache for SparseMM if enabled
+            # SnapKV and TOVA use standard DynamicCache (uniform compression, all heads same length)
+            # Other methods (SparseMM, AdaKV, PyramidKV, MixKV) use DynamicCacheSplitHeadFlatten (variable-length per head)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                past_key_values = DynamicCacheSplitHeadFlatten()
+                if KV_METHOD in ("snapkv", "tova"):
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()
             
             # Measure prefill time
             prefill_start_event = torch.cuda.Event(enable_timing=True)

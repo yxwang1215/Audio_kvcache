@@ -1,15 +1,18 @@
 #!/bin/bash
 # KeSpeech ASR Evaluation with Qwen2.5-Omni
 
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=2
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
 export SAMPLE_LIMIT=0
 
-export KV_METHOD="sparsekv"
+export KV_METHOD="tova"
+export TOVA_DECODE_COMPRESSION="true"
+export TOVA_DECODE_COMPRESSION_INTERVAL="256"  # 每256个token压缩一次
+# export KV_METHOD="sparsekv"
 # export KV_METHOD="mixkv"
 # export METHOD="mixsparsemm"
 # export SELECT_METHOD="headwisemixkv"
-export BUDGET=0.6
+export BUDGET=0.2
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -30,5 +33,5 @@ conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
 python code/qwen2.5_kespeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/KeSpeech_Results/SparseKV/budget0.6 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/KeSpeech_Results/SparseKV/budget0.6/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/KeSpeech_Results/ToVA/budget0.8 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/KeSpeech_Results/ToVA/budget0.8/timing_stats.json

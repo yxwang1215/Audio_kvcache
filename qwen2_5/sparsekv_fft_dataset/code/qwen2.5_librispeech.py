@@ -130,6 +130,7 @@ if USE_SPARSEKV:
         Qwen2_5OmniFlashAttention2SnapKV,
         Qwen2_5OmniFlashAttention2AdaKV,
         Qwen2_5OmniFlashAttention2PyramidKV,
+        Qwen2_5OmniFlashAttention2TOVA,
         Qwen2_5OmniFlashAttention2MixKV
     )
     print("Using sparsekv version of the model")
@@ -165,12 +166,14 @@ else:
         SparseMM,
         SnapKVCluster,
         AdaKVCluster,
+        TOVACluster,
         MixKVCluster,
         DynamicCacheSplitHeadFlatten,
         init_sparsemm,
         init_snapkv,
         init_adakv,
         init_pyramidkv,
+        init_tova,
         init_mixkv
     )
     print(f"Using standard SparseMM implementation with KV_METHOD={KV_METHOD}")
@@ -326,7 +329,7 @@ def update_sparsemm_budget(model, prefill_token_count):
                 if hasattr(kv_cluster, 'update_budget'):
                     kv_cluster.update_budget(actual_budget)
                 elif hasattr(kv_cluster, 'max_capacity_prompt'):
-                    # For SnapKVCluster (used by pyramidkv, snapkv, and mixkv)
+                    # For SnapKVCluster (used by pyramidkv, snapkv, mixkv) and TOVACluster
                     kv_cluster.max_capacity_prompt = actual_budget
                     # Reset pyram_init so pyramid mode recalculates with new budget
                     if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
@@ -1150,15 +1153,39 @@ def main():
             
             # Use the unified enable_kv_compression method if available
             if hasattr(model, 'enable_kv_compression'):
-                model.enable_kv_compression(KV_METHOD, kv_config, head_score_data)
+                result = model.enable_kv_compression(KV_METHOD, kv_config, head_score_data)
+                if not result:
+                    print(f"[KV Compression] ERROR: Failed to enable {KV_METHOD} method!")
+                    print(f"[KV Compression] Please check if the method name is correct and all dependencies are available.")
+                    sparsemm_enabled = False
+                else:
+                    sparsemm_enabled = True
+                    print(f"[KV Compression] {KV_METHOD} enabled successfully")
+                    # Verify that the method was actually applied
+                    if hasattr(model, 'thinker') and hasattr(model.thinker, 'model'):
+                        base_model = model.thinker.model
+                        if hasattr(base_model, 'layers') and len(base_model.layers) > 0:
+                            first_layer_attn = base_model.layers[0].self_attn
+                            expected_class_name = f"Qwen2_5OmniFlashAttention2{KV_METHOD.upper()}" if KV_METHOD != 'sparsekv' else "Qwen2_5OmniFlashAttention2SparseMM"
+                            actual_class_name = first_layer_attn.__class__.__name__
+                            print(f"[KV Compression] Verification: First layer attention class = {actual_class_name}")
+                            if KV_METHOD == 'tova' and 'TOVA' not in actual_class_name:
+                                print(f"[KV Compression] WARNING: Expected TOVA attention class but got {actual_class_name}!")
+                                print(f"[KV Compression] TOVA may not be properly enabled!")
+                            elif KV_METHOD != 'sparsekv' and expected_class_name != actual_class_name:
+                                print(f"[KV Compression] WARNING: Expected {expected_class_name} but got {actual_class_name}!")
             elif KV_METHOD == 'sparsekv' and hasattr(model, 'enable_sparsemm_attention'):
                 # Fallback to legacy method
-                model.enable_sparsemm_attention(head_score_data, kv_config)
+                result = model.enable_sparsemm_attention(head_score_data, kv_config)
+                if result:
+                    sparsemm_enabled = True
+                    print(f"[KV Compression] {KV_METHOD} enabled successfully")
+                else:
+                    sparsemm_enabled = False
+                    print(f"[KV Compression] ERROR: Failed to enable {KV_METHOD} method!")
             else:
                 print(f"[KV Compression] Warning: Model does not support {KV_METHOD} method")
-            
-            sparsemm_enabled = True
-            print(f"[KV Compression] {KV_METHOD} enabled successfully")
+                sparsemm_enabled = False
         else:
             print("[KV Compression] Warning: Cannot find thinker model, skipping initialization")
 
@@ -1369,9 +1396,14 @@ def main():
             
             # Initialize cache for SparseMM if enabled
             # NOTE: Create fresh cache for each sample to avoid state leakage
+            # SnapKV and TOVA use standard DynamicCache (uniform compression, all heads same length)
+            # Other methods (SparseMM, AdaKV, PyramidKV, MixKV) use DynamicCacheSplitHeadFlatten (variable-length per head)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                past_key_values = DynamicCacheSplitHeadFlatten()
+                if KV_METHOD in ("snapkv", "tova"):
+                    past_key_values = DynamicCache()
+                else:
+                    past_key_values = DynamicCacheSplitHeadFlatten()
             
             # Single generate call for actual inference
             # NOTE: We removed the separate prefill measurement because:

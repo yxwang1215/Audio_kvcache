@@ -2042,7 +2042,10 @@ class Qwen2_5OmniFlashAttention2SnapKV(Qwen2_5OmniAttention):
                     "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
                     "with a layer index."
                 )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            if hasattr(past_key_value, "get_usable_length"):
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            else:
+                kv_seq_len += past_key_value.get_seq_length()
 
         if position_embeddings is None:
             cos, sin = self.rotary_emb(value_states, position_ids)
@@ -2107,8 +2110,12 @@ class Qwen2_5OmniFlashAttention2SnapKV(Qwen2_5OmniAttention):
             # Initialize head metadata if needed - get actual length from cache
             if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
                 # Get actual KV length from cache (prefill already stored compressed KV)
-                cache_key = past_key_value.key_cache[self.layer_idx]
-                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                if hasattr(past_key_value, 'key_cache') and len(past_key_value.key_cache) > self.layer_idx:
+                    cache_key = past_key_value.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                else:
+                    # Fallback for standard DynamicCache
+                    total_cache_len = past_key_value.get_seq_length(self.layer_idx) * num_kv_heads
                 head_len = total_cache_len // num_kv_heads  # Each head has same length for SnapKV
                 
                 self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
@@ -2342,7 +2349,10 @@ class Qwen2_5OmniFlashAttention2PyramidKV(Qwen2_5OmniAttention):
                     "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
                     "with a layer index."
                 )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            if hasattr(past_key_value, "get_usable_length"):
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            else:
+                kv_seq_len += past_key_value.get_seq_length()
 
         if position_embeddings is None:
             cos, sin = self.rotary_emb(value_states, position_ids)
@@ -2407,8 +2417,12 @@ class Qwen2_5OmniFlashAttention2PyramidKV(Qwen2_5OmniAttention):
             # Initialize head metadata if needed - get actual length from cache
             if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
                 # Get actual KV length from cache (prefill already stored compressed KV)
-                cache_key = past_key_value.key_cache[self.layer_idx]
-                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                if hasattr(past_key_value, 'key_cache') and len(past_key_value.key_cache) > self.layer_idx:
+                    cache_key = past_key_value.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                else:
+                    # Fallback for standard DynamicCache
+                    total_cache_len = past_key_value.get_seq_length(self.layer_idx) * num_kv_heads
                 head_len = total_cache_len // num_kv_heads  # Each head has same length for PyramidKV
                 
                 self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
@@ -2453,6 +2467,10 @@ class Qwen2_5OmniFlashAttention2TOVA(Qwen2_5OmniAttention):
     TOVA (Token Omission via Attention) uses the attention weights of the last token 
     averaged across heads to select important KV pairs.
     Based on: https://arxiv.org/abs/2401.06104
+    
+    TOVA uses standard DynamicCache because all heads are compressed to the same length.
+    - Prefill: compress KV using TOVA scoring and store to cache, use original KV for attention
+    - Decode: use compressed KV from cache with standard attention
     """
 
     def __init__(self, *args, **kwargs):
@@ -2492,7 +2510,10 @@ class Qwen2_5OmniFlashAttention2TOVA(Qwen2_5OmniAttention):
                     "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
                     "with a layer index."
                 )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            if hasattr(past_key_value, "get_usable_length"):
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            else:
+                kv_seq_len += past_key_value.get_seq_length()
 
         if position_embeddings is None:
             cos, sin = self.rotary_emb(value_states, position_ids)
@@ -2505,6 +2526,22 @@ class Qwen2_5OmniFlashAttention2TOVA(Qwen2_5OmniAttention):
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+
+        # Check cache type - TOVA uses standard DynamicCache (not DynamicCacheSplitHeadFlatten)
+        is_dynamic_cache = (
+            past_key_value is not None and (
+                isinstance(past_key_value, DynamicCache) or
+                type(past_key_value).__name__ == "DynamicCache"
+            )
+        )
+        
+        # Also check for DynamicCacheSplitHeadFlatten (for backward compatibility)
+        is_split_head_flatten_cache = (
+            past_key_value is not None and (
+                isinstance(past_key_value, DynamicCacheSplitHeadFlatten) or
+                type(past_key_value).__name__ == "DynamicCacheSplitHeadFlatten"
+            )
+        )
 
         if is_prefill:
             # Prefill phase: compress and store, use original for attention
@@ -2549,16 +2586,75 @@ class Qwen2_5OmniFlashAttention2TOVA(Qwen2_5OmniAttention):
                 is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
             )
             attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        elif is_dynamic_cache and not is_split_head_flatten_cache:
+            # DECODE PHASE with DynamicCache (standard 4D tensor cache)
+            # First update cache with new token
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # key_states and value_states are 4D: [bsz, num_kv_heads, seq_len, head_dim]
+            
+            # Apply decode phase compression if enabled (based on kvpress DecodingPress)
+            if self.kv_cluster.decode_compression_enabled:
+                key_states_compress, value_states_compress, compressed = self.kv_cluster.update_kv_decode(
+                    key_states, query_states, value_states
+                )
+                if compressed:
+                    # Update cache with compressed KV
+                    if hasattr(past_key_value, 'key_cache') and hasattr(past_key_value, 'value_cache'):
+                        past_key_value.key_cache[self.layer_idx] = key_states_compress
+                        past_key_value.value_cache[self.layer_idx] = value_states_compress
+                    key_states = key_states_compress
+                    value_states = value_states_compress
+            
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
+
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
+
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
+            else:
+                sliding_window = None
+
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         else:
-            # Decode phase: use flattened cache with varlen attention
+            # DECODE PHASE with DynamicCacheSplitHeadFlatten (2D flattened cache) - backward compatibility
             device = key_states.device
             num_kv_heads = self.num_key_value_heads
             
             # Initialize head metadata if needed - get actual length from cache
             if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
                 # Get actual KV length from cache (prefill already stored compressed KV)
-                cache_key = past_key_value.key_cache[self.layer_idx]
-                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                if hasattr(past_key_value, 'key_cache') and len(past_key_value.key_cache) > self.layer_idx:
+                    cache_key = past_key_value.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                else:
+                    # Fallback for standard DynamicCache
+                    total_cache_len = past_key_value.get_seq_length(self.layer_idx) * num_kv_heads
                 head_len = total_cache_len // num_kv_heads  # Each head has same length for TOVA
                 
                 self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
@@ -2640,7 +2736,10 @@ class Qwen2_5OmniFlashAttention2MixKV(Qwen2_5OmniAttention):
                     "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
                     "with a layer index."
                 )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            if hasattr(past_key_value, "get_usable_length"):
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            else:
+                kv_seq_len += past_key_value.get_seq_length()
 
         if position_embeddings is None:
             cos, sin = self.rotary_emb(value_states, position_ids)
@@ -2705,8 +2804,12 @@ class Qwen2_5OmniFlashAttention2MixKV(Qwen2_5OmniAttention):
             # Initialize head metadata if needed - get actual length from cache
             if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
                 # Get actual KV length from cache (prefill already stored compressed KV)
-                cache_key = past_key_value.key_cache[self.layer_idx]
-                total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                if hasattr(past_key_value, 'key_cache') and len(past_key_value.key_cache) > self.layer_idx:
+                    cache_key = past_key_value.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                else:
+                    # Fallback for standard DynamicCache
+                    total_cache_len = past_key_value.get_seq_length(self.layer_idx) * num_kv_heads
                 head_len = total_cache_len // num_kv_heads  # Each head has same length for MixKV
                 
                 self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)

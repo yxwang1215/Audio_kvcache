@@ -40,6 +40,7 @@ if USE_SPARSEKV:
         Gemma3nTextAttentionSnapKV,
         Gemma3nTextAttentionAdaKV,
         Gemma3nTextAttentionPyramidKV,
+        Gemma3nTextAttentionTOVA,
         Gemma3nTextAttentionMixKV
     )
     print(f"Using sparsekv version of the model (KV_METHOD={KV_METHOD})")
@@ -1166,6 +1167,16 @@ def reset_sparsemm_state(model):
                 # Reset token usage statistics
                 if hasattr(kv_cluster, 'reset_token_usage_stats'):
                     kv_cluster.reset_token_usage_stats()
+                # CRITICAL: Reset pyram_init for SnapKV/PyramidKV/MixKV to allow budget recalculation
+                # This ensures that when update_budget() is called, the pyramidal capacity will be recalculated
+                if hasattr(kv_cluster, 'pyram_init'):
+                    kv_cluster.pyram_init = False
+                if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
+                    # For pyramidal mode, we need to reset pyram_init to allow recalculation
+                    kv_cluster.pyram_init = False
+                # CRITICAL: Reset TOVA decode state for proper budget recalculation
+                if hasattr(kv_cluster, 'reset_decode_state'):
+                    kv_cluster.reset_decode_state()
             
     except (AttributeError, KeyError):
         # Model structure doesn't match expected format, skip reset
@@ -1286,6 +1297,14 @@ def init_model():
             elif KV_METHOD == "pyramidkv":
                 model.enable_pyramidkv_attention(sparsemm_config)
                 print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "tova":
+                result = model.enable_tova_attention(sparsemm_config)
+                if not result:
+                    print(f"[TOVA] ERROR: Failed to enable TOVA method!")
+                    print(f"[TOVA] Please check if the method name is correct and all dependencies are available.")
+                    SPARSEM_ENABLED = False
+                else:
+                    print("[TOVA] TOVA attention enabled successfully")
             elif KV_METHOD == "mixkv":
                 select_method = os.environ.get("SELECT_METHOD", "mixkv")
                 sparsemm_config['select_method'] = select_method
@@ -1351,12 +1370,18 @@ def update_sparsemm_budget(model, prefill_token_count):
             for layer_idx, layer in enumerate(base_model.layers):
                 has_self_attn = hasattr(layer, 'self_attn')
                 has_kv_cluster = has_self_attn and hasattr(layer.self_attn, 'kv_cluster')
+                if layer_idx == 0:
+                    print(f"[KVCache DEBUG] Layer 0: has_self_attn={has_self_attn}, has_kv_cluster={has_kv_cluster}")
                 if has_self_attn and has_kv_cluster:
                     kv_cluster = layer.self_attn.kv_cluster
                     # CRITICAL: Always use update_budget() if available to properly reset pyram_init
                     # This is essential for PyramidKV and MixKV to recalculate pyramidal capacity
                     if hasattr(kv_cluster, 'update_budget'):
+                        old_budget = getattr(kv_cluster, 'max_capacity_prompt', getattr(kv_cluster, 'base_capacity', None))
                         kv_cluster.update_budget(actual_budget)
+                        new_budget = getattr(kv_cluster, 'max_capacity_prompt', getattr(kv_cluster, 'base_capacity', None))
+                        if layer_idx == 0:
+                            print(f"[KVCache DEBUG] Layer 0 update_budget: {old_budget} -> {new_budget}")
                         updated_count += 1
                     elif hasattr(kv_cluster, 'base_capacity'):
                         # Fallback for older versions without update_budget method
@@ -1373,10 +1398,14 @@ def update_sparsemm_budget(model, prefill_token_count):
                         # Fallback: Direct assignment (should not happen if update_budget exists)
                         # For PyramidKV/MixKV, this won't reset pyram_init, so it's not ideal
                         # But we still update the budget value
+                        old_budget = kv_cluster.max_capacity_prompt
                         kv_cluster.max_capacity_prompt = actual_budget
                         # Try to reset pyram_init if pyram_mode is enabled
                         if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
                             kv_cluster.pyram_init = False
+                        if layer_idx == 0:
+                            print(f"[KVCache WARNING] Layer 0: Direct budget assignment (no update_budget method): "
+                                  f"{old_budget} -> {actual_budget}")
                         updated_count += 1
             
             # Also update model config for consistency
@@ -1797,17 +1826,22 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
         print(f"[DEBUG] Processor output: total_input_tokens={prefill_token_count}, audio_tokens={audio_token_count}")
 
     # CRITICAL: Update KV cache budget based on actual prefill token count
-    # This ensures budget ratio (e.g., 0.99) is applied to actual sequence length
-    if sparsem_enabled and ENV_BUDGET_IS_RATIO and prefill_token_count > 0:
-        update_sparsemm_budget(model, prefill_token_count)
+    # This ensures budget ratio (e.g., 0.6) is applied to actual sequence length
+    # For absolute budget values, we also need to update to ensure proper initialization
+    if sparsem_enabled and prefill_token_count > 0:
+        print(f"[DEBUG] Before update_sparsemm_budget: prefill_token_count={prefill_token_count}, ENV_BUDGET={ENV_BUDGET}, ENV_BUDGET_IS_RATIO={ENV_BUDGET_IS_RATIO}")
+        actual_budget = update_sparsemm_budget(model, prefill_token_count)
+        print(f"[DEBUG] After update_sparsemm_budget: actual_budget={actual_budget}")
     
     # Only create custom cache if needed (for performance optimization)
     # - SnapKV: uses standard DynamicCache (uniform compression, all heads same length)
     # - AdaKV/SparseMM/PyramidKV/MixKV: uses DynamicCacheSplitHeadFlatten (variable-length per head)
     if sparsem_enabled:
-        if KV_METHOD == "snapkv":
+        if KV_METHOD in ("snapkv", "tova"):
+            # SnapKV and TOVA use standard DynamicCache because all heads have the same compressed length
             generate_kwargs["past_key_values"] = DynamicCache()
         else:
+            # AdaKV, SparseMM, PyramidKV, MixKV use DynamicCacheSplitHeadFlatten
             generate_kwargs["past_key_values"] = DynamicCacheSplitHeadFlatten()
     elif ENV_BUDGET_RAW != "4096" or ENV_BUDGET != 4096.0:
         generate_kwargs["past_key_values"] = BudgetLimitedKVCache(budget=ENV_BUDGET, seed=42)

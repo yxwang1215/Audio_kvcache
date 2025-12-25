@@ -25,13 +25,11 @@ os.chdir(current_dir)
 sys.path.insert(0, parent_dir)  # Add parent directory to path for model imports
 
 # 根据环境变量决定是否使用 sparsekv 版本
-# KV Cache method selection: sparsekv, snapkv, adakv, pyramidkv, mixkv, vanilla
+# KV Cache method selection: sparsekv, snapkv, adakv, pyramidkv, tova, mixkv, vanilla
 # sparsekv is alias for sparsemm, vanilla means no KV compression
 KV_METHOD = os.environ.get("KV_METHOD", "sparsekv").lower()
 # USE_SPARSEKV is derived from KV_METHOD for backward compatibility
 USE_SPARSEKV = KV_METHOD != "vanilla"
-
-# KV Cache method selection: sparsemm, snapkv, adakv, pyramidkv, mixkv
 
 if USE_SPARSEKV:
     # Import from model directory
@@ -41,6 +39,7 @@ if USE_SPARSEKV:
         Gemma3nTextAttentionSnapKV,
         Gemma3nTextAttentionAdaKV,
         Gemma3nTextAttentionPyramidKV,
+        Gemma3nTextAttentionTOVA,
         Gemma3nTextAttentionMixKV
     )
     print(f"Using sparsekv version of the model (KV_METHOD={KV_METHOD})")
@@ -1090,6 +1089,16 @@ def reset_sparsemm_state(model):
                 # Reset token usage statistics
                 if hasattr(kv_cluster, 'reset_token_usage_stats'):
                     kv_cluster.reset_token_usage_stats()
+                # CRITICAL: Reset pyram_init for SnapKV/PyramidKV/MixKV to allow budget recalculation
+                # This ensures that when update_budget() is called, the pyramidal capacity will be recalculated
+                if hasattr(kv_cluster, 'pyram_init'):
+                    kv_cluster.pyram_init = False
+                if hasattr(kv_cluster, 'pyram_mode') and kv_cluster.pyram_mode:
+                    # For pyramidal mode, we need to reset pyram_init to allow recalculation
+                    kv_cluster.pyram_init = False
+                # CRITICAL: Reset TOVA decode state for proper budget recalculation
+                if hasattr(kv_cluster, 'reset_decode_state'):
+                    kv_cluster.reset_decode_state()
             
     except (AttributeError, KeyError):
         # Model structure doesn't match expected format, skip reset
@@ -1213,6 +1222,14 @@ def init_model():
             elif KV_METHOD == "pyramidkv":
                 model.enable_pyramidkv_attention(sparsemm_config)
                 print("[PyramidKV] PyramidKV attention enabled successfully")
+            elif KV_METHOD == "tova":
+                result = model.enable_tova_attention(sparsemm_config)
+                if not result:
+                    print(f"[TOVA] ERROR: Failed to enable TOVA method!")
+                    print(f"[TOVA] Please check if the method name is correct and all dependencies are available.")
+                    SPARSEM_ENABLED = False
+                else:
+                    print("[TOVA] TOVA attention enabled successfully")
             elif KV_METHOD == "mixkv":
                 select_method = os.environ.get("SELECT_METHOD", "mixkv")
                 sparsemm_config['select_method'] = select_method
@@ -1731,8 +1748,8 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
     # - Otherwise, let model use default cache (fastest)
     if sparsem_enabled:
         # Determine which cache type to use based on KV_METHOD
-        if KV_METHOD == "snapkv":
-            # SnapKV uses standard DynamicCache because all heads have the same compressed length
+        if KV_METHOD in ("snapkv", "tova"):
+            # SnapKV and TOVA use standard DynamicCache because all heads have the same compressed length
             generate_kwargs["past_key_values"] = DynamicCache()
         else:
             # AdaKV, SparseMM, PyramidKV, MixKV use DynamicCacheSplitHeadFlatten
