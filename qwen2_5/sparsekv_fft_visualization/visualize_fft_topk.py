@@ -375,3 +375,6 @@ def main():
 if __name__ == '__main__':
     main()
 
+'''
+python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_visualization/visualize_fft_topk.py --stats-file /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_visualization/results/LibriSpeech_budget0.5_fft_saliency_cutoff0.15_alpha0.6/fft_topk_stats.json --output-dir /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_visualization/results/LibriSpeech_budget0.5_fft_lowpass_cutoff0.7_alpha0.6 --max-samples 5
+'''

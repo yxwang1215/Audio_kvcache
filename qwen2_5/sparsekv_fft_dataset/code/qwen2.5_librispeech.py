@@ -1400,7 +1400,7 @@ def main():
             # Other methods (SparseMM, AdaKV, PyramidKV, MixKV) use DynamicCacheSplitHeadFlatten (variable-length per head)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                if KV_METHOD in ("snapkv", "tova"):
+                if KV_METHOD in ("snapkv", "tova", "knorm", "headkv", "h2o"):
                     past_key_values = DynamicCache()
                 else:
                     past_key_values = DynamicCacheSplitHeadFlatten()

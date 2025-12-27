@@ -11,6 +11,8 @@
 | **AdaKV** | `KV_METHOD="adakv"` | 自适应 KV cache 分配 | ❌ |
 | **PyramidKV** | `KV_METHOD="pyramidkv"` | 金字塔形 KV cache 压缩 | ❌ |
 | **MixKV** | `KV_METHOD="mixkv"` | 混合策略 KV cache 压缩 | ❌ |
+| **KNorm** | `KV_METHOD="knorm"` | 基于 Key 向量 L2 范数的 KV cache 压缩 | ❌ |
+| **H2O** | `KV_METHOD="h2o"` | Heavy-Hitter Oracle: 基于累积注意力分数的 KV cache 压缩 | ❌ |
 | **None** | `KV_METHOD="none"` | 禁用 KV cache 压缩（Full Cache） | ❌ |
 
 ## 向后兼容性
@@ -256,7 +258,100 @@ python code/qwen2.5_librispeech.py \
     --output-dir ./results/MixKV/budget0.4
 ```
 
-### 6. Full Cache (无压缩)
+### 6. KNorm
+
+```bash
+#!/bin/bash
+export KV_METHOD="knorm"
+export BUDGET=0.4
+export RATIO=0.5
+export WINDOW_SIZE=32
+export KERNEL_SIZE=5
+export POOLING="maxpool"
+
+# KNorm 不需要 head score 配置
+export USE_OPTIMIZED_SPARSEMM="false"
+```
+
+**完整示例脚本** (`run_librispeech_knorm.sh`):
+
+```bash
+#!/bin/bash
+export CUDA_VISIBLE_DEVICES=0
+export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
+export SAMPLE_LIMIT=0
+
+export KV_METHOD="knorm"
+export BUDGET=0.4
+export RATIO=0.5
+export WINDOW_SIZE=32
+export KERNEL_SIZE=5
+export POOLING="maxpool"
+export USE_OPTIMIZED_SPARSEMM="false"
+
+source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
+conda activate Qwen3_2 && \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
+python code/qwen2.5_librispeech.py \
+    --model-path "${MODEL_PATH}" \
+    --output-dir ./results/KNorm/budget0.4
+```
+
+**KNorm 方法说明**:
+- KNorm (Key Norm) 使用 Key 向量的 L2 范数来选择重要的 KV 对
+- 较小的 Key 范数表示该 token 更重要（因为会收到更多注意力）
+- 使用标准的 `DynamicCache`（所有 head 压缩到相同长度）
+- 不需要 Head Score 文件
+
+### 7. H2O (Heavy-Hitter Oracle)
+
+```bash
+#!/bin/bash
+export KV_METHOD="h2o"
+export BUDGET=0.4
+export RATIO=0.5
+export WINDOW_SIZE=32
+export KERNEL_SIZE=5
+export POOLING="avgpool"
+
+# H2O 特有配置
+export H2O_HEAVY_RATIO=0.5              # Heavy hitter vs recent tokens 比例
+export USE_OPTIMIZED_SPARSEMM="false"
+```
+
+**完整示例脚本** (`run_librispeech_h2o.sh`):
+
+```bash
+#!/bin/bash
+export CUDA_VISIBLE_DEVICES=0
+export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
+export SAMPLE_LIMIT=0
+
+export KV_METHOD="h2o"
+export BUDGET=0.4
+export RATIO=0.5
+export WINDOW_SIZE=32
+export KERNEL_SIZE=5
+export POOLING="avgpool"
+export H2O_HEAVY_RATIO=0.5
+
+source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
+conda activate Qwen3_2 && \
+cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
+python code/qwen2.5_librispeech.py \
+    --model-path "${MODEL_PATH}" \
+    --output-dir ./results/H2O/budget0.4
+```
+
+**H2O 方法说明**:
+- H2O (Heavy-Hitter Oracle) 基于累积注意力分数识别"重击手"token
+- 维护两类 token：heavy hitters（累积注意力分数最高的 token）和 recent tokens（滑动窗口）
+- `H2O_HEAVY_RATIO` 控制 heavy hitters 与 recent tokens 的比例（默认 0.5）
+- 基于论文：https://arxiv.org/abs/2306.14048
+- 使用标准的 `DynamicCache`
+- 不需要 Head Score 文件
+
+### 8. Full Cache (无压缩)
 
 ```bash
 #!/bin/bash
@@ -317,6 +412,8 @@ python code/qwen2.5_librispeech.py \
 | AdaKV | ❌ | 中 | 需要自适应分配 |
 | PyramidKV | ❌ | 低 | 长序列处理 |
 | MixKV | ❌ | 高 | 需要混合策略 |
+| KNorm | ❌ | 低 | 基于 Key 范数的压缩 |
+| H2O | ❌ | 中 | 基于累积注意力的压缩 |
 
 ## 注意事项
 
@@ -335,10 +432,14 @@ scripts/
 │   ├── run_librispeech_adakv.sh    # AdaKV
 │   ├── run_librispeech_pyramidkv.sh # PyramidKV
 │   ├── run_librispeech_mixkv.sh    # MixKV
+│   ├── run_librispeech_knorm.sh    # KNorm
+│   ├── run_librispeech_h2o.sh      # H2O
 │   └── run_all_kv_methods.sh       # 批量运行
 ├── ST/
 │   ├── run_covost2_en_zh.sh
-│   └── run_covost2_zh_en.sh
+│   ├── run_covost2_zh_en.sh
+│   ├── run_covost2_en_zh_h2o.sh    # H2O
+│   └── run_covost2_zh_en_h2o.sh    # H2O
 ├── audio_captioning/
 │   └── ...
 ├── audio_qa/

@@ -75,6 +75,9 @@ else:
         init_tova,
         init_mixkv,
         init_mixsparsemm,
+        init_knorm,
+        init_headkv,
+        init_h2o,
         DynamicCacheSplitHeadFlatten
     )
     print("[modeling] Using standard SparseMM implementation")
@@ -2684,6 +2687,561 @@ class Qwen2_5OmniFlashAttention2TOVA(Qwen2_5OmniAttention):
             )
             attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
             attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, self.hidden_size).contiguous()
+
+        attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value, query_states, key_states, value_states
+
+
+class Qwen2_5OmniFlashAttention2KNorm(Qwen2_5OmniAttention):
+    """
+    Qwen2_5Omni flash attention module with KNorm integration.
+    KNorm (Key Norm) uses the L2 norm of key vectors to select important KV pairs.
+    Tokens with smaller key norms are considered more important and retained.
+    Based on: https://arxiv.org/pdf/2406.11430
+    
+    KNorm uses standard DynamicCache because all heads are compressed to the same length.
+    - Prefill: compress KV using KNorm scoring and store to cache, use original KV for attention
+    - Decode: use compressed KV from cache with standard attention
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ):
+        # Initialize KNorm cluster
+        init_knorm(self)
+        
+        bsz, q_len, _ = hidden_states.size()
+        is_prefill = q_len != 1
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            if self.layer_idx is None:
+                raise ValueError(
+                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                    "with a layer index."
+                )
+            if hasattr(past_key_value, "get_usable_length"):
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            else:
+                kv_seq_len += past_key_value.get_seq_length()
+
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
+
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+        )
+
+        if past_key_value is not None:
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+
+        # Check cache type - KNorm uses standard DynamicCache (not DynamicCacheSplitHeadFlatten)
+        is_dynamic_cache = (
+            past_key_value is not None and (
+                isinstance(past_key_value, DynamicCache) or
+                type(past_key_value).__name__ == "DynamicCache"
+            )
+        )
+        
+        # Also check for DynamicCacheSplitHeadFlatten (for backward compatibility)
+        is_split_head_flatten_cache = (
+            past_key_value is not None and (
+                isinstance(past_key_value, DynamicCacheSplitHeadFlatten) or
+                type(past_key_value).__name__ == "DynamicCacheSplitHeadFlatten"
+            )
+        )
+
+        if is_prefill:
+            # Prefill phase: compress and store, use original for attention
+            if past_key_value is not None:
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_value.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            # Use original KV for attention computation
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
+
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
+
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
+            else:
+                sliding_window = None
+
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        elif is_dynamic_cache and not is_split_head_flatten_cache:
+            # DECODE PHASE with DynamicCache (standard 4D tensor cache)
+            # First update cache with new token
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
+
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
+
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
+            else:
+                sliding_window = None
+
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        else:
+            # DECODE PHASE with DynamicCacheSplitHeadFlatten (2D flattened cache) - backward compatibility
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            # Initialize head metadata if needed - get actual length from cache
+            if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                # Get actual KV length from cache (prefill already stored compressed KV)
+                if hasattr(past_key_value, 'key_cache') and len(past_key_value.key_cache) > self.layer_idx:
+                    cache_key = past_key_value.key_cache[self.layer_idx]
+                    total_cache_len = cache_key.shape[0]  # 2D tensor: [total_len, dim]
+                else:
+                    # Fallback for standard DynamicCache
+                    total_cache_len = past_key_value.get_seq_length(self.layer_idx) * num_kv_heads
+                head_len = total_cache_len // num_kv_heads  # Each head has same length for KNorm
+                
+                self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                self.kv_cluster.klen_sum = total_cache_len
+                self.kv_cluster.max_seqlen_k = head_len
+                self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+
+            cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+            cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+            self.kv_cluster.klen_sum += num_kv_heads
+            self.kv_cluster.max_seqlen_k += 1
+            self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+            self.kv_cluster.head_lens.add_(1)
+
+            query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+            key_states = key_states.view(-1, 1, self.head_dim)
+            value_states = value_states.view(-1, 1, self.head_dim)
+
+            attn_output = sparsemm_flash_attn_varlen_func(
+                query_states, key_states, value_states,
+                self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                1, self.kv_cluster.max_seqlen_k, causal=True
+            )
+            attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+            attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, self.hidden_size).contiguous()
+
+        attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value, query_states, key_states, value_states
+
+
+class Qwen2_5OmniFlashAttention2HeadKV(Qwen2_5OmniAttention):
+    """
+    Qwen2_5Omni flash attention module with HeadKV integration.
+    HeadKV allocates different KV cache budgets to different attention heads based on their importance.
+    Based on: https://arxiv.org/abs/2410.19258 (ICLR 2025)
+    
+    HeadKV uses standard DynamicCache because compression is uniform per head.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ):
+        # Initialize HeadKV cluster
+        init_headkv(self)
+        
+        bsz, q_len, _ = hidden_states.size()
+        is_prefill = q_len != 1
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            if self.layer_idx is None:
+                raise ValueError(
+                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                    "with a layer index."
+                )
+            if hasattr(past_key_value, "get_usable_length"):
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            else:
+                kv_seq_len += past_key_value.get_seq_length()
+
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
+
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+        )
+
+        if past_key_value is not None:
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+
+        is_dynamic_cache = (
+            past_key_value is not None and (
+                isinstance(past_key_value, DynamicCache) or
+                type(past_key_value).__name__ == "DynamicCache"
+            )
+        )
+
+        if is_prefill:
+            if past_key_value is not None:
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_value.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
+
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
+
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
+            else:
+                sliding_window = None
+
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        elif is_dynamic_cache:
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
+
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
+
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
+            else:
+                sliding_window = None
+
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        else:
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            attn_output = _flash_attention_forward(
+                query_states.transpose(1, 2), key_states_attn.transpose(1, 2), value_states_attn.transpose(1, 2),
+                attention_mask, q_len, dropout=0.0, is_causal=self.is_causal,
+                use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+
+        attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value, query_states, key_states, value_states
+
+
+class Qwen2_5OmniFlashAttention2H2O(Qwen2_5OmniAttention):
+    """
+    Qwen2_5Omni flash attention module with H2O (Heavy-Hitter Oracle) integration.
+    H2O uses accumulated attention scores to identify "heavy hitter" tokens and keeps
+    them along with a sliding window of recent tokens.
+    Based on: https://arxiv.org/abs/2306.14048
+    
+    H2O uses standard DynamicCache because compression is uniform per head.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ):
+        # Initialize H2O cluster
+        init_h2o(self)
+        
+        bsz, q_len, _ = hidden_states.size()
+        is_prefill = q_len != 1
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            if self.layer_idx is None:
+                raise ValueError(
+                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                    "with a layer index."
+                )
+            if hasattr(past_key_value, "get_usable_length"):
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            else:
+                kv_seq_len += past_key_value.get_seq_length()
+
+        if position_embeddings is None:
+            cos, sin = self.rotary_emb(value_states, position_ids)
+        else:
+            cos, sin = position_embeddings
+
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+        )
+
+        if past_key_value is not None:
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+
+        is_dynamic_cache = (
+            past_key_value is not None and (
+                isinstance(past_key_value, DynamicCache) or
+                type(past_key_value).__name__ == "DynamicCache"
+            )
+        )
+
+        if is_prefill:
+            if past_key_value is not None:
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_value.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
+
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
+
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
+            else:
+                sliding_window = None
+
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        elif is_dynamic_cache:
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            
+            dropout_rate = 0.0 if not self.training else self.attention_dropout
+
+            input_dtype = query_states.dtype
+            if input_dtype == torch.float32:
+                if torch.is_autocast_enabled():
+                    target_dtype = torch.get_autocast_gpu_dtype()
+                elif hasattr(self.config, "_pre_quantization_dtype"):
+                    target_dtype = self.config._pre_quantization_dtype
+                else:
+                    target_dtype = self.q_proj.weight.dtype
+                query_states = query_states.to(target_dtype)
+                key_states_attn = key_states_attn.to(target_dtype)
+                value_states_attn = value_states_attn.to(target_dtype)
+
+            query_states = query_states.transpose(1, 2)
+            key_states_attn = key_states_attn.transpose(1, 2)
+            value_states_attn = value_states_attn.transpose(1, 2)
+
+            if (
+                self.config.use_sliding_window
+                and getattr(self.config, "sliding_window", None) is not None
+                and self.layer_idx >= self.config.max_window_layers
+            ):
+                sliding_window = self.config.sliding_window
+            else:
+                sliding_window = None
+
+            attn_output = _flash_attention_forward(
+                query_states, key_states_attn, value_states_attn, attention_mask, q_len,
+                dropout=dropout_rate, sliding_window=sliding_window,
+                is_causal=self.is_causal, use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        else:
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            attn_output = _flash_attention_forward(
+                query_states.transpose(1, 2), key_states_attn.transpose(1, 2), value_states_attn.transpose(1, 2),
+                attention_mask, q_len, dropout=0.0, is_causal=self.is_causal,
+                use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            )
+            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
 
         attn_output = self.o_proj(attn_output)
 
@@ -5866,6 +6424,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             'pyramidkv': Qwen2_5OmniFlashAttention2PyramidKV,
             'tova': Qwen2_5OmniFlashAttention2TOVA,
             'mixkv': Qwen2_5OmniFlashAttention2MixKV,
+            'knorm': Qwen2_5OmniFlashAttention2KNorm,
+            'headkv': Qwen2_5OmniFlashAttention2HeadKV,
+            'h2o': Qwen2_5OmniFlashAttention2H2O,
         }
         
         init_func_map = {
@@ -5874,6 +6435,9 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
             'pyramidkv': init_pyramidkv,
             'tova': init_tova,
             'mixkv': init_mixkv,
+            'knorm': init_knorm,
+            'headkv': init_headkv,
+            'h2o': init_h2o,
         }
         
         if method not in attention_class_map:

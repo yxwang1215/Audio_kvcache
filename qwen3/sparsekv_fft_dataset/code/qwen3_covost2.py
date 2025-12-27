@@ -1092,6 +1092,26 @@ def main():
                 sparsemm_config['select_method'] = select_method
                 model.enable_mixkv_attention(sparsemm_config)
                 print(f"[MixKV] MixKV attention enabled successfully with select_method={select_method}")
+            elif KV_METHOD == "knorm":
+                result = model.enable_knorm_attention(sparsemm_config)
+                if not result:
+                    print(f"[KNorm] ERROR: Failed to enable KNorm method!")
+                    print(f"[KNorm] Please check if the method name is correct and all dependencies are available.")
+                    sparsemm_enabled = False
+                else:
+                    print(f"[KNorm] KNorm enabled successfully")
+            elif KV_METHOD == "headkv":
+                sparsemm_config['beta'] = float(os.environ.get("HEADKV_BETA", "1.5"))
+                sparsemm_config['headkv_temp'] = float(os.environ.get("HEADKV_TEMP", "1.0"))
+                head_score_path = os.environ.get("HEAD_SCORE_PATH", None)
+                if head_score_path:
+                    sparsemm_config['head_score_path'] = head_score_path
+                result = model.enable_headkv_attention(sparsemm_config)
+                if not result:
+                    print(f"[HeadKV] ERROR: Failed to enable HeadKV method!")
+                    sparsemm_enabled = False
+                else:
+                    print(f"[HeadKV] HeadKV enabled successfully")
             else:
                 print(f"[KVCache WARNING] Unknown KV_METHOD '{KV_METHOD}', falling back to SparseMM")
                 model.enable_sparsemm_attention(head_score_data, sparsemm_config)
@@ -1271,7 +1291,7 @@ def main():
             # Other methods use DynamicCacheSplitHeadFlatten (variable-length per head)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                if KV_METHOD in ("snapkv", "tova"):
+                if KV_METHOD in ("snapkv", "tova", "knorm", "headkv"):
                     past_key_values = DynamicCache()
                 else:
                     past_key_values = DynamicCacheSplitHeadFlatten()
@@ -1299,7 +1319,7 @@ def main():
             if USE_SPARSEKV and sparsemm_enabled:
                 reset_sparsemm_state(model)
                 # TOVA and SnapKV use DynamicCache, others use DynamicCacheSplitHeadFlatten
-                if KV_METHOD in ("snapkv", "tova"):
+                if KV_METHOD in ("snapkv", "tova", "knorm", "headkv"):
                     past_key_values = DynamicCache()  # Create fresh cache
                 else:
                     past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache

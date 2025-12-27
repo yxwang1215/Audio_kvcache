@@ -36,7 +36,10 @@ try:
         init_pyramidkv, 
         init_snapkv,
         init_tova,
-        init_mixkv, 
+        init_mixkv,
+        init_knorm,
+        init_headkv,
+        init_h2o,
         DynamicCacheSplitHeadFlatten, 
         repeat_kv
     )
@@ -49,6 +52,8 @@ except ImportError:
     init_snapkv = None
     init_tova = None
     init_mixkv = None
+    init_knorm = None
+    init_h2o = None
     print("[WARNING] sparsemm_utils not available, SparseMM features will be disabled")
 
 # Import flash_attn_varlen_func for SparseMM decode phase
@@ -2815,6 +2820,424 @@ class Gemma3nTextAttentionTOVA(Gemma3nTextAttention):
         return attn_output, attn_weights
 
 
+class Gemma3nTextAttentionKNorm(Gemma3nTextAttention):
+    """
+    Gemma3n text attention module with KNorm integration.
+    KNorm uses negative L2 norm of key vectors to score tokens - keys with smaller norms are more important.
+    Based on: https://arxiv.org/pdf/2406.11430
+    
+    Uses standard DynamicCache because all heads are compressed to the same length.
+    - Prefill: compress KV using KNorm scoring and store to cache, use original KV for attention
+    - Decode: use compressed KV from cache with standard attention
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.config.head_dim)
+
+        cos, sin = position_embeddings
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_norm(query_states)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        query_states = query_states.transpose(1, 2)
+
+        # Handle KV shared layers
+        if self.is_kv_shared_layer and past_key_values is not None:
+            if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                key_states = key_states.to(query_states.device)
+                value_states = value_states.to(query_states.device)
+            else:
+                key_states = self.k_proj(hidden_states).view(hidden_shape)
+                key_states = self.k_norm(key_states)
+                key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+                key_states = key_states.transpose(1, 2)
+                value_states = self.v_proj(hidden_states).view(hidden_shape)
+                value_states = self.v_norm(value_states)
+                value_states = value_states.transpose(1, 2)
+        else:
+            key_states = self.k_proj(hidden_states).view(hidden_shape)
+            key_states = self.k_norm(key_states)
+            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+            key_states = key_states.transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(hidden_shape)
+            value_states = self.v_norm(value_states)
+            value_states = value_states.transpose(1, 2)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        num_kv_heads = self.config.num_key_value_heads
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
+
+        # Initialize KNorm cluster (only for non-shared layers)
+        if not self.is_kv_shared_layer:
+            if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+                init_knorm(self)
+
+        is_prefill = q_len != 1
+
+        # Check cache type
+        is_dynamic_cache = (
+            past_key_values is not None and (
+                isinstance(past_key_values, DynamicCache) or
+                type(past_key_values).__name__ == "DynamicCache"
+            )
+        )
+
+        # KNorm with standard DynamicCache
+        if is_dynamic_cache:
+            if self.is_kv_shared_layer:
+                # For KV shared layers: use shared_layers KV directly, no compression
+                if not is_prefill:
+                    if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                        key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                        key_states = key_states.to(query_states.device)
+                        value_states = value_states.to(query_states.device)
+                
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            elif is_prefill:
+                # PREFILL PHASE: Compress KV using KNorm
+                
+                # Store full-length KV for shared layers BEFORE compression
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                # Compress KV using KNorm and store to cache
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+                
+                # Use original (uncompressed) KV for attention computation during prefill
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            else:
+                # DECODE PHASE
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                
+                # Update shared_layers for store_full_length_kv layers
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+        else:
+            # Fallback: no cache or unsupported cache type
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+
+        # Standard attention computation
+        attn_weights = None
+        attn_output = flex_attention_forward(
+            self,
+            query_states,
+            key_states_attn,
+            value_states_attn,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=1.0,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Gemma3nTextAttentionHeadKV(Gemma3nTextAttention):
+    """
+    Gemma3n text attention module with HeadKV integration.
+    HeadKV allocates different KV cache budgets to different attention heads based on their importance.
+    Based on: https://arxiv.org/abs/2410.19258 (ICLR 2025)
+    
+    Key idea: Not all heads matter equally. Important heads get larger cache budgets.
+    Uses standard DynamicCache with per-head variable compression.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.config.head_dim)
+
+        cos, sin = position_embeddings
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_norm(query_states)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        query_states = query_states.transpose(1, 2)
+
+        # Handle KV shared layers
+        if self.is_kv_shared_layer and past_key_values is not None:
+            if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                key_states = key_states.to(query_states.device)
+                value_states = value_states.to(query_states.device)
+            else:
+                key_states = self.k_proj(hidden_states).view(hidden_shape)
+                key_states = self.k_norm(key_states)
+                key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+                key_states = key_states.transpose(1, 2)
+                value_states = self.v_proj(hidden_states).view(hidden_shape)
+                value_states = self.v_norm(value_states)
+                value_states = value_states.transpose(1, 2)
+        else:
+            key_states = self.k_proj(hidden_states).view(hidden_shape)
+            key_states = self.k_norm(key_states)
+            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+            key_states = key_states.transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(hidden_shape)
+            value_states = self.v_norm(value_states)
+            value_states = value_states.transpose(1, 2)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        num_kv_heads = self.config.num_key_value_heads
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
+
+        # Initialize HeadKV cluster (only for non-shared layers)
+        if not self.is_kv_shared_layer:
+            if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+                init_headkv(self)
+
+        is_prefill = q_len != 1
+
+        # Check cache type
+        is_dynamic_cache = (
+            past_key_values is not None and (
+                isinstance(past_key_values, DynamicCache) or
+                type(past_key_values).__name__ == "DynamicCache"
+            )
+        )
+
+        # HeadKV with standard DynamicCache
+        if is_dynamic_cache:
+            if self.is_kv_shared_layer:
+                # For KV shared layers: use shared_layers KV directly, no compression
+                if not is_prefill:
+                    if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                        key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                        key_states = key_states.to(query_states.device)
+                        value_states = value_states.to(query_states.device)
+                
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            elif is_prefill:
+                # PREFILL PHASE: Compress KV using HeadKV
+                
+                # Store full-length KV for shared layers BEFORE compression
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                # Compress KV using HeadKV and store to cache
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+                
+                # Use original (uncompressed) KV for attention computation during prefill
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            else:
+                # DECODE PHASE
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                
+                # Update shared_layers for store_full_length_kv layers
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+        else:
+            # Fallback: no cache or unsupported cache type
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+
+        # Standard attention computation
+        attn_weights = None
+        attn_output = flex_attention_forward(
+            self,
+            query_states,
+            key_states_attn,
+            value_states_attn,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=1.0,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Gemma3nTextAttentionH2O(Gemma3nTextAttention):
+    """
+    Gemma3n text attention module with H2O (Heavy-Hitter Oracle) integration.
+    H2O uses accumulated attention scores to identify "heavy hitter" tokens and keeps
+    them along with a sliding window of recent tokens.
+    Based on: https://arxiv.org/abs/2306.14048
+    
+    Uses standard DynamicCache with uniform compression per head.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.config.head_dim)
+
+        cos, sin = position_embeddings
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape)
+        query_states = self.q_norm(query_states)
+        query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
+        query_states = query_states.transpose(1, 2)
+
+        # Handle KV shared layers
+        if self.is_kv_shared_layer and past_key_values is not None:
+            if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                key_states = key_states.to(query_states.device)
+                value_states = value_states.to(query_states.device)
+            else:
+                key_states = self.k_proj(hidden_states).view(hidden_shape)
+                key_states = self.k_norm(key_states)
+                key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+                key_states = key_states.transpose(1, 2)
+                value_states = self.v_proj(hidden_states).view(hidden_shape)
+                value_states = self.v_norm(value_states)
+                value_states = value_states.transpose(1, 2)
+        else:
+            key_states = self.k_proj(hidden_states).view(hidden_shape)
+            key_states = self.k_norm(key_states)
+            key_states = apply_rotary_pos_emb(key_states, cos, sin, unsqueeze_dim=2)
+            key_states = key_states.transpose(1, 2)
+            value_states = self.v_proj(hidden_states).view(hidden_shape)
+            value_states = self.v_norm(value_states)
+            value_states = value_states.transpose(1, 2)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        num_kv_heads = self.config.num_key_value_heads
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window} if past_key_values is not None else None
+
+        # Initialize H2O cluster (only for non-shared layers)
+        if not self.is_kv_shared_layer:
+            if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+                init_h2o(self)
+
+        is_prefill = q_len != 1
+
+        # Check cache type
+        is_dynamic_cache = (
+            past_key_values is not None and (
+                isinstance(past_key_values, DynamicCache) or
+                type(past_key_values).__name__ == "DynamicCache"
+            )
+        )
+
+        # H2O with standard DynamicCache
+        if is_dynamic_cache:
+            if self.is_kv_shared_layer:
+                # For KV shared layers: use shared_layers KV directly, no compression
+                if not is_prefill:
+                    if hasattr(past_key_values, "shared_layers") and self.kv_shared_layer_index in past_key_values.shared_layers:
+                        key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+                        key_states = key_states.to(query_states.device)
+                        value_states = value_states.to(query_states.device)
+                
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            elif is_prefill:
+                # PREFILL PHASE: Compress KV using H2O
+                
+                # Store full-length KV for shared layers BEFORE compression
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                # Compress KV using H2O and store to cache
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+                
+                # Use original (uncompressed) KV for attention computation during prefill
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            else:
+                # DECODE PHASE
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                
+                # Update shared_layers for store_full_length_kv layers
+                if self.store_full_length_kv:
+                    if not hasattr(past_key_values, "shared_layers"):
+                        past_key_values.shared_layers = {}
+                    past_key_values.shared_layers[self.layer_idx] = (key_states.clone(), value_states.clone())
+                
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+        else:
+            # Fallback: no cache or unsupported cache type
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+
+        # Standard attention computation
+        attn_weights = None
+        attn_output = flex_attention_forward(
+            self,
+            query_states,
+            key_states_attn,
+            value_states_attn,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=1.0,
+            sliding_window=self.sliding_window,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
 class Gemma3nTextAttentionMixKV(Gemma3nTextAttention):
     """
     Gemma3n text attention module with MixKV integration.
@@ -4392,6 +4815,193 @@ class Gemma3nForConditionalGeneration(Gemma3nPreTrainedModel, GenerationMixin):
             patched_count += 1
         
         print(f"[TOVA] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_knorm_attention(
+        self,
+        sparsemm_config: Dict[str, Any]
+    ):
+        """
+        Replace attention modules with KNorm version for Key norm-based KVCache compression.
+        
+        Args:
+            sparsemm_config: Dictionary containing configuration:
+                - 'budget': KV cache budget
+                - 'budget_ratio': Budget ratio for dynamic adjustment (optional)
+                - 'window_size': Window size for recent tokens
+        """
+        if not SPARSEM_AVAILABLE:
+            raise ImportError("sparsemm_utils is not available.")
+        
+        base_model = self.model.language_model
+        model_config = base_model.config
+        
+        # Apply configuration to model config
+        model_config.window_size = sparsemm_config.get('window_size', 32)
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        # CRITICAL: Store budget_ratio for dynamic adjustment
+        budget_ratio = sparsemm_config.get('budget_ratio', None)
+        model_config.budget_ratio = budget_ratio
+        
+        if budget_ratio is not None:
+            print(f"[KNorm] budget_ratio={budget_ratio} enabled for dynamic budget adjustment")
+        # add
+        if not hasattr(model_config, 'gqa_func'):
+            model_config.gqa_func = 'mean'
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Gemma3nTextAttentionKNorm(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            # Copy weights
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            new_attn.v_norm.load_state_dict(old_attn.v_norm.state_dict())
+            
+            init_knorm(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[KNorm] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_headkv_attention(
+        self,
+        sparsemm_config: Dict[str, Any]
+    ):
+        """
+        Replace attention modules with HeadKV version for Head-level KVCache compression.
+        
+        Args:
+            sparsemm_config: Dictionary containing configuration:
+                - 'budget': KV cache budget
+                - 'budget_ratio': Budget ratio for dynamic adjustment (optional)
+                - 'window_size': Window size for recent tokens
+                - 'beta': HeadKV beta parameter for budget pool allocation (default 1.5)
+                - 'head_score_list': Optional tensor of head importance scores
+        """
+        if not SPARSEM_AVAILABLE:
+            raise ImportError("sparsemm_utils is not available.")
+        
+        base_model = self.model.language_model
+        model_config = base_model.config
+        
+        # Apply configuration to model config
+        model_config.window_size = sparsemm_config.get('window_size', 32)
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        model_config.kernel_size = sparsemm_config.get('kernel_size', 7)
+        model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
+        model_config.beta = sparsemm_config.get('beta', 1.5)
+        
+        # HeadKV specific: head importance scores
+        if 'head_score_list' in sparsemm_config:
+            model_config.head_score_list = sparsemm_config['head_score_list']
+        if 'head_score_path' in sparsemm_config:
+            model_config.head_score_path = sparsemm_config['head_score_path']
+        if 'headkv_temp' in sparsemm_config:
+            model_config.headkv_temp = sparsemm_config['headkv_temp']
+        
+        # CRITICAL: Store budget_ratio for dynamic adjustment
+        budget_ratio = sparsemm_config.get('budget_ratio', None)
+        model_config.budget_ratio = budget_ratio
+        
+        if budget_ratio is not None:
+            print(f"[HeadKV] budget_ratio={budget_ratio} enabled for dynamic budget adjustment")
+        
+        if not hasattr(model_config, 'gqa_func'):
+            model_config.gqa_func = 'mean'
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Gemma3nTextAttentionHeadKV(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            # Copy weights
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            new_attn.v_norm.load_state_dict(old_attn.v_norm.state_dict())
+            
+            init_headkv(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[HeadKV] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_h2o_attention(
+        self,
+        sparsemm_config: Dict[str, Any]
+    ):
+        """
+        Replace attention modules with H2O version for Heavy-Hitter Oracle KVCache compression.
+        
+        Args:
+            sparsemm_config: Dictionary containing configuration:
+                - 'budget': KV cache budget
+                - 'budget_ratio': Budget ratio for dynamic adjustment (optional)
+                - 'window_size': Window size for recent tokens
+                - 'heavy_ratio': Ratio for heavy hitter tokens vs recent tokens (default 0.5)
+        """
+        if not SPARSEM_AVAILABLE:
+            raise ImportError("sparsemm_utils is not available.")
+        
+        base_model = self.model.language_model
+        model_config = base_model.config
+        
+        # Apply configuration to model config
+        model_config.window_size = sparsemm_config.get('window_size', 32)
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        model_config.kernel_size = sparsemm_config.get('kernel_size', 5)
+        model_config.pooling = sparsemm_config.get('pooling', 'avgpool')
+        model_config.heavy_ratio = sparsemm_config.get('heavy_ratio', 0.5)
+        
+        # CRITICAL: Store budget_ratio for dynamic adjustment
+        budget_ratio = sparsemm_config.get('budget_ratio', None)
+        model_config.budget_ratio = budget_ratio
+        
+        if budget_ratio is not None:
+            print(f"[H2O] budget_ratio={budget_ratio} enabled for dynamic budget adjustment")
+        
+        if not hasattr(model_config, 'gqa_func'):
+            model_config.gqa_func = 'mean'
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Gemma3nTextAttentionH2O(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            # Copy weights
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            new_attn.v_norm.load_state_dict(old_attn.v_norm.state_dict())
+            
+            init_h2o(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[H2O] Total layers patched: {patched_count}/{len(base_model.layers)}")
         return True
 
     def enable_mixkv_attention(

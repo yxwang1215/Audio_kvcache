@@ -1653,8 +1653,8 @@ conda activate Qwen3_2 &&
 CUDA_VISIBLE_DEVICES=0 \
 USE_SPARSEKV=true \
 USE_FFT_FILTER=true \
-FFT_FILTER_TYPE=saliency \
-FFT_CUTOFF_RATIO=0.15 \
+FFT_FILTER_TYPE=lowpass \
+FFT_CUTOFF_RATIO=0.7 \
 FFT_USE_SALIENCY=true \
 FFT_ALPHA=0.6 \
 FFT_ADAPTIVE_CUTOFF=true \
@@ -1662,7 +1662,7 @@ BUDGET=0.5 \
 RATIO=0.5 \
 WINDOW_SIZE=32 \
 HEAD_SCORE_FILE=aggregated \
-RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_fft_visualization \
-python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen/sparsekv_fft_visualization/LibriSpeech_qwen2.5.py
+RESULTS_DIR=/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_visualization \
+python /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_visualization/LibriSpeech_qwen2.5.py
 
 '''

@@ -1,5 +1,5 @@
 """
-分析 FFT 前后 topk 选择的分布变化情况
+分析 SAS 前后 topk 选择的分布变化情况
 """
 
 import json
@@ -48,7 +48,7 @@ def load_stats(filepath):
 
 def analyze_topk_distribution(stats):
     """
-    分析 FFT 前后 topk 选择的分布变化
+    分析 SAS 前后 topk 选择的分布变化
     
     返回:
         - position_distribution: 每个位置被选中的频率分布
@@ -242,11 +242,11 @@ def plot_selection_heatmap(analysis, output_dir, max_samples=10):
     # 创建图形 - 保持原尺寸
     fig, axes = plt.subplots(2, 1, figsize=(16, 8))
     
-    # Before FFT
+    # Before SAS
     im1 = axes[0].imshow(before_matrix, aspect='auto', cmap='Blues', interpolation='nearest')
     axes[0].set_xlabel('Token Position', fontsize=28)  # 进一步增大
     axes[0].set_ylabel('Sample Index', fontsize=28)  # 进一步增大
-    axes[0].set_title('TopK Selection Before FFT (Blue = Selected)', fontsize=24)
+    axes[0].set_title('TopK Selection Before SAS (Blue = Selected)', fontsize=24)
     # 增大刻度标签字体
     axes[0].tick_params(axis='x', labelsize=24)  # Token Position的数字 (1000, 3000等)
     axes[0].tick_params(axis='y', labelsize=24)  # Sample Index的数字
@@ -255,11 +255,11 @@ def plot_selection_heatmap(analysis, output_dir, max_samples=10):
     cbar1.set_label('', fontsize=24)  # colorbar标签
     cbar1.ax.tick_params(labelsize=24)  # colorbar刻度 (0.0 - 1.0)
     
-    # After FFT
+    # After SAS
     im2 = axes[1].imshow(after_matrix, aspect='auto', cmap='Reds', interpolation='nearest')
     axes[1].set_xlabel('Token Position', fontsize=28)  # 进一步增大
     axes[1].set_ylabel('Sample Index', fontsize=28)  # 进一步增大
-    axes[1].set_title('TopK Selection After FFT (Red = Selected)', fontsize=24)
+    axes[1].set_title('TopK Selection After SAS (Red = Selected)', fontsize=24)
     # 增大刻度标签字体
     axes[1].tick_params(axis='x', labelsize=24)  # Token Position的数字 (1000, 3000等)
     axes[1].tick_params(axis='y', labelsize=24)  # Sample Index的数字
@@ -301,8 +301,8 @@ def plot_distribution_statistics(analysis, output_dir):
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     
     # Plot 1: 频率分布直方图
-    axes[0, 0].hist(before_counts, bins=30, color='blue', alpha=0.6, label='Before FFT', edgecolor='black')
-    axes[0, 0].hist(after_counts, bins=30, color='red', alpha=0.6, label='After FFT', edgecolor='black')
+    axes[0, 0].hist(before_counts, bins=30, color='blue', alpha=0.6, label='Before SAS', edgecolor='black')
+    axes[0, 0].hist(after_counts, bins=30, color='red', alpha=0.6, label='After SAS', edgecolor='black')
     axes[0, 0].set_xlabel('Selection Frequency', fontsize=10)
     axes[0, 0].set_ylabel('Number of Positions', fontsize=10)
     axes[0, 0].set_title('Distribution of Selection Frequencies', fontsize=11)
@@ -313,9 +313,9 @@ def plot_distribution_statistics(analysis, output_dir):
     sorted_before = np.sort(before_counts)[::-1]
     sorted_after = np.sort(after_counts)[::-1]
     axes[0, 1].plot(np.arange(len(sorted_before)), np.cumsum(sorted_before), 'b-', 
-                   label='Before FFT', linewidth=2)
+                   label='Before SAS', linewidth=2)
     axes[0, 1].plot(np.arange(len(sorted_after)), np.cumsum(sorted_after), 'r-', 
-                   label='After FFT', linewidth=2)
+                   label='After SAS', linewidth=2)
     axes[0, 1].set_xlabel('Position Rank (by frequency)', fontsize=10)
     axes[0, 1].set_ylabel('Cumulative Frequency', fontsize=10)
     axes[0, 1].set_title('Cumulative Distribution of Selection Frequencies', fontsize=11)
@@ -341,9 +341,9 @@ def plot_distribution_statistics(analysis, output_dir):
         width = bin_edges[1] - bin_edges[0]
         
         axes[1, 0].bar(bin_centers - width/4, before_hist, width/2, 
-                      label='Before FFT', color='blue', alpha=0.7)
+                      label='Before SAS', color='blue', alpha=0.7)
         axes[1, 0].bar(bin_centers + width/4, after_hist, width/2,
-                      label='After FFT', color='red', alpha=0.7)
+                      label='After SAS', color='red', alpha=0.7)
         axes[1, 0].set_xlabel('Token Position Range', fontsize=10)
         axes[1, 0].set_ylabel('Total Selection Frequency', fontsize=10)
         axes[1, 0].set_title('Selection Frequency by Position Range', fontsize=11)
@@ -355,13 +355,13 @@ def plot_distribution_statistics(analysis, output_dir):
     stats_text = f"""
     Distribution Statistics:
     
-    Before FFT:
+    Before SAS:
       - Mean frequency: {before_counts.mean():.2f}
       - Std frequency: {before_counts.std():.2f}
       - Max frequency: {before_counts.max():.0f}
       - Unique positions: {len(before_freq)}
     
-    After FFT:
+    After SAS:
       - Mean frequency: {after_counts.mean():.2f}
       - Std frequency: {after_counts.std():.2f}
       - Max frequency: {after_counts.max():.0f}
@@ -398,18 +398,18 @@ def print_summary(stats, analysis):
         after_counts = np.array(list(after_freq.values()))
         
         print(f"\nSelection Frequency Statistics:")
-        print(f"  Before FFT - Mean: {before_counts.mean():.2f}, Std: {before_counts.std():.2f}")
-        print(f"  After FFT  - Mean: {after_counts.mean():.2f}, Std: {after_counts.std():.2f}")
+        print(f"  Before SAS - Mean: {before_counts.mean():.2f}, Std: {before_counts.std():.2f}")
+        print(f"  After SAS - Mean: {after_counts.mean():.2f}, Std: {after_counts.std():.2f}")
         
         # 找出最常被选中的位置
         top_before = sorted(before_freq.items(), key=lambda x: x[1], reverse=True)[:10]
         top_after = sorted(after_freq.items(), key=lambda x: x[1], reverse=True)[:10]
         
-        print(f"\nTop 10 Most Selected Positions (Before FFT):")
+        print(f"\nTop 10 Most Selected Positions (Before SAS):")
         for pos, count in top_before:
             print(f"  Position {pos}: {count} times")
         
-        print(f"\nTop 10 Most Selected Positions (After FFT):")
+        print(f"\nTop 10 Most Selected Positions (After SAS):")
         for pos, count in top_after:
             print(f"  Position {pos}: {count} times")
     
@@ -418,7 +418,7 @@ def print_summary(stats, analysis):
 def main():
     parser = argparse.ArgumentParser(description='Analyze TopK distribution changes')
     parser.add_argument('--stats-file', type=str, required=True,
-                       help='Path to JSON file containing FFT statistics')
+                       help='Path to JSON file containing SAS statistics')
     parser.add_argument('--output-dir', type=str, required=True,
                        help='Output directory for plots')
     parser.add_argument('--max-samples', type=int, default=10,

@@ -9,7 +9,7 @@ export SAMPLE_LIMIT=4898
 export KV_METHOD="tova"
 # export METHOD="mixsparsemm"
 # export SELECT_METHOD="headwisemixkv"
-export BUDGET=0.6
+export BUDGET=0.4
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -31,5 +31,5 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset
 python code/qwen3_covost2.py \
     --direction en_zh \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/EN_ZH/ToVA/budget0.6 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/EN_ZH/ToVA/budget0.6/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/EN_ZH/ToVA/budget0.4 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/CoVoST2/EN_ZH/ToVA/budget0.4/timing_stats.json

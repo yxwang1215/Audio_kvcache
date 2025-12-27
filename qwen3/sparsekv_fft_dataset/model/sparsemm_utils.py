@@ -2287,6 +2287,192 @@ def init_mixkv(self):
         )
 
 
+class KNormCluster():
+    """
+    KNorm-based KV cache compression.
+    Uses negative L2 norm of key vectors to score tokens - keys with smaller norms are considered more important.
+    Based on: https://arxiv.org/pdf/2406.11430
+    
+    The intuition is that keys with smaller norms tend to receive more attention (due to softmax behavior),
+    so they are more important to retain in the KV cache.
+    """
+    def __init__(self, window_size=64, max_capacity_prompt=256, kernel_size=5, pooling='avgpool',
+                 layer_idx=None, num_hidden_layers=None, pyram_mode=False, pyram_beta=20,
+                 num_key_value_groups=1, gqa_func='mean', config=None):
+        self.window_size = window_size
+        self.max_capacity_prompt = max_capacity_prompt
+        assert self.max_capacity_prompt - self.window_size > 0
+        self.kernel_size = kernel_size
+        self.pooling = pooling
+        
+        self.pyram_init = False
+        self.pyram_mode = pyram_mode
+        self.pyram_beta = pyram_beta
+        self.layer_idx = layer_idx
+        self.num_hidden_layers = num_hidden_layers
+        
+        self.num_key_value_groups = num_key_value_groups
+        self.gqa_func = gqa_func
+        self.config = config
+        
+        # Metadata for variable-length attention
+        self.head_lens = None
+        self.max_seqlen_k = 0
+        self.klen_sum = 0
+        self.cu_klen = None
+        self.cu_qlen = None
+        self.cu_offset = None
+
+    def reset(self, window_size=64, max_capacity_prompt=256, kernel_size=5, pooling='avgpool'):
+        self.window_size = window_size
+        self.max_capacity_prompt = max_capacity_prompt
+        assert self.max_capacity_prompt - self.window_size > 0
+        self.kernel_size = kernel_size
+        self.pooling = pooling
+
+    def update_budget(self, new_budget):
+        """Update max_capacity_prompt budget for dynamic budget adjustment."""
+        self.max_capacity_prompt = new_budget
+        if self.max_capacity_prompt <= self.window_size:
+            self.max_capacity_prompt = self.window_size + 1
+        if self.pyram_mode:
+            self.pyram_init = False
+
+    def update_kv(self, origin_key_states, query_states, origin_value_states):
+        """
+        Compress KV cache using key L2 norm scoring.
+        Keys with smaller L2 norms are considered more important (receive more attention).
+        
+        Args:
+            origin_key_states: [bsz, num_kv_heads, seq_len, head_dim]
+            query_states: [bsz, num_heads, seq_len, head_dim]
+            origin_value_states: [bsz, num_kv_heads, seq_len, head_dim]
+        
+        Returns:
+            Compressed (key_states, value_states)
+        """
+        key_states = repeat_kv(origin_key_states, self.num_key_value_groups)
+        value_states = repeat_kv(origin_value_states, self.num_key_value_groups)
+        
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        
+        # Compute pyramidal capacity if enabled
+        if self.pyram_mode and not self.pyram_init and q_len > self.window_size:
+            base_capacity = self.max_capacity_prompt - self.window_size
+            if base_capacity <= 0:
+                base_capacity = 1
+            
+            min_num = base_capacity // self.pyram_beta
+            max_num = base_capacity * 2 - min_num
+            
+            if max_num >= q_len - self.window_size:
+                max_num = q_len - self.window_size
+                min_num = base_capacity * 2 - max_num
+            
+            if min_num < 1:
+                min_num = 1
+                max_num = base_capacity * 2 - min_num
+                if max_num >= q_len - self.window_size:
+                    max_num = q_len - self.window_size
+                    min_num = base_capacity * 2 - max_num
+            
+            if max_num < min_num:
+                max_num = min_num
+            
+            if self.num_hidden_layers > 1:
+                steps = (max_num - min_num) // (self.num_hidden_layers - 1)
+            else:
+                steps = 0
+            
+            self.max_capacity_prompt = max_num - self.layer_idx * steps + self.window_size
+            if self.max_capacity_prompt <= self.window_size:
+                self.max_capacity_prompt = self.window_size + 1
+            self.pyram_init = True
+            print(f"[KNorm] Pyram mode: layer {self.layer_idx}, max_capacity_prompt: {self.max_capacity_prompt}", flush=True)
+        
+        # Check if compression is needed
+        compressible_len = q_len - self.window_size
+        layer_capacity = self.max_capacity_prompt - self.window_size
+        
+        if compressible_len <= layer_capacity:
+            return origin_key_states, origin_value_states
+        
+        # Compute key L2 norms for tokens before the window
+        # Shape: [bsz, num_kv_heads, q_len - window_size]
+        keys_before_window = origin_key_states[:, :, :-self.window_size, :]
+        
+        # Use negative norm so that smaller norms get higher scores
+        # KNorm paper: tokens with smaller key norms receive more attention
+        knorm_scores = -torch.norm(keys_before_window, p=2, dim=-1)  # [bsz, num_kv_heads, q_len - window_size]
+        
+        # Apply pooling for smoother selection
+        if self.pooling == 'avgpool':
+            knorm_scores = F.avg_pool1d(knorm_scores, kernel_size=self.kernel_size, 
+                                        padding=self.kernel_size//2, stride=1)
+        elif self.pooling == 'maxpool':
+            knorm_scores = F.max_pool1d(knorm_scores, kernel_size=self.kernel_size,
+                                        padding=self.kernel_size//2, stride=1)
+        
+        # Select top-k tokens based on knorm scores
+        capacity = self.max_capacity_prompt - self.window_size
+        indices = knorm_scores.topk(capacity, dim=-1).indices
+        indices = indices.unsqueeze(-1).expand(-1, -1, -1, head_dim)
+        
+        # Gather selected keys and values
+        k_past_compress = origin_key_states[:, :, :-self.window_size, :].gather(dim=2, index=indices)
+        v_past_compress = origin_value_states[:, :, :-self.window_size, :].gather(dim=2, index=indices)
+        
+        # Concatenate with recent window
+        k_cur = origin_key_states[:, :, -self.window_size:, :]
+        v_cur = origin_value_states[:, :, -self.window_size:, :]
+        
+        key_states_compressed = torch.cat([k_past_compress, k_cur], dim=2)
+        value_states_compressed = torch.cat([v_past_compress, v_cur], dim=2)
+        
+        return key_states_compressed, value_states_compressed
+
+
+def init_knorm(self):
+    """Initialize KNorm cluster for key L2 norm-based KV cache compression."""
+    if not hasattr(self, "kv_cluster"):
+        if not hasattr(self.config, 'window_size'):
+            self.config.window_size = int(os.getenv('WINDOW_SIZE', 32))
+        if not hasattr(self.config, 'max_capacity_prompt'):
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096
+        if not hasattr(self.config, 'kernel_size'):
+            self.config.kernel_size = int(os.getenv('KERNEL_SIZE', 5))
+        if not hasattr(self.config, 'pooling'):
+            self.config.pooling = os.getenv('POOLING', 'avgpool')
+        if not hasattr(self.config, 'num_hidden_layers'):
+            raise ValueError('num_hidden_layers should be set')
+        if not hasattr(self.config, 'gqa_func'):
+            if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                self.config.gqa_func = 'mean'
+
+    if not hasattr(self, "kv_cluster"):
+        self.kv_cluster = KNormCluster(
+            window_size=self.config.window_size,
+            max_capacity_prompt=self.config.max_capacity_prompt,
+            kernel_size=self.config.kernel_size,
+            pooling=self.config.pooling,
+            layer_idx=self.layer_idx,
+            num_hidden_layers=self.config.num_hidden_layers,
+            pyram_mode=False,
+            num_key_value_groups=self.config.num_attention_heads // self.config.num_key_value_heads,
+            gqa_func=self.config.gqa_func,
+            config=self.config
+        )
+
+
 def init_tova(self):
     """Initialize TOVA cluster for Token Omission via Attention KV cache compression."""
     if not hasattr(self, "kv_cluster"):
@@ -2379,5 +2565,414 @@ def init_mixsparsemm(self):
             gqa_func = self.config.gqa_func,
             model_type=self.config.model_type,
             select_method=self.config.select_method,
+            config=self.config
+        )
+
+
+class HeadKVCluster():
+    """
+    HeadKV: Head-Level KV Cache Compression Method.
+    Allocates different KV cache budgets to different attention heads based on their importance.
+    Based on: https://arxiv.org/abs/2410.19258 (ICLR 2025)
+    """
+    def __init__(self, window_size=32, base_capacity=256, kernel_size=7, pooling='maxpool',
+                 beta=1.5, head_score_list=None, layer_idx=None, num_hidden_layers=None,
+                 num_attention_heads=None, num_key_value_groups=1, gqa_func='mean', config=None):
+        self.window_size = window_size
+        self.kernel_size = kernel_size
+        self.pooling = pooling
+        self.base_capacity = base_capacity - window_size
+        self.beta = beta
+        self.layer_idx = layer_idx
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_groups = num_key_value_groups
+        self.gqa_func = gqa_func
+        self.config = config
+        
+        if head_score_list is not None:
+            self.head_score_list = head_score_list
+            total_pool_capacity = (self.base_capacity // self.beta) * self.num_hidden_layers * self.num_attention_heads
+            min_num = self.base_capacity - self.base_capacity // self.beta
+            self.head_capacity = torch.round(self.head_score_list * total_pool_capacity + min_num).int()
+        else:
+            self.head_capacity = None
+        
+        self.head_lens = None
+        self.max_seqlen_k = 0
+        self.klen_sum = 0
+        self.cu_klen = None
+        self.cu_qlen = None
+        self.cu_offset = None
+
+    def update_budget(self, new_budget):
+        self.base_capacity = new_budget - self.window_size
+        if self.base_capacity <= 0:
+            self.base_capacity = 1
+        if hasattr(self, 'head_score_list') and self.head_score_list is not None:
+            total_pool_capacity = (self.base_capacity // self.beta) * self.num_hidden_layers * self.num_attention_heads
+            min_num = max(1, self.base_capacity - self.base_capacity // self.beta)
+            self.head_capacity = torch.round(self.head_score_list * total_pool_capacity + min_num).int()
+
+    def calcul_attn_score(self, key_states, query_states):
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        attn_weights = torch.matmul(query_states[..., -self.window_size:, :], key_states.transpose(2, 3)) / math.sqrt(head_dim)
+        
+        mask = torch.full((self.window_size, self.window_size), torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
+        mask_cond = torch.arange(mask.size(-1), device=attn_weights.device)
+        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+        attention_mask = mask[None, None, :, :]
+        
+        attn_weights[:, :, -self.window_size:, -self.window_size:] += attention_mask
+        attn_weights = torch.nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights_mean = attn_weights[:, :, -self.window_size:, :-self.window_size].mean(dim=-2)
+        
+        if self.pooling == 'avgpool':
+            attn_weights_mean_pooling = torch.nn.functional.avg_pool1d(
+                attn_weights_mean, kernel_size=self.kernel_size, padding=self.kernel_size // 2, stride=1
+            )
+        elif self.pooling == 'maxpool':
+            attn_weights_mean_pooling = torch.nn.functional.max_pool1d(
+                attn_weights_mean, kernel_size=self.kernel_size, padding=self.kernel_size // 2, stride=1
+            )
+        else:
+            raise ValueError(f'Pooling method {self.pooling} not supported')
+        return attn_weights_mean_pooling
+
+    def update_kv(self, key_states, query_states, value_states):
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+        
+        _device = key_states.device
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        
+        attn_score = self.calcul_attn_score(key_states, query_states)
+        
+        if self.base_capacity > attn_score.size(-1):
+            return key_states[:, ::self.num_key_value_groups, :, :], value_states[:, ::self.num_key_value_groups, :, :]
+        
+        if self.head_capacity is not None:
+            head_capacities = self.head_capacity[self.layer_idx].to(_device)
+        else:
+            head_capacities = torch.full((num_heads,), self.base_capacity, dtype=torch.int32, device=_device)
+        
+        _, indices = attn_score.sort(dim=-1, descending=True)
+        indices = indices.split(1, dim=1)
+        
+        origin_heads_key_states = torch.split(key_states, 1, dim=1)
+        origin_heads_value_states = torch.split(value_states, 1, dim=1)
+        
+        heads_key_states = []
+        heads_value_states = []
+        
+        assert bsz == 1
+        
+        for head_idx in range(num_heads):
+            head_capacity = int(head_capacities[head_idx].item())
+            head_capacity = min(head_capacity, q_len - self.window_size)
+            head_capacity = max(head_capacity, 1)
+            
+            cache_index = indices[head_idx][..., :head_capacity]
+            cache_index = cache_index.view(1, 1, -1, 1).expand(-1, -1, -1, head_dim)
+            
+            top_k_cache = origin_heads_key_states[head_idx].gather(dim=2, index=cache_index)
+            top_v_cache = origin_heads_value_states[head_idx].gather(dim=2, index=cache_index)
+            
+            selected_k = torch.cat([top_k_cache, origin_heads_key_states[head_idx][:, :, -self.window_size:, :]], dim=2)
+            selected_v = torch.cat([top_v_cache, origin_heads_value_states[head_idx][:, :, -self.window_size:, :]], dim=2)
+            
+            heads_key_states.append(selected_k)
+            heads_value_states.append(selected_v)
+        
+        key_states_out = torch.cat([heads_key_states[i] for i in range(0, num_heads, self.num_key_value_groups)], dim=1)
+        value_states_out = torch.cat([heads_value_states[i] for i in range(0, num_heads, self.num_key_value_groups)], dim=1)
+        
+        return key_states_out, value_states_out
+
+
+def init_headkv(self):
+    """Initialize HeadKV cluster for head-level adaptive KV cache compression."""
+    if not hasattr(self, "kv_cluster"):
+        if not hasattr(self.config, 'window_size'):
+            self.config.window_size = int(os.getenv('WINDOW_SIZE', 32))
+        if not hasattr(self.config, 'max_capacity_prompt'):
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096
+        if not hasattr(self.config, 'kernel_size'):
+            self.config.kernel_size = int(os.getenv('KERNEL_SIZE', 7))
+        if not hasattr(self.config, 'pooling'):
+            self.config.pooling = os.getenv('POOLING', 'maxpool')
+        if not hasattr(self.config, 'num_hidden_layers'):
+            raise ValueError('num_hidden_layers should be set')
+        if not hasattr(self.config, 'beta'):
+            self.config.beta = float(os.getenv('HEADKV_BETA', '1.5'))
+        if not hasattr(self.config, 'gqa_func'):
+            if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                self.config.gqa_func = 'mean'
+        
+        head_score_list = None
+        if hasattr(self.config, 'head_score_list'):
+            head_score_list = self.config.head_score_list
+        elif hasattr(self.config, 'head_score_path') and self.config.head_score_path:
+            try:
+                import json
+                import numpy as np
+                with open(self.config.head_score_path, 'r') as f:
+                    head_list = json.loads(f.readline())
+                scores = [np.mean(l[1]) for l in head_list.items()]
+                scores = torch.tensor(scores / sum(scores))
+                temp = getattr(self.config, 'headkv_temp', 1.0)
+                scores = torch.pow(scores, temp)
+                scores = scores / torch.sum(scores)
+                head_score_list = scores.reshape(self.config.num_hidden_layers, self.config.num_attention_heads)
+            except Exception as e:
+                print(f"[HeadKV] Warning: Failed to load head scores: {e}")
+                head_score_list = None
+
+    if not hasattr(self, "kv_cluster"):
+        self.kv_cluster = HeadKVCluster(
+            window_size=self.config.window_size,
+            base_capacity=self.config.max_capacity_prompt,
+            kernel_size=self.config.kernel_size,
+            pooling=self.config.pooling,
+            beta=self.config.beta,
+            head_score_list=head_score_list,
+            layer_idx=self.layer_idx,
+            num_hidden_layers=self.config.num_hidden_layers,
+            num_attention_heads=self.config.num_attention_heads,
+            num_key_value_groups=self.config.num_attention_heads // self.config.num_key_value_heads,
+            gqa_func=self.config.gqa_func,
+            config=self.config
+        )
+
+
+class H2OCluster():
+    """
+    H2O (Heavy-Hitter Oracle) KV cache compression.
+    Based on: https://arxiv.org/abs/2306.14048
+    
+    H2O uses accumulated attention scores to identify "heavy hitter" tokens that receive
+    the most attention across all previous queries. It maintains:
+    1. Heavy hitters: tokens with highest accumulated attention scores
+    2. Recent tokens: a sliding window of most recent tokens
+    """
+    def __init__(self, window_size=64, max_capacity_prompt=256, kernel_size=5, pooling='avgpool',
+                 layer_idx=None, num_hidden_layers=None, pyram_mode=False, pyram_beta=20,
+                 num_key_value_groups=1, gqa_func='mean', heavy_ratio=0.5, config=None):
+        self.window_size = window_size
+        self.max_capacity_prompt = max_capacity_prompt
+        if self.max_capacity_prompt <= self.window_size:
+            self.max_capacity_prompt = self.window_size + 1
+        self.kernel_size = kernel_size
+        self.pooling = pooling
+        
+        self.pyram_init = False
+        self.pyram_mode = pyram_mode
+        self.pyram_beta = pyram_beta
+        self.layer_idx = layer_idx
+        self.num_hidden_layers = num_hidden_layers
+        
+        self.num_key_value_groups = num_key_value_groups
+        self.gqa_func = gqa_func
+        self.config = config
+        
+        # H2O specific parameters
+        self.heavy_ratio = heavy_ratio
+        self.recent_ratio = 1.0 - heavy_ratio
+        
+        # Accumulated attention scores for heavy hitter detection
+        self.previous_scores = None
+        self.heavy_budget = None
+        self.recent_budget = None
+        
+        # Metadata for variable-length attention
+        self.head_lens = None
+        self.max_seqlen_k = 0
+        self.klen_sum = 0
+        self.cu_klen = None
+        self.cu_qlen = None
+        self.cu_offset = None
+
+    def reset(self, window_size=64, max_capacity_prompt=256, kernel_size=5, pooling='avgpool'):
+        """Reset cluster parameters and clear accumulated scores."""
+        self.window_size = window_size
+        self.max_capacity_prompt = max_capacity_prompt
+        if self.max_capacity_prompt <= self.window_size:
+            self.max_capacity_prompt = self.window_size + 1
+        self.kernel_size = kernel_size
+        self.pooling = pooling
+        self.previous_scores = None
+        self.heavy_budget = None
+        self.recent_budget = None
+
+    def update_budget(self, new_budget):
+        """Update max_capacity_prompt budget for dynamic budget adjustment."""
+        self.max_capacity_prompt = new_budget
+        if self.max_capacity_prompt <= self.window_size:
+            self.max_capacity_prompt = self.window_size + 1
+        if self.pyram_mode:
+            self.pyram_init = False
+        self._update_cache_budgets()
+
+    def _update_cache_budgets(self):
+        """Update heavy and recent cache budgets based on current max_capacity_prompt."""
+        cache_budget = self.max_capacity_prompt - self.window_size
+        if cache_budget <= 0:
+            cache_budget = 1
+        self.heavy_budget = int(self.heavy_ratio * cache_budget)
+        self.recent_budget = cache_budget - self.heavy_budget
+        if self.heavy_budget <= 0:
+            self.heavy_budget = 1
+        if self.recent_budget <= 0:
+            self.recent_budget = 1
+
+    def update_kv(self, origin_key_states, query_states, origin_value_states):
+        """
+        Compress KV cache using H2O (Heavy-Hitter Oracle) method.
+        """
+        key_states = repeat_kv(origin_key_states, self.num_key_value_groups)
+        value_states = repeat_kv(origin_value_states, self.num_key_value_groups)
+        
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        
+        # Compute pyramidal capacity if enabled
+        if self.pyram_mode and not self.pyram_init and q_len > self.window_size:
+            base_capacity = self.max_capacity_prompt - self.window_size
+            if base_capacity <= 0:
+                base_capacity = 1
+            
+            min_num = base_capacity // self.pyram_beta
+            max_num = base_capacity * 2 - min_num
+            
+            if max_num >= q_len - self.window_size:
+                max_num = q_len - self.window_size
+                min_num = base_capacity * 2 - max_num
+            
+            if min_num < 1:
+                min_num = 1
+            if max_num < min_num:
+                max_num = min_num
+            
+            if self.num_hidden_layers > 1:
+                steps = (max_num - min_num) // (self.num_hidden_layers - 1)
+            else:
+                steps = 0
+            
+            self.max_capacity_prompt = max_num - self.layer_idx * steps + self.window_size
+            if self.max_capacity_prompt <= self.window_size:
+                self.max_capacity_prompt = self.window_size + 1
+            self.pyram_init = True
+            print(f"[H2O] Pyram mode: layer {self.layer_idx}, max_capacity_prompt: {self.max_capacity_prompt}", flush=True)
+        
+        if self.heavy_budget is None or self.recent_budget is None:
+            self._update_cache_budgets()
+        
+        if q_len < self.max_capacity_prompt:
+            return origin_key_states, origin_value_states
+        
+        # Compute attention scores for heavy hitter detection
+        window_queries = query_states[:, :, -self.window_size:, :]
+        
+        attn_weights = torch.matmul(window_queries, key_states.transpose(2, 3)) / math.sqrt(head_dim)
+        
+        mask = torch.full((self.window_size, self.window_size), torch.finfo(attn_weights.dtype).min, 
+                         device=attn_weights.device)
+        mask_cond = torch.arange(mask.size(-1), device=attn_weights.device)
+        mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
+        attention_mask = mask[None, None, :, :]
+        
+        attn_weights[:, :, -self.window_size:, -self.window_size:] += attention_mask
+        
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        
+        attn_scores = attn_weights.mean(dim=2)
+        
+        # Handle GQA
+        attn_scores = attn_scores.view(bsz, -1, self.num_key_value_groups, q_len)
+        if self.gqa_func == 'max':
+            attn_scores = attn_scores.max(dim=-2).values
+        elif self.gqa_func == 'mean':
+            attn_scores = attn_scores.mean(dim=-2)
+        else:
+            attn_scores = attn_scores.mean(dim=-2)
+        
+        # Apply pooling
+        if self.pooling == 'avgpool':
+            attn_scores = F.avg_pool1d(attn_scores, kernel_size=self.kernel_size, 
+                                       padding=self.kernel_size//2, stride=1)
+        elif self.pooling == 'maxpool':
+            attn_scores = F.max_pool1d(attn_scores, kernel_size=self.kernel_size,
+                                       padding=self.kernel_size//2, stride=1)
+        
+        scores_for_selection = attn_scores[:, :, :-self.recent_budget]
+        
+        heavy_budget = min(self.heavy_budget, scores_for_selection.shape[-1])
+        if heavy_budget <= 0:
+            heavy_budget = 1
+        
+        heavy_indices = scores_for_selection.topk(heavy_budget, dim=-1).indices
+        heavy_indices = heavy_indices.unsqueeze(-1).expand(-1, -1, -1, head_dim)
+        
+        k_heavy = origin_key_states[:, :, :-self.recent_budget, :].gather(dim=2, index=heavy_indices)
+        v_heavy = origin_value_states[:, :, :-self.recent_budget, :].gather(dim=2, index=heavy_indices)
+        
+        k_recent = origin_key_states[:, :, -self.recent_budget:, :]
+        v_recent = origin_value_states[:, :, -self.recent_budget:, :]
+        
+        key_states_compressed = torch.cat([k_heavy, k_recent], dim=2)
+        value_states_compressed = torch.cat([v_heavy, v_recent], dim=2)
+        
+        return key_states_compressed, value_states_compressed
+
+
+def init_h2o(self):
+    """Initialize H2O cluster for Heavy-Hitter Oracle KV cache compression."""
+    if not hasattr(self, "kv_cluster"):
+        if not hasattr(self.config, 'window_size'):
+            self.config.window_size = int(os.getenv('WINDOW_SIZE', 32))
+        if not hasattr(self.config, 'max_capacity_prompt'):
+            budget_str = os.getenv('BUDGET', '4096')
+            try:
+                budget_val = float(budget_str)
+                if budget_val < 1.0:
+                    self.config.max_capacity_prompt = 4096
+                else:
+                    self.config.max_capacity_prompt = int(budget_val)
+            except ValueError:
+                self.config.max_capacity_prompt = 4096
+        if not hasattr(self.config, 'kernel_size'):
+            self.config.kernel_size = int(os.getenv('KERNEL_SIZE', 5))
+        if not hasattr(self.config, 'pooling'):
+            self.config.pooling = os.getenv('POOLING', 'avgpool')
+        if not hasattr(self.config, 'num_hidden_layers'):
+            raise ValueError('num_hidden_layers should be set')
+        if not hasattr(self.config, 'gqa_func'):
+            if 'llama' in self.config.model_type or 'mistral' in self.config.model_type or \
+                'llava' in self.config.model_type or 'qwen' in self.config.model_type:
+                self.config.gqa_func = 'mean'
+        
+        if not hasattr(self.config, 'heavy_ratio'):
+            self.config.heavy_ratio = float(os.getenv('H2O_HEAVY_RATIO', '0.5'))
+
+    if not hasattr(self, "kv_cluster"):
+        self.kv_cluster = H2OCluster(
+            window_size=self.config.window_size,
+            max_capacity_prompt=self.config.max_capacity_prompt,
+            kernel_size=self.config.kernel_size,
+            pooling=self.config.pooling,
+            layer_idx=self.layer_idx,
+            num_hidden_layers=self.config.num_hidden_layers,
+            pyram_mode=False,
+            num_key_value_groups=self.config.num_attention_heads // self.config.num_key_value_heads,
+            gqa_func=self.config.gqa_func,
+            heavy_ratio=self.config.heavy_ratio,
             config=self.config
         )

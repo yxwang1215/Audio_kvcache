@@ -52,6 +52,9 @@ try:
         init_tova,
         init_mixkv,
         init_mixsparsemm,
+        init_knorm,
+        init_headkv,
+        init_h2o,
         DynamicCacheSplitHeadFlatten
     )
     from flash_attn import flash_attn_varlen_func as sparsemm_flash_attn_varlen_func
@@ -2517,6 +2520,412 @@ class Qwen3OmniMoeThinkerTextAttentionTOVA(Qwen3OmniMoeThinkerTextAttention):
                         **kwargs,
                     )
                     attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Qwen3OmniMoeThinkerTextAttentionKNorm(Qwen3OmniMoeThinkerTextAttention):
+    """
+    Qwen3OmniMoeThinkerTextAttention with KNorm integration.
+    KNorm (Key Norm) uses the L2 norm of key vectors to select important KV pairs.
+    Tokens with smaller key norms are considered more important and retained.
+    Based on: https://arxiv.org/pdf/2406.11430
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.num_heads = self.config.num_attention_heads
+        self.num_key_value_heads = self.config.num_key_value_heads
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        is_prefill = q_len != 1
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position} if past_key_values is not None else None
+
+        # Initialize KNorm cluster
+        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+            init_knorm(self)
+
+        if is_prefill:
+            # Prefill phase: compress and store, use original for attention
+            if past_key_values is not None:
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            # Use original KV for attention computation
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states_attn,
+                value_states_attn,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                sliding_window=self.sliding_window,
+                **kwargs,
+            )
+            attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        else:
+            # Decode phase: use flattened cache with varlen attention
+            device = key_states.device
+            num_kv_heads = self.num_key_value_heads
+            
+            # For DynamicCache, we don't need to initialize head_lens (use standard attention)
+            # Only initialize for DynamicCacheSplitHeadFlatten (use varlen attention)
+            if not isinstance(past_key_values, DynamicCache):
+                # Initialize head metadata if needed - get actual length from cache
+                if not hasattr(self.kv_cluster, 'head_lens') or self.kv_cluster.head_lens is None:
+                    # Get actual KV length from cache (prefill already stored compressed KV)
+                    # Handle DynamicCacheSplitHeadFlatten (2D: [total_len, dim])
+                    total_cache_len = None
+                    if hasattr(past_key_values, 'key_cache') and len(past_key_values.key_cache) > self.layer_idx:
+                        # DynamicCacheSplitHeadFlatten stores as 2D tensor: [total_len, dim]
+                        cache_key = past_key_values.key_cache[self.layer_idx]
+                        total_cache_len = cache_key.shape[0]
+                    else:
+                        # Fallback: try to access via __getitem__ or get_seq_length
+                        try:
+                            cache_key_tuple = past_key_values[self.layer_idx]
+                            cache_key = cache_key_tuple[0]  # Get key from (key, value) tuple
+                            if cache_key.dim() == 4:
+                                # 4D tensor: [batch_size, num_heads, seq_len, head_dim]
+                                bsz, num_heads_in_cache, seq_len, head_dim = cache_key.shape
+                                cache_key = cache_key.reshape(bsz * num_heads_in_cache * seq_len, head_dim)
+                                total_cache_len = cache_key.shape[0]
+                            else:
+                                # 2D tensor: [total_len, dim]
+                                total_cache_len = cache_key.shape[0]
+                        except (IndexError, KeyError, TypeError):
+                            # Ultimate fallback: use get_seq_length
+                            total_cache_len = past_key_values.get_seq_length(self.layer_idx) * num_kv_heads
+                    head_len = total_cache_len // num_kv_heads  # Each head has same length for KNorm
+                    
+                    self.kv_cluster.head_lens = torch.full((num_kv_heads,), head_len, dtype=torch.int32, device=device)
+                    self.kv_cluster.klen_sum = total_cache_len
+                    self.kv_cluster.max_seqlen_k = head_len
+                    self.kv_cluster.cu_klen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device) * head_len
+                    self.kv_cluster.cu_qlen = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+                    self.kv_cluster.cu_offset = torch.arange(0, num_kv_heads + 1, dtype=torch.int32, device=device)
+
+            # KNorm uses DynamicCache which stores 4D tensors [bsz, num_heads, seq_len, head_dim]
+            # Use standard attention instead of varlen attention for DynamicCache
+            if isinstance(past_key_values, DynamicCache):
+                # For DynamicCache, use standard attention (not varlen)
+                # First update cache with new token
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                # key_states and value_states are 4D: [bsz, num_kv_heads, seq_len, head_dim]
+                
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                
+                attention_interface: Callable = eager_attention_forward
+                if self.config._attn_implementation != "eager":
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attn_output, attn_weights = attention_interface(
+                    self,
+                    query_states,
+                    key_states_attn,
+                    value_states_attn,
+                    attention_mask,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    scaling=self.scaling,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
+                attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            else:
+                # For DynamicCacheSplitHeadFlatten, use varlen attention
+                cache_kwargs["head_lens"] = self.kv_cluster.head_lens
+                cache_kwargs["cu_klen"] = self.kv_cluster.cu_klen
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+                self.kv_cluster.klen_sum += num_kv_heads
+                self.kv_cluster.max_seqlen_k += 1
+                self.kv_cluster.cu_klen.add_(self.kv_cluster.cu_offset)
+                self.kv_cluster.head_lens.add_(1)
+
+                query_states = query_states.view(-1, self.num_key_value_groups, self.head_dim)
+                key_states = key_states.view(-1, 1, self.head_dim)
+                value_states = value_states.view(-1, 1, self.head_dim)
+
+                if SPARSEM_AVAILABLE and sparsemm_flash_attn_varlen_func is not None:
+                    attn_output = sparsemm_flash_attn_varlen_func(
+                        query_states, key_states, value_states,
+                        self.kv_cluster.cu_qlen, self.kv_cluster.cu_klen,
+                        1, self.kv_cluster.max_seqlen_k, causal=True
+                    )
+                    attn_output = attn_output.reshape(bsz, self.num_heads, q_len, self.head_dim)
+                    attn_output = attn_output.transpose(1, 2).reshape(bsz, q_len, -1).contiguous()
+                    attn_weights = None
+                else:
+                    # Fallback to standard attention if SparseMM not available
+                    key_states = repeat_kv(key_states, self.num_key_value_groups)
+                    value_states = repeat_kv(value_states, self.num_key_value_groups)
+                    attention_interface: Callable = eager_attention_forward
+                    if self.config._attn_implementation != "eager":
+                        attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                    attn_output, attn_weights = attention_interface(
+                        self,
+                        query_states,
+                        key_states,
+                        value_states,
+                        attention_mask,
+                        dropout=0.0 if not self.training else self.attention_dropout,
+                        scaling=self.scaling,
+                        sliding_window=self.sliding_window,
+                        **kwargs,
+                    )
+                    attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Qwen3OmniMoeThinkerTextAttentionHeadKV(Qwen3OmniMoeThinkerTextAttention):
+    """
+    Qwen3OmniMoeThinkerTextAttention with HeadKV integration.
+    HeadKV allocates different KV cache budgets to different attention heads based on their importance.
+    Based on: https://arxiv.org/abs/2410.19258 (ICLR 2025)
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.num_heads = self.config.num_attention_heads
+        self.num_key_value_heads = self.config.num_key_value_heads
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        is_prefill = q_len != 1
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position} if past_key_values is not None else None
+
+        # Initialize HeadKV cluster
+        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+            init_headkv(self)
+
+        if is_prefill:
+            if past_key_values is not None:
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states_attn,
+                value_states_attn,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                sliding_window=self.sliding_window,
+                **kwargs,
+            )
+            attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        else:
+            # Decode phase
+            if isinstance(past_key_values, DynamicCache):
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                
+                attention_interface: Callable = eager_attention_forward
+                if self.config._attn_implementation != "eager":
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attn_output, attn_weights = attention_interface(
+                    self,
+                    query_states,
+                    key_states_attn,
+                    value_states_attn,
+                    attention_mask,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    scaling=self.scaling,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
+                attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            else:
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                
+                attention_interface: Callable = eager_attention_forward
+                if self.config._attn_implementation != "eager":
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attn_output, attn_weights = attention_interface(
+                    self,
+                    query_states,
+                    key_states_attn,
+                    value_states_attn,
+                    attention_mask,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    scaling=self.scaling,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
+                attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class Qwen3OmniMoeThinkerTextAttentionH2O(Qwen3OmniMoeThinkerTextAttention):
+    """
+    Qwen3OmniMoeThinkerTextAttention with H2O (Heavy-Hitter Oracle) integration.
+    H2O uses accumulated attention scores to identify "heavy hitter" tokens and keeps
+    them along with a sliding window of recent tokens.
+    Based on: https://arxiv.org/abs/2306.14048
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.num_heads = self.config.num_attention_heads
+        self.num_key_value_heads = self.config.num_key_value_heads
+
+    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        bsz, num_heads, q_len, head_dim = query_states.shape
+        is_prefill = q_len != 1
+        cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position} if past_key_values is not None else None
+
+        # Initialize H2O cluster
+        if not hasattr(self, "kv_cluster") or self.kv_cluster is None:
+            init_h2o(self)
+
+        if is_prefill:
+            if past_key_values is not None:
+                key_states_compress, value_states_compress = self.kv_cluster.update_kv(key_states, query_states, value_states)
+                past_key_values.update(key_states_compress, value_states_compress, self.layer_idx, cache_kwargs)
+            
+            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states_attn,
+                value_states_attn,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                sliding_window=self.sliding_window,
+                **kwargs,
+            )
+            attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        else:
+            # Decode phase
+            if isinstance(past_key_values, DynamicCache):
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                
+                attention_interface: Callable = eager_attention_forward
+                if self.config._attn_implementation != "eager":
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attn_output, attn_weights = attention_interface(
+                    self,
+                    query_states,
+                    key_states_attn,
+                    value_states_attn,
+                    attention_mask,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    scaling=self.scaling,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
+                attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+            else:
+                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
+                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                
+                attention_interface: Callable = eager_attention_forward
+                if self.config._attn_implementation != "eager":
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attn_output, attn_weights = attention_interface(
+                    self,
+                    query_states,
+                    key_states_attn,
+                    value_states_attn,
+                    attention_mask,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    scaling=self.scaling,
+                    sliding_window=self.sliding_window,
+                    **kwargs,
+                )
+                attn_output = attn_output.reshape(*input_shape, -1).contiguous()
 
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
@@ -5344,6 +5753,142 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
             patched_count += 1
         
         print(f"[MixKV] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_knorm_attention(
+        self,
+        sparsemm_config: dict
+    ):
+        """
+        Replace attention modules with KNorm version for Key norm-based KVCache compression.
+        KNorm uses the L2 norm of key vectors to select important KV pairs.
+        """
+        if not SPARSEM_AVAILABLE:
+            raise RuntimeError("SparseMM is not available.")
+        
+        base_model = self.thinker.model
+        model_config = base_model.config
+        
+        model_config.window_size = sparsemm_config.get('window_size', 32)
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Qwen3OmniMoeThinkerTextAttentionKNorm(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            if hasattr(old_attn, 'q_norm'):
+                new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            if hasattr(old_attn, 'k_norm'):
+                new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            
+            init_knorm(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[KNorm] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_headkv_attention(
+        self,
+        sparsemm_config: dict
+    ):
+        """
+        Replace attention modules with HeadKV version for Head-level KVCache compression.
+        HeadKV allocates different KV cache budgets to different attention heads.
+        """
+        if not SPARSEM_AVAILABLE:
+            raise RuntimeError("SparseMM is not available.")
+        
+        base_model = self.thinker.model
+        model_config = base_model.config
+        
+        model_config.window_size = sparsemm_config.get('window_size', 32)
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        model_config.kernel_size = sparsemm_config.get('kernel_size', 7)
+        model_config.pooling = sparsemm_config.get('pooling', 'maxpool')
+        model_config.beta = sparsemm_config.get('beta', 1.5)
+        
+        if 'head_score_list' in sparsemm_config:
+            model_config.head_score_list = sparsemm_config['head_score_list']
+        if 'head_score_path' in sparsemm_config:
+            model_config.head_score_path = sparsemm_config['head_score_path']
+        if 'headkv_temp' in sparsemm_config:
+            model_config.headkv_temp = sparsemm_config['headkv_temp']
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Qwen3OmniMoeThinkerTextAttentionHeadKV(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            if hasattr(old_attn, 'q_norm'):
+                new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            if hasattr(old_attn, 'k_norm'):
+                new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            
+            init_headkv(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[HeadKV] Total layers patched: {patched_count}/{len(base_model.layers)}")
+        return True
+
+    def enable_h2o_attention(
+        self,
+        sparsemm_config: dict
+    ):
+        """
+        Replace attention modules with H2O version for Heavy-Hitter Oracle KVCache compression.
+        H2O uses accumulated attention scores to identify "heavy hitter" tokens.
+        """
+        if not SPARSEM_AVAILABLE:
+            raise RuntimeError("SparseMM is not available.")
+        
+        base_model = self.thinker.model
+        model_config = base_model.config
+        
+        model_config.window_size = sparsemm_config.get('window_size', 32)
+        model_config.max_capacity_prompt = sparsemm_config.get('budget', 4096)
+        model_config.kernel_size = sparsemm_config.get('kernel_size', 5)
+        model_config.pooling = sparsemm_config.get('pooling', 'avgpool')
+        model_config.heavy_ratio = sparsemm_config.get('heavy_ratio', 0.5)
+        
+        patched_count = 0
+        for layer_idx, layer in enumerate(base_model.layers):
+            old_attn = layer.self_attn
+            old_device = next(old_attn.parameters()).device
+            old_dtype = next(old_attn.parameters()).dtype
+            new_attn = Qwen3OmniMoeThinkerTextAttentionH2O(config=model_config, layer_idx=layer_idx)
+            new_attn = new_attn.to(device=old_device, dtype=old_dtype)
+            
+            new_attn.q_proj.load_state_dict(old_attn.q_proj.state_dict())
+            new_attn.k_proj.load_state_dict(old_attn.k_proj.state_dict())
+            new_attn.v_proj.load_state_dict(old_attn.v_proj.state_dict())
+            new_attn.o_proj.load_state_dict(old_attn.o_proj.state_dict())
+            if hasattr(old_attn, 'q_norm'):
+                new_attn.q_norm.load_state_dict(old_attn.q_norm.state_dict())
+            if hasattr(old_attn, 'k_norm'):
+                new_attn.k_norm.load_state_dict(old_attn.k_norm.state_dict())
+            
+            init_h2o(new_attn)
+            layer.self_attn = new_attn
+            patched_count += 1
+        
+        print(f"[H2O] Total layers patched: {patched_count}/{len(base_model.layers)}")
         return True
 
     def _get_talker_user_parts(

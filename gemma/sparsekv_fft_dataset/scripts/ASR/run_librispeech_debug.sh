@@ -1,15 +1,12 @@
 #!/bin/bash
 # LibriSpeech-long ASR Evaluation with Gemma-3n-E2B-it
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=4
 export MODEL_PATH="/mnt/public/models/gemma-3n-E2B-it"
 export SAMPLE_LIMIT=0
 
 # export KV_METHOD="pyramidkv"
-export KV_METHOD="mixkv"
-export SELECT_METHOD="headwisemixkv"
-export METHOD="mixsparsemm"
-export USE_SPARSEKV="true"
+export KV_METHOD="snapkv"
 export BUDGET=0.8
 export RATIO=0.5
 export WINDOW_SIZE=32

@@ -1,27 +1,23 @@
 #!/bin/bash
 # KeSpeech ASR Evaluation with Qwen2.5-Omni
 
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=6
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
 export SAMPLE_LIMIT=0
 
-export KV_METHOD="tova"
-export TOVA_DECODE_COMPRESSION="true"
-export TOVA_DECODE_COMPRESSION_INTERVAL="256"  # 每256个token压缩一次
+# export KV_METHOD="headkv"
 # export KV_METHOD="sparsekv"
-# export KV_METHOD="mixkv"
-# export METHOD="mixsparsemm"
-# export SELECT_METHOD="headwisemixkv"
-export BUDGET=0.2
+export KV_METHOD="knorm"
+export BUDGET=0.6
 export RATIO=0.5
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
 export POOLING="maxpool"
-# export HEAD_SCORE_FILE="uniform"
-export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_3B_old/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
+export HEAD_SCORE_FILE="uniform"
+# export HEAD_SCORE_PATH="/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_7B_old/audio_head_scores_topk24_alpha1_beta1_gamma1.json"
 export HEAD_SCORE_AGGREGATION="first"
 
-export USE_FFT_FILTER="false"
+export USE_FFT_FILTER="true"
 export FFT_FILTER_TYPE="lowpass"
 export FFT_CUTOFF_RATIO="0.7"
 export FFT_ALPHA="0.5"
@@ -33,5 +29,5 @@ conda activate Qwen3_2 && \
 cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_dataset && \
 python code/qwen2.5_kespeech.py \
     --model-path "${MODEL_PATH}" \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/KeSpeech_Results/ToVA/budget0.8 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/KeSpeech_Results/ToVA/budget0.8/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/KeSpeech_Results/Knorm/budget0.6 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/KeSpeech_Results/Knorm/budget0.6/timing_stats.json
