@@ -1,12 +1,12 @@
 #!/bin/bash
 # Multilingual LibriSpeech ASR Evaluation with Qwen2.5-Omni - Spanish
 
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=3
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
 export SAMPLE_LIMIT=0
 
-export KV_METHOD="sparsekv"
-export BUDGET=0.4
+export KV_METHOD="h2o"
+export BUDGET=0.8
 export RATIO=0.5    
 export WINDOW_SIZE=32
 export KERNEL_SIZE=5
@@ -28,5 +28,5 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen2_5/sparsekv_fft_datas
 python code/qwen2.5_multilingual_librispeech.py \
     --model-path "${MODEL_PATH}" \
     --languages spanish \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/MultilingualLibriSpeech/Spanish/SnapKV_FFT/budget0.4 \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/MultilingualLibriSpeech/Spanish/SnapKV_FFT/budget0.4/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/MultilingualLibriSpeech/Spanish/SnapKV_FFT/budget0.8 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/datasets/MultilingualLibriSpeech/Spanish/SnapKV_FFT/budget0.8/timing_stats.json

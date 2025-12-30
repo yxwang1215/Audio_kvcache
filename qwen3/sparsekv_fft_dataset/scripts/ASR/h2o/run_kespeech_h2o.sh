@@ -1,7 +1,7 @@
 #!/bin/bash
 # KeSpeech ASR Evaluation with Qwen3-Omni using H2O
 
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=7
 export MODEL_PATH="/mnt/public/models/Qwen3-Omni-30B-A3B-Instruct"
 export SAMPLE_LIMIT=0
 

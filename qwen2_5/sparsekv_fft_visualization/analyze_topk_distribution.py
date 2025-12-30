@@ -6,6 +6,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
+from matplotlib.colors import ListedColormap, BoundaryNorm
 try:
     import seaborn as sns
     sns.set_style("whitegrid")
@@ -239,56 +240,73 @@ def plot_selection_heatmap(analysis, output_dir, max_samples=10):
         for pos in after_sel:
             after_matrix[i, int(pos)] = 1
     
-    # 创建图形 - 保持原尺寸
+    # 创建离散的颜色映射（只有0和1两个值）
+    # 白色表示0（未选中），ACL深蓝色表示1（选中）
+    acl_deep_blue = '#08306B'
+    colors = ['white', acl_deep_blue]
+    cmap = ListedColormap(colors)
+    bounds = [0, 0.5, 1]
+    norm = BoundaryNorm(bounds, cmap.N)
+    
+    # 创建包含两个子图的图形
     fig, axes = plt.subplots(2, 1, figsize=(16, 8))
     
-    # Before SAS
-    im1 = axes[0].imshow(before_matrix, aspect='auto', cmap='Blues', interpolation='nearest')
-    axes[0].set_xlabel('Token Position', fontsize=28)  # 进一步增大
-    axes[0].set_ylabel('Sample Index', fontsize=28)  # 进一步增大
-    axes[0].set_title('TopK Selection Before SAS (Blue = Selected)', fontsize=24)
+    # ========== 第一个子图：Before SAS - (a) ==========
+    ax1 = axes[0]
+    im1 = ax1.imshow(before_matrix, aspect='auto', cmap=cmap, norm=norm, interpolation='nearest')
+    ax1.set_xlabel('(a) Token Index', fontsize=28)
+    ax1.set_ylabel('Sample Index', fontsize=28)
+    ax1.set_title('TopK Selection Before SSS (Blue = Selected)', fontsize=24)
     # 增大刻度标签字体
-    axes[0].tick_params(axis='x', labelsize=24)  # Token Position的数字 (1000, 3000等)
-    axes[0].tick_params(axis='y', labelsize=24)  # Sample Index的数字
-    # 增大colorbar字体
-    cbar1 = plt.colorbar(im1, ax=axes[0])
-    cbar1.set_label('', fontsize=24)  # colorbar标签
-    cbar1.ax.tick_params(labelsize=24)  # colorbar刻度 (0.0 - 1.0)
+    ax1.tick_params(axis='x', labelsize=24)
+    ax1.tick_params(axis='y', labelsize=24)
     
-    # After SAS
-    im2 = axes[1].imshow(after_matrix, aspect='auto', cmap='Reds', interpolation='nearest')
-    axes[1].set_xlabel('Token Position', fontsize=28)  # 进一步增大
-    axes[1].set_ylabel('Sample Index', fontsize=28)  # 进一步增大
-    axes[1].set_title('TopK Selection After SAS (Red = Selected)', fontsize=24)
+    # 创建方块图例而不是 colorbar
+    from matplotlib.patches import Rectangle
+    # 创建自定义图例：两个方块
+    legend_elements = [
+        Rectangle((0, 0), 1, 1, facecolor='white', edgecolor='black', linewidth=1, label='0'),
+        Rectangle((0, 0), 1, 1, facecolor=acl_deep_blue, edgecolor='black', linewidth=1, label='1')
+    ]
+    legend1 = ax1.legend(handles=legend_elements, loc='center left', bbox_to_anchor=(1.02, 0.5), 
+                        fontsize=24, frameon=True, handlelength=1.5, handleheight=1.5)
+    
+    # ========== 第二个子图：After SSS - (b) ==========
+    ax2 = axes[1]
+    im2 = ax2.imshow(after_matrix, aspect='auto', cmap=cmap, norm=norm, interpolation='nearest')
+    ax2.set_xlabel('(b) Token Index', fontsize=28)
+    ax2.set_ylabel('Sample Index', fontsize=28)
+    ax2.set_title('TopK Selection After SSS (Blue = Selected)', fontsize=24)
     # 增大刻度标签字体
-    axes[1].tick_params(axis='x', labelsize=24)  # Token Position的数字 (1000, 3000等)
-    axes[1].tick_params(axis='y', labelsize=24)  # Sample Index的数字
-    # 增大colorbar字体
-    cbar2 = plt.colorbar(im2, ax=axes[1])
-    cbar2.set_label('', fontsize=24)  # colorbar标签
-    cbar2.ax.tick_params(labelsize=24)  # colorbar刻度 (0.0 - 1.0)
+    ax2.tick_params(axis='x', labelsize=24)
+    ax2.tick_params(axis='y', labelsize=24)
+    
+    # 创建方块图例而不是 colorbar
+    legend_elements2 = [
+        Rectangle((0, 0), 1, 1, facecolor='white', edgecolor='black', linewidth=1, label='0'),
+        Rectangle((0, 0), 1, 1, facecolor=acl_deep_blue, edgecolor='black', linewidth=1, label='1')
+    ]
+    legend2 = ax2.legend(handles=legend_elements2, loc='center left', bbox_to_anchor=(1.02, 0.5), 
+                        fontsize=24, frameon=True, handlelength=1.5, handleheight=1.5)
     
     plt.tight_layout()
     
     # 保存为PNG, PDF, SVG
     base_path = output_dir / 'topk_selection_heatmap'
     
-    # PNG
     output_path_png = base_path.with_suffix('.png')
     plt.savefig(output_path_png, dpi=300, bbox_inches='tight')
     print(f"Saved selection heatmap to {output_path_png}")
     
-    # PDF
     output_path_pdf = base_path.with_suffix('.pdf')
     plt.savefig(output_path_pdf, bbox_inches='tight')
     print(f"Saved selection heatmap to {output_path_pdf}")
     
-    # SVG
     output_path_svg = base_path.with_suffix('.svg')
     plt.savefig(output_path_svg, bbox_inches='tight')
     print(f"Saved selection heatmap to {output_path_svg}")
     
-    plt.close()
+    plt.close(fig)
 
 def plot_distribution_statistics(analysis, output_dir):
     """绘制分布统计信息"""

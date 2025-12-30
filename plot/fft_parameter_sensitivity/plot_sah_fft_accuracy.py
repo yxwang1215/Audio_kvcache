@@ -174,7 +174,7 @@ for label in cbar.ax.get_yticklabels():
 # 不添加图例，改用侧边标注
 
 # 设置标题（简化，去掉描述性文字）
-ax.set_title('AudioKV+FFT Accuracy Versus AudioKV Baseline', 
+ax.set_title('AudioKV Accuracy Versus AudioKV(w/o SSS) Baseline', 
              fontsize=22, fontweight='bold', pad=25)
 
 # 设置网格样式（ACL风格：清晰但不突兀）

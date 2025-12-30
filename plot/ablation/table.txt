@@ -1,0 +1,31 @@
+Gemma-E2B	LibriSpeech-long			SP_librispeech		
+retain ratio	0.8	0.6	0.4	0.8	0.6	0.4
+vanilla	90.15			76.92		
+snapkv	0	0	0	73.96	47.33	0
+AudioKV (without SSS)	90.05	85.99	39.35	82.64	81.09	35.36
+SnapKV	87.58	74.14	0	79.7	48.46	0
+AudioKV	90.19	88.46	60.58	82.88	81.24	36.17
+Gemma-E4B
+vanilla	92.57			80.61		
+snapkv	0	0	0	73.1	39.25	0
+AudioKV (without SSS)	92.63	91.79	49.82	86.58	86.09	58.07
+SnapKV	90.76	78.48	0	83.96	68.63	0
+AudioKV	92.64	91.71	80.76	86.59	86.37	61.12
+Qwen2.5-3B
+vanilla	94.7			94.01		
+snapkv	66.97	15.7	0	44.96	0	0
+AudioKV (without SSS)	95.14	94.78	38.75	93.87	91.93	0
+SnapKV	90.37	85.9	58.5	93.56	88.61	0
+AudioKV	95.02	93.94	89.98	93.91	92.97	91.28
+Qwen2.5-7B	
+vanilla	98.13			94.48		
+snapkv	80.69	40.17	0	76.02	0	0
+AudioKV (without SSS)	98.09	84.01	0	94.4	90.85	0
+SnapKV	94.85	91.03	61.11	94.07	91.24	24.65
+AudioKV	98.1	98.01	89.14	94.45	94.19	91.23
+Qwen3-30B
+vanilla	98.27			96.86		
+snapkv	63.63	45.16	0	68.17	0	0
+AudioKV (without SSS)	98.27	97.7	71.29	96.82	96.13	0
+SnapKV	96.2	90.26	54.58	96.35	87.72	0
+AudioKV	98.24	98.17	97.82	96.86	96.8	83.6

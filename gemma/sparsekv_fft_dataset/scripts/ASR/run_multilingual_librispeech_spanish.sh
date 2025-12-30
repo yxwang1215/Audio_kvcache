@@ -1,11 +1,11 @@
 #!/bin/bash
 # Multilingual LibriSpeech ASR Evaluation with Gemma-3n-E2B-it - Spanish
 
-export CUDA_VISIBLE_DEVICES=7
-export MODEL_PATH="/mnt/public/models/gemma-3n-E2B-it"
+export CUDA_VISIBLE_DEVICES=6
+export MODEL_PATH="/mnt/public/models/gemma-3n-E4B-it"
 export SAMPLE_LIMIT=0
 
-export KV_METHOD="snapkv"
+export KV_METHOD="sparsekv"
 # export KV_METHOD="mixkv"
 # export SELECT_METHOD="headwisemixkv"
 # export METHOD="mixsparsemm"
@@ -33,6 +33,6 @@ cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/gemma/sparsekv_fft_dataset
 python code/gemma_multilingual_librispeech.py \
     --model-path "${MODEL_PATH}" \
     --languages spanish \
-    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/MultilingualLibriSpeech/Spanish/vanilla \
-    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E2B_it/datasets/MultilingualLibriSpeech/Spanish/vanilla/timing_stats.json
+    --output-dir /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/MultilingualLibriSpeech/Spanish/vanilla1228 \
+    --timing-output-file /mnt/users/wangyuxuan-20250915/Audio/Results/Gemma_3n_E4B_it/datasets/MultilingualLibriSpeech/Spanish/vanilla1228/timing_stats.json
 

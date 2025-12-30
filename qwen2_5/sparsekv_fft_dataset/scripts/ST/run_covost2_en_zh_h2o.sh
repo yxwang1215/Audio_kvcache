@@ -1,7 +1,7 @@
 #!/bin/bash
 # CoVoST2 English-to-Chinese Speech Translation Evaluation with Qwen2.5-Omni using H2O
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=4
 export MODEL_PATH="/mnt/public/models/Qwen2.5-Omni-3B"
 export SAMPLE_LIMIT=0
 

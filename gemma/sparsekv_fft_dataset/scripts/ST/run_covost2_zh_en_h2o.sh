@@ -1,7 +1,7 @@
 #!/bin/bash
 # CoVoST2 Speech Translation Evaluation with Gemma-3n-E2B-it Chinese to English using H2O
 
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=7
 export MODEL_PATH="/mnt/public/models/gemma-3n-E2B-it"
 export SAMPLE_LIMIT=0
 export COVOST2_DIRECTION="zh_en"
