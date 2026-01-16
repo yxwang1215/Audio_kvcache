@@ -9,11 +9,12 @@ ACL顶会风格
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import re
 
 # 设置ACL顶会风格：使用LaTeX字体，高质量渲染
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Times New Roman', 'DejaVu Serif']
-plt.rcParams['font.size'] = 16  # 增大基础字体
+plt.rcParams['font.size'] = 20  # 增大基础字体
 plt.rcParams['axes.unicode_minus'] = False
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
@@ -53,7 +54,8 @@ def parse_table(file_path):
         if current_model not in data:
             data[current_model] = {
                 'LibriSpeech-long': {},
-                'SP_librispeech': {}
+                'SP_librispeech': {},
+                'FR_librispeech': {}
             }
         
         # 跳过retain ratio标题行
@@ -132,6 +134,90 @@ def parse_table(file_path):
     
     return data
 
+# 解析ablation.tex文件提取FR数据
+def parse_tex_fr(file_path):
+    """从ablation.tex文件中提取FR列的数据（索引7-9对应0.8, 0.6, 0.4）"""
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    fr_data = {}
+    retain_ratios = [0.8, 0.6, 0.4]
+    
+    # 模型名称映射
+    model_map = {
+        'Qwen-2.5-Omni 3B': 'Qwen2.5-3B',
+        'Qwen-2.5-Omni-7B': 'Qwen2.5-7B',
+        'Qwen3-Omni-30B-A3B-Instruct': 'Qwen3-30B',
+        'Gemma-3n-E2B': 'Gemma-E2B',
+        'Gemma-3n-E4B': 'Gemma-E4B'
+    }
+    
+    # 手动提取的数据（从ablation.tex中FR列，索引7-9）
+    # 格式：{模型: {方法: {0.8: val, 0.6: val, 0.4: val}}}
+    manual_data = {
+        'Qwen2.5-3B': {
+            'snapkv': {0.8: 54.2, 0.6: 0.0, 0.4: 0.0},
+            'SnapKV': {0.8: 88.9, 0.6: 87.6, 0.4: 0.0},
+            'AudioKV (without SSS)': {0.8: 90.7, 0.6: 90.0, 0.4: 0.0},
+            'AudioKV': {0.8: 89.9, 0.6: 90.5, 0.4: 85.8}
+        },
+        'Qwen2.5-7B': {
+            'snapkv': {0.8: 72.4, 0.6: 0.0, 0.4: 0.0},
+            'SnapKV': {0.8: 83.0, 0.6: 76.9, 0.4: 19.1},
+            'AudioKV (without SSS)': {0.8: 83.1, 0.6: 82.1, 0.4: 0.0},
+            'AudioKV': {0.8: 83.4, 0.6: 82.9, 0.4: 78.7}
+        },
+        'Qwen3-30B': {
+            'snapkv': {0.8: 68.7, 0.6: 0.0, 0.4: 0.0},
+            'SnapKV': {0.8: 95.1, 0.6: 89.8, 0.4: 0.0},
+            'AudioKV (without SSS)': {0.8: 95.6, 0.6: 95.2, 0.4: 0.0},
+            'AudioKV': {0.8: 95.6, 0.6: 95.5, 0.4: 89.2}
+        },
+        'Gemma-E2B': {
+            'snapkv': {0.8: 33.8, 0.6: 0.0, 0.4: 0.0},
+            'SnapKV': {0.8: 61.5, 0.6: 47.2, 0.4: 0.0},
+            'AudioKV (without SSS)': {0.8: 63.3, 0.6: 54.7, 0.4: 20.9},
+            'AudioKV': {0.8: 66.8, 0.6: 64.9, 0.4: 28.9}
+        },
+        'Gemma-E4B': {
+            'snapkv': {0.8: 57.8, 0.6: 0.0, 0.4: 0.0},
+            'SnapKV': {0.8: 71.4, 0.6: 59.1, 0.4: 0.0},
+            'AudioKV (without SSS)': {0.8: 75.5, 0.6: 74.4, 0.4: 35.4},
+            'AudioKV': {0.8: 75.5, 0.6: 75.2, 0.4: 35.5}
+        }
+    }
+    
+    return manual_data
+
+# 合并FR数据到主数据结构
+def merge_fr_data(data, fr_data):
+    """将FR数据合并到主数据结构中"""
+    # French数据集的vanilla基准值（从左到右：Gemma-E2B, Gemma-E4B, Qwen2.5-3B, Qwen2.5-7B, Qwen3-30B）
+    vanilla_values = {
+        'Gemma-E2B': 57.2,
+        'Gemma-E4B': 60.5,
+        'Qwen2.5-3B': 90.9,
+        'Qwen2.5-7B': 83.9,
+        'Qwen3-30B': 95.6
+    }
+    
+    for model in fr_data:
+        if model not in data:
+            data[model] = {}
+        if 'FR_librispeech' not in data[model]:
+            data[model]['FR_librispeech'] = {}
+        
+        # 添加vanilla值
+        if model in vanilla_values:
+            data[model]['FR_librispeech']['vanilla'] = vanilla_values[model]
+        
+        for method in fr_data[model]:
+            if method not in data[model]['FR_librispeech']:
+                data[model]['FR_librispeech'][method] = {}
+            data[model]['FR_librispeech'][method].update(fr_data[model][method])
+    
+    return data
+
 # 绘制单个子图
 def plot_subplot(ax, model, dataset, data, retain_ratios, model_idx=0, dataset_display_names=None):
     """绘制单个子图"""
@@ -139,11 +225,11 @@ def plot_subplot(ax, model, dataset, data, retain_ratios, model_idx=0, dataset_d
         dataset_display_names = {}
     methods = ['vanilla', 'snapkv', 'AudioKV (without SSS)', 'SnapKV', 'AudioKV']
     colors = {
-        'vanilla': '#1f77b4',      # 蓝色
-        'snapkv': '#ff7f0e',       # 橙色
-        'AudioKV (without SSS)': '#2ca02c',     # 绿色
-        'SnapKV': '#d62728',   # 红色
-        'AudioKV': '#9467bd'  # 紫色
+        'vanilla': '#2E5C8A',      # 深蓝色 (高对比度版本) - 对应 Full KV
+        'snapkv': '#C66B3A',       # 珊瑚橙色 (高对比度版本) - 对应 SnapKV
+        'AudioKV (without SSS)': '#3D8B4F',     # 森林绿色 (高对比度版本) - 对应 AdaKV 配色
+        'SnapKV': '#6B5A9A',   # 紫色 (高对比度版本) - 与 snapkv 区分
+        'AudioKV': '#B83A3F'  # 砖红色 (高对比度版本) - 对应 AudioKV
     }
     markers = {
         'vanilla': 'o',
@@ -169,7 +255,7 @@ def plot_subplot(ax, model, dataset, data, retain_ratios, model_idx=0, dataset_d
     
     # 方法显示名称映射
     method_display_names = {
-        'vanilla': 'Vanilla',
+        'vanilla': 'Full KV',
         'snapkv': 'SnapKV',
         'AudioKV (without SSS)': 'AudioKV (without SSS)',
         'SnapKV': 'SnapKV (with SSS)',
@@ -214,13 +300,13 @@ def plot_subplot(ax, model, dataset, data, retain_ratios, model_idx=0, dataset_d
         'Gemma-E2B': 'Gemma-3n-E2B',
         'Gemma-E4B': 'Gemma-3n-E4B',
         'Qwen2.5-3B': 'Qwen2.5-Omni-3B',
-        'Qwen2.5-7B': 'Qwen-2.5-Omni-7B',
+        'Qwen2.5-7B': 'Qwen2.5-Omni-7B',
         'Qwen3-30B': 'Qwen3-Omni-30B-A3B-Instruct'
     }
     
     # 设置标签和标题
-    ax.set_xlabel('Retain Ratio', fontsize=18, fontweight='bold')
-    ax.set_ylabel('Accuracy (%)', fontsize=18, fontweight='bold')
+    ax.set_xlabel('Retain Ratio', fontsize=22, fontweight='bold')
+    ax.set_ylabel('Accuracy (%)', fontsize=22, fontweight='bold')
     
     # 使用规范模型名称和数据集显示名称
     display_model = model_name_map.get(model, model)
@@ -229,11 +315,11 @@ def plot_subplot(ax, model, dataset, data, retain_ratios, model_idx=0, dataset_d
     else:
         display_dataset = dataset
     title = f'{display_model}\n{display_dataset}'
-    ax.set_title(title, fontsize=16, fontweight='bold', pad=10)
+    ax.set_title(title, fontsize=20, fontweight='bold', pad=12)
     
     # 设置x轴刻度（从高到低）
     ax.set_xticks(retain_ratios)
-    ax.set_xticklabels([f'{r:.1f}' for r in retain_ratios], fontsize=15)
+    ax.set_xticklabels([f'{r:.1f}' for r in retain_ratios], fontsize=19)
     # 反转x轴，让左边显示高值
     ax.invert_xaxis()
     
@@ -266,7 +352,7 @@ def plot_subplot(ax, model, dataset, data, retain_ratios, model_idx=0, dataset_d
     # 按照methods的顺序重新排序图例
     method_order = ['vanilla', 'snapkv', 'AudioKV (without SSS)', 'SnapKV', 'AudioKV']
     method_display_names_map = {
-        'vanilla': 'Vanilla',
+        'vanilla': 'Full KV',
         'snapkv': 'SnapKV',
         'AudioKV (without SSS)': 'AudioKV (without SSS)',
         'SnapKV': 'SnapKV (with SSS)',
@@ -284,10 +370,10 @@ def plot_subplot(ax, model, dataset, data, retain_ratios, model_idx=0, dataset_d
     # 刻度标签加粗并增大字体
     for label in ax.get_xticklabels():
         label.set_fontweight('bold')
-        label.set_fontsize(15)
+        label.set_fontsize(19)
     for label in ax.get_yticklabels():
         label.set_fontweight('bold')
-        label.set_fontsize(15)
+        label.set_fontsize(19)
     
     return ordered_handles, ordered_labels
 
@@ -297,17 +383,24 @@ def main():
     table_path = Path(__file__).parent / 'table.txt'
     data = parse_table(table_path)
     
+    # 从ablation.tex提取FR数据
+    tex_path = Path(__file__).parent / 'ablation.tex'
+    if tex_path.exists():
+        fr_data = parse_tex_fr(tex_path)
+        data = merge_fr_data(data, fr_data)
+    
     # 模型和数据集
     models = ['Gemma-E2B', 'Gemma-E4B', 'Qwen2.5-3B', 'Qwen2.5-7B', 'Qwen3-30B']
-    datasets = ['LibriSpeech-long', 'SP_librispeech']  # 数据键名
+    datasets = ['LibriSpeech-long', 'SP_librispeech', 'FR_librispeech']  # 数据键名
     dataset_display_names = {
         'LibriSpeech-long': 'LibriSpeech-long',
-        'SP_librispeech': 'LibriSpeech-Spanish'
+        'SP_librispeech': 'LibriSpeech-Spanish',
+        'FR_librispeech': 'LibriSpeech-French'
     }
     retain_ratios = [0.8, 0.6, 0.4]  # 从高到低，左边显示高值
     
-    # 创建2x5的子图布局（2行5列：2个数据集，5个模型）
-    fig, axes = plt.subplots(2, 5, figsize=(25, 10))
+    # 创建3x5的子图布局（3行5列：3个数据集，5个模型）
+    fig, axes = plt.subplots(3, 5, figsize=(25, 15))
     
     # 用于收集图例的handles和labels（从所有子图中收集，确保包含所有方法）
     legend_handles_dict = {}
@@ -328,7 +421,7 @@ def main():
     # 按照methods的顺序整理图例
     method_order = ['vanilla', 'snapkv', 'AudioKV (without SSS)', 'SnapKV', 'AudioKV']
     method_display_names_map = {
-        'vanilla': 'Vanilla',
+        'vanilla': 'Full KV',
         'snapkv': 'SnapKV',
         'AudioKV (without SSS)': 'AudioKV (without SSS)',
         'SnapKV': 'SnapKV (with SSS)',
@@ -344,28 +437,32 @@ def main():
     
     # 添加共享图例（在底部居中，增大字体并加粗）
     legend = fig.legend(legend_handles, legend_labels, 
-              loc='lower center', bbox_to_anchor=(0.5, 0.02),
-              ncol=5, fontsize=18, framealpha=0.95,
+              loc='lower center', bbox_to_anchor=(0.5, -0.02),
+              ncol=5, fontsize=24, framealpha=0.95,
               edgecolor='gray', fancybox=True, shadow=False)
     # 设置图例文本加粗
     for text in legend.get_texts():
         text.set_fontweight('bold')
     
-    # 调整布局，为底部图例留出空间
-    plt.tight_layout(pad=3.0, rect=[0, 0.05, 1, 1])
+    # 调整布局，为底部图例留出空间（折中的间距）
+    plt.tight_layout(pad=3.0, rect=[0, 0.08, 1, 1])
+    # 进一步调整子图间距（在tight_layout之后调整，折中值）
+    # 增加水平间距以解决标题截断问题
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.96, bottom=0.10, 
+                       wspace=0.4, hspace=0.5)
     
     # 保存图片
     output_dir = Path(__file__).parent
     
     # 保存PNG格式
-    png_path = output_dir / 'ablation_plots.png'
-    plt.savefig(png_path, dpi=300, bbox_inches='tight', facecolor='white')
-    print(f"PNG图片已保存至: {png_path}")
+    # png_path = output_dir / 'ablation_plots.png'
+    # plt.savefig(png_path, dpi=300, bbox_inches='tight', facecolor='white')
+    # print(f"PNG图片已保存至: {png_path}")
     
-    # 保存SVG格式
-    svg_path = output_dir / 'ablation_plots.svg'
-    plt.savefig(svg_path, format='svg', bbox_inches='tight', facecolor='white')
-    print(f"SVG矢量图已保存至: {svg_path}")
+    # # 保存SVG格式
+    # svg_path = output_dir / 'ablation_plots.svg'
+    # plt.savefig(svg_path, format='svg', bbox_inches='tight', facecolor='white')
+    # print(f"SVG矢量图已保存至: {svg_path}")
     
     # 保存PDF格式
     pdf_path = output_dir / 'ablation_plots.pdf'

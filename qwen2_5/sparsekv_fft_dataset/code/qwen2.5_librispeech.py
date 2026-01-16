@@ -154,13 +154,25 @@ from qwen_omni_utils import process_mm_info
 USE_OPTIMIZED_SPARSEMM = os.environ.get("USE_OPTIMIZED_SPARSEMM", "false").lower() == "true"
 
 # Import SparseMM utilities from model directory
+# Note: When USE_OPTIMIZED_SPARSEMM=true, we use optimized SparseMM but still use
+# original classes for other methods (snapkv, adakv, etc.)
 if USE_OPTIMIZED_SPARSEMM:
     from model.sparsemm_utils_optimized import (
         SparseMM_Optimized as SparseMM,
         DynamicCacheSplitHeadFlattenOptimized as DynamicCacheSplitHeadFlatten,
-        init_sparsemm_optimized as init_sparsemm
+        init_sparsemm_optimized as init_sparsemm,
+        # Re-exported from sparsemm_utils for compatibility with other KV methods
+        SnapKVCluster,
+        AdaKVCluster,
+        TOVACluster,
+        MixKVCluster,
+        init_snapkv,
+        init_adakv,
+        init_pyramidkv,
+        init_tova,
+        init_mixkv,
     )
-    print("Using OPTIMIZED SparseMM implementation for better performance")
+    print(f"Using OPTIMIZED SparseMM implementation with KV_METHOD={KV_METHOD}")
 else:
     from model.sparsemm_utils import (
         SparseMM,
@@ -187,6 +199,39 @@ from model.audio_head_utils import (
     get_audio_head_score_path
 )
 
+def get_size_of_cache(cache):
+    """
+    计算 KV Cache 占用的显存字节数。
+    支持 DynamicCache, DynamicCacheSplitHeadFlatten 以及传统的 tuple 格式。
+    """
+    if cache is None:
+        return 0
+    
+    size_in_bytes = 0
+    
+    # 针对具有 key_cache 和 value_cache 属性的对象 (如你的自定义类或标准 DynamicCache)
+    if hasattr(cache, 'key_cache') and hasattr(cache, 'value_cache'):
+        # 直接遍历列表中的 Tensor
+        for k in cache.key_cache:
+            size_in_bytes += k.element_size() * k.nelement()
+        for v in cache.value_cache:
+            size_in_bytes += v.element_size() * v.nelement()
+        return size_in_bytes
+    if hasattr(cache, 'layers'):
+        for layer in cache.layers:
+            # 计算 keys 属性
+            if hasattr(layer, 'keys'):
+                k = layer.keys
+                if torch.is_tensor(k):
+                    size_in_bytes += k.element_size() * k.nelement()
+            # 计算 values 属性
+            if hasattr(layer, 'values'):
+                v = layer.values
+                if torch.is_tensor(v):
+                    size_in_bytes += v.element_size() * v.nelement()
+        return size_in_bytes
+   
+    raise NotImplementedError(f"不支持的 Cache 类型: {type(cache)}。请检查模型返回的 past_key_values 结构。")
 def get_gpu_memory_usage():
     """Get GPU memory usage"""
     if torch.cuda.is_available():
@@ -1418,17 +1463,21 @@ def main():
                     **inputs,
                     use_audio_in_video=True,
                     return_audio=False,
-                    thinker_max_new_tokens=1100,  
+                    thinker_max_new_tokens=100,  
                     thinker_do_sample=False,
                     pad_token_id=processor.tokenizer.eos_token_id,
-                    past_key_values=past_key_values
+                    past_key_values=past_key_values,
+                    return_dict_in_generate=True
                 )
             end_event.record()
             
+            cache_size = get_size_of_cache(out_ids.past_key_values)
+            peak_memory = torch.cuda.max_memory_allocated()
             # Synchronize and calculate times
             torch.cuda.synchronize()
             total_time = start_event.elapsed_time(end_event) / 1000.0
             # Estimate prefill vs decode time based on token counts
+            out_ids=out_ids.sequences
             input_token_count = inputs.input_ids.shape[1] if hasattr(inputs, 'input_ids') else 0
             output_token_count = out_ids.shape[1] if hasattr(out_ids, 'shape') else len(out_ids[0]) if isinstance(out_ids, list) else 0
             decode_token_count = max(0, output_token_count - input_token_count)
@@ -1472,7 +1521,9 @@ def main():
                   f"Prefill time: {prefill_time:.4f}s, Decode time: {decode_time:.4f}s, "
                   f"Total time: {total_time:.4f}s, TPS: {sample_tps:.2f}, "
                   f"Hypothesis: {hypothesis_char_len} chars / {hypothesis_word_len} words, "
-                  f"Ground truth: {reference_char_len} chars / {reference_word_len} words")
+                  f"Ground truth: {reference_char_len} chars / {reference_word_len} words"
+                  f"Peak memory usage:{peak_memory / 1024**3}"
+                  f"Cache Size:{cache_size / 1024**3}")
             
             wer = calculate_wer(reference, hypothesis)
 
@@ -1482,41 +1533,39 @@ def main():
             current_avg_wer = total_wer / processed_samples
             current_avg_accuracy = 100.0 - current_avg_wer  # Word Accuracy = 100 - WER
             
-            # ===== 实时输出 WER 和平均 WER =====
-            # 在每个样本处理后立即输出，格式清晰醒目
-            print(f"\n{'='*80}")
+            # ===== 瀹炴椂杈撳嚭 WER 鍜屽钩鍧?WER =====
+            # 鍦ㄦ瘡涓牱鏈鐞嗗悗绔嬪嵆杈撳嚭锛屾牸寮忔竻鏅伴啋鐩?            print(f"\n{'='*80}")
             print(f"[Sample {idx+1}/{len(dataset)}] ID={doc.get('id', f'sample_{idx}')} | "
                   f"Speaker={speaker_id} | Duration={doc.get('duration', 0):.1f}s")
             print(f"{'='*80}")
-            print(f"  📊 实时 WER (当前样本): {wer:.2f}%")
-            print(f"  📈 平均 WER (已处理 {processed_samples} 个样本): {current_avg_wer:.2f}%")
-            print(f"  ✅ 平均准确率: {current_avg_accuracy:.2f}%")
+            print(f"  馃搳 瀹炴椂 WER (褰撳墠鏍锋湰): {wer:.2f}%")
+            print(f"  馃搱 骞冲潎 WER (宸插鐞?{processed_samples} 涓牱鏈?: {current_avg_wer:.2f}%")
+            print(f"  鉁?骞冲潎鍑嗙‘鐜? {current_avg_accuracy:.2f}%")
             print(f"{'='*80}")
             
             # Print reference and hypothesis (truncated if too long)
             ref_display = reference[:100] + "..." if len(reference) > 100 else reference
             hyp_display = hypothesis[:100] + "..." if len(hypothesis) > 100 else hypothesis
-            print(f"  📝 参考文本:  {ref_display}")
-            print(f"  💬 识别结果: {hyp_display}")
+            print(f"  馃摑 鍙傝€冩枃鏈?  {ref_display}")
+            print(f"  馃挰 璇嗗埆缁撴灉: {hyp_display}")
             print(f"{'='*80}\n")
             
-            # 更新进度条，始终显示最新的 WER 信息
+            # 鏇存柊杩涘害鏉★紝濮嬬粓鏄剧ず鏈€鏂扮殑 WER 淇℃伅
             update_interval = 10 if is_screen_env else 1
             sample_count = idx + 1
             
-            # 进度条始终显示最新的 WER 和平均 WER
+            # 杩涘害鏉″缁堟樉绀烘渶鏂扮殑 WER 鍜屽钩鍧?WER
             progress_bar.set_postfix({
-                '实时WER': f'{wer:.2f}%',
-                '平均WER': f'{current_avg_wer:.2f}%',
-                '准确率': f'{current_avg_accuracy:.2f}%',
-                '样本': f'{sample_count}/{len(dataset)}'
+                '瀹炴椂WER': f'{wer:.2f}%',
+                '骞冲潎WER': f'{current_avg_wer:.2f}%',
+                '鍑嗙鐜?': f'{current_avg_accuracy:.2f}%',
+                '鏍锋湰': f'{sample_count}/{len(dataset)}'
             })
             
             if sample_count % update_interval == 0 or sample_count == len(dataset):
                 if is_screen_env:
-                    # 在非交互式环境中，额外输出进度信息
-                    print(f"  📊 进度更新: {sample_count}/{len(dataset)} ({sample_count/len(dataset)*100:.1f}%)")
-                    print(f"  📈 当前平均 WER: {current_avg_wer:.2f}% | 平均准确率: {current_avg_accuracy:.2f}%")
+                    # 鍦ㄩ潪浜や簰寮忕幆澧冧腑锛岄澶栬緭鍑鸿繘搴︿俊鎭?                    print(f"  馃搳 杩涘害鏇存柊: {sample_count}/{len(dataset)} ({sample_count/len(dataset)*100:.1f}%)")
+                    print(f"  馃搱 褰撳墠骞冲潎 WER: {current_avg_wer:.2f}% | 骞冲潎鍑嗙‘鐜? {current_avg_accuracy:.2f}%")
 
             
             results.append({

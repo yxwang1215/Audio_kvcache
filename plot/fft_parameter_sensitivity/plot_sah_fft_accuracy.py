@@ -13,7 +13,7 @@ from pathlib import Path
 # 设置ACL顶会风格：使用LaTeX字体，高质量渲染
 plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Times New Roman', 'DejaVu Serif']
-plt.rcParams['font.size'] = 18  # 增大基础字体
+plt.rcParams['font.size'] = 19  # 增大基础字体
 plt.rcParams['axes.unicode_minus'] = False
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
@@ -109,14 +109,14 @@ for j in range(0, len(cutoff_values), 1):  # 可以调整步长来控制网格�
 # 在右下区域（绿色圈位置）添加 AudioKV (baseline) 标注
 # 在右下角（高Alpha、高Cutoff Ratio）绘制指示线
 max_cutoff = cutoff_values.max()  # 现在是0.9
-line_x = np.array([max_cutoff, max_cutoff + 0.15])  # 从右侧边缘延伸
+line_x = np.array([max_cutoff, max_cutoff + 0.10])  # 从右侧边缘延伸
 line_y = np.array([1.0, 1.0])   # 在Alpha=1.0位置
 line_z = np.array([baseline_value, baseline_value])
 ax.plot(line_x, line_y, line_z, 'k-', linewidth=3.0, alpha=1.0, zorder=10)
 
 # 在线的末端添加文字标注
-ax.text(max_cutoff + 0.18, 1.0, baseline_value, 'AudioKV\n(baseline)', 
-        fontsize=17, fontweight='bold', color='black',
+ax.text(max_cutoff + 0.08, 1.0, baseline_value, 'AudioKV\n(w/o SSS)', 
+        fontsize=19, fontweight='bold', color='black',
         bbox=dict(boxstyle='round,pad=0.5', facecolor='white', 
                  alpha=0.95, edgecolor='black', linewidth=2.0),
         ha='left', va='center', zorder=11)
@@ -125,8 +125,8 @@ ax.text(max_cutoff + 0.18, 1.0, baseline_value, 'AudioKV\n(baseline)',
 ax.view_init(elev=35, azim=50)
 
 # 设置坐标轴标签（ACL风格：清晰、专业）
-ax.set_xlabel('Cutoff Ratio', fontsize=20, fontweight='bold', labelpad=20)
-ax.set_ylabel('Alpha', fontsize=20, fontweight='bold', labelpad=20)
+ax.set_xlabel('Cutoff Ratio', fontsize=19, fontweight='bold', labelpad=20)
+ax.set_ylabel('Alpha', fontsize=19, fontweight='bold', labelpad=20)
 # 移除z轴标签，因为colorbar已经显示了Accuracy (%)
 # ax.set_zlabel('Accuracy (%)', fontsize=20, fontweight='bold', labelpad=12)
 
@@ -141,9 +141,9 @@ ax.set_yticks(np.arange(0, 1.0, 0.2))
 ax.set_zticks(np.arange(int(z_min), int(z_max) + 1, 3))  # 每3个单位一个刻度
 
 # 设置刻度标签格式（增大字体并加粗）
-ax.tick_params(axis='x', labelsize=20, pad=7)
-ax.tick_params(axis='y', labelsize=20, pad=7)
-ax.tick_params(axis='z', labelsize=20, pad=7)
+ax.tick_params(axis='x', labelsize=19, pad=7)
+ax.tick_params(axis='y', labelsize=19, pad=7)
+ax.tick_params(axis='z', labelsize=19, pad=7)
 
 # 设置坐标轴范围
 ax.set_xlim(cutoff_values.min() - 0.05, cutoff_values.max() + 0.05)  # 稍微扩展范围以便显示
@@ -161,9 +161,9 @@ for label in ax.get_zticklabels():
 
 # 添加颜色条（压缩刻度间距，增大字体）
 cbar = fig.colorbar(surf, ax=ax, shrink=0.7, aspect=25, pad=0.05)
-cbar.set_label('Accuracy (%)', fontsize=22, fontweight='bold', rotation=270, labelpad=30)
+cbar.set_label('Accuracy (%)', fontsize=19, fontweight='bold', rotation=270, labelpad=30)
 # 减少colorbar刻度数量，压缩间距
-cbar.ax.tick_params(labelsize=20)
+cbar.ax.tick_params(labelsize=19)
 # 设置colorbar刻度数量（减少刻度，压缩间距）
 cbar.locator = plt.MaxNLocator(nbins=5)  # 最多5个刻度
 cbar.update_ticks()
@@ -173,9 +173,7 @@ for label in cbar.ax.get_yticklabels():
 
 # 不添加图例，改用侧边标注
 
-# 设置标题（简化，去掉描述性文字）
-ax.set_title('AudioKV Accuracy Versus AudioKV(w/o SSS) Baseline', 
-             fontsize=22, fontweight='bold', pad=25)
+# 不添加标题
 
 # 设置网格样式（ACL风格：清晰但不突兀）
 ax.xaxis.pane.fill = False

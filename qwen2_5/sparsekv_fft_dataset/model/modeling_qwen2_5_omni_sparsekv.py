@@ -64,7 +64,20 @@ import os
 USE_OPTIMIZED_SPARSEMM = os.environ.get("USE_OPTIMIZED_SPARSEMM", "false").lower() == "true"
 
 if USE_OPTIMIZED_SPARSEMM:
-    from .sparsemm_utils_optimized import init_sparsemm_optimized as init_sparsemm, DynamicCacheSplitHeadFlattenOptimized as DynamicCacheSplitHeadFlatten
+    from .sparsemm_utils_optimized import (
+        init_sparsemm_optimized as init_sparsemm,
+        DynamicCacheSplitHeadFlattenOptimized as DynamicCacheSplitHeadFlatten,
+        # Re-exported from sparsemm_utils for compatibility
+        init_adakv,
+        init_pyramidkv,
+        init_snapkv,
+        init_tova,
+        init_mixkv,
+        init_mixsparsemm,
+        init_knorm,
+        init_headkv,
+        init_h2o,
+    )
     print("[modeling] Using OPTIMIZED SparseMM implementation")
 else:
     from .sparsemm_utils import (

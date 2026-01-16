@@ -1,0 +1,117 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{colortbl}
+\usepackage{tikz}
+\usepackage{fancyvrb}
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+
+\geometry{a4paper, margin=1in}
+
+% Color definitions
+\definecolor{refcolor}{RGB}{240, 248, 255}
+\definecolor{snapkvcolor}{RGB}{255, 240, 240}
+\definecolor{sparsekvcolor}{RGB}{240, 255, 240}
+\definecolor{errorcolor}{RGB}{255, 200, 200}
+\definecolor{goodcolor}{RGB}{200, 255, 200}
+
+\title{Case Study: Method Comparison}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section*{Case Study: SnapKV vs SparseKV-FFT}
+
+This case study compares the transcription quality of two KV-cache compression methods on a long audio sample from LibriSpeech (Chapter 13754, duration: 232.62s).
+
+\begin{table}[h]
+\centering
+\caption{Transcription Comparison}
+\label{tab:comparison}
+\begin{tabularx}{\textwidth}{|X|}
+\hline
+\rowcolor{refcolor}
+\textbf{Reference Text} \\
+\hline
+They knew no north, no south, no east, no west. They stood positively by the Constitution and would have nothing to do in the bloody strife between brothers, unless indeed they were summoned by the authority to which they had already once loyally responded to furnish men and arms for their country's need. Every reader of recent and current history has learned of her rapid growth, of her repeated appeals for the recognition to which she had so long been entitled in the sisterhood of states, of the prompt refusals with which her pleas were persistently met, though other territories with smaller and more illiterate populations, more restricted resources, and in every way weaker claims, were allowed to assume the habiliments of maturity, while Utah, lusty, large and strong, was kept in swaddling clothes. But the cries of the vigorous infant were at length heeded, and in answer to the seventh appeal of the kind, Utah's star was added to the nation's galaxy. But let us turn more particularly to the history of the church itself. When Brigham Young passed from earth, he was mourned of the people as deeply as was Moses of Israel. And had he not proved himself a Moses, aye, and a Joshua, too. He had led the people into the land of holy promise and had divided unto them their inheritances. He was a man with clear title as one of the small brotherhood we call great. As carpenter, farmer, pioneer, capitalist, financier, preacher, apostle, prophet, in everything he was a leader among men. Even those who opposed him in politics and in religion respected him for his talents, his magnanimity, his liberality and his manliness, and years after his demise, men who had refused him honor while alive, brought their mites and their gold to erect a monument of stone and bronze to the memory of this man who needs it not. With his death closed another epoch in the history of his people, and a successor arose, one who was capable of leading and judging under the changed conditions. That plural marriage has been practised by a limited proportion of the people under sanction of church ordinance has never since the introduction of the system been denied. But that plural marriage is a vital tenet of the church is not true. What the Latter Day Saints call celestial marriage is characteristic of the church and is in very general practise, but of celestial marriage, plurality of wives was an incident, never an essential. Yet the two have often been confused in the popular mind. We believe in a literal resurrection and an actual hereafter, in which future state shall be recognized every sanctified and authorized relationship existing here on earth, of parent and child, brother and sister, husband and wife. We believe further that contracts as of marriage, to be valid beyond the veil of mortality, must be sanctioned by a power greater than that of earth. With the seal of the holy priesthood upon their wedded state, these people believe implicitly in the perpetuity of that relationship on the far side of the grave. They marry not with the saddening limitation until death do you part, but for time and for all eternity. To them marriage is not, can never be, a civil compact alone. Its significance reaches beyond the grave. Its obligations are eternal, and the Latter Day Saints are notable for the sanctity with which they invest the marital state. It has been my privilege to tread the soil of many lands, to observe the customs and study the habits of more nations than one, and I have yet to find the place and meet the people where and with whom the purity of man and woman is held more precious than among the maligned Mormons in the mountain valleys of the West. \\
+\hline
+\end{tabularx}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Method Comparison}
+\label{tab:methods}
+\begin{tabularx}{\textwidth}{|l|X|c|}
+\hline
+\rowcolor{lightgray}
+\textbf{Method} & \textbf{Hypothesis} & \textbf{WER (\%)} \\
+\hline
+\rowcolor{snapkvcolor}
+\textbf{SnapKV} & 
+\begin{minipage}[t]{\linewidth}
+They knew no north, no south, no east, no west. They stood positively by the Constitution and would have nothing to do in the bloody strife between brothers, unless indeed they were summoned by the authority to which they had already once loyally responded to furnish men and arms for the country's need. Every reader of recent and current history has learned of her rapid growth, of her repeated appeals for the recognition to which she had so long been entitled in the sisterhood of states, of the prompt refusals with which her pleas were persistently met, though other territories with smaller and more illiterate populations, more restricted resources, and in every way weaker claims, were allowed to assume the habiliments of maturity, while Utah, lusty, large and strong, was kept in swaddling clothes. But the cries of the vigorous infant were at length heeded, and in answer to the seventh appeal of the kind, Utah's star was added to the nation's galaxy. But let us turn more particularly to the history of the church itself. When Brigham Young passed from earth, he was mourned of the people as deeply as was Moses of Israel, and had he not proved himself a Moses, I, and a Joshua, too? He had led the people into the land of holy promise, and had divided it among them. He was a man with clear title, as one of the small brotherhood we call great, as carpenter, farmer, pioneer, capitalist, financier, preacher, apostle, prophet, and in everything he was a leader among men, even those who opposed him in politics and in religion, respected him for his talents, his magnanimity, his liberality, and his manliness, and years after his demise, men who had refused him honor while alive, brought their mites and their gold to erect a monument of stone and bronze to the memory of this man who needs it not. With his death closed another epoch in the history of his people, and his successor arose, one who was capable of leading and judging under changed conditions. That plural marriage has been practiced by a limited proportion of the people, under church ordinance, has never since the introduction of the system been denied, but that plural marriage is a vital tenet of the church is not true. What the Latter - Day Saints call celestial marriage is characteristic of the church, and is in very general practice, but the two have often been confused in the popular mind. \textcolor{red}{\textbf{We believe in a literal resurrection, and in an actual hereafter, in which future states shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~every future state shall recognize}}\\
+\textcolor{red}{\textbf{~~[... this pattern repeats hundreds more times ...]}}
+\end{minipage} & 
+\textcolor{red}{\textbf{93.62}} \\
+\hline
+\rowcolor{sparsekvcolor}
+\textbf{SparseKV-FFT} & 
+\begin{minipage}[t]{\linewidth}
+They knew no north, no south, no east, no west. They stood positively by the Constitution and would have nothing to do in the bloody strife between brothers, unless indeed they were summoned by the authority to which they had already once loyally responded to furnish men and arms for the country's need. Every reader of recent and current history has learned of her rapid growth, of her repeated appeals for the recognition to which she had so long been entitled in the sisterhood of states, of the prompt refusals with which her pleas were persistently met, though other territories with smaller and more illiterate populations, more restricted resources, and in every way weaker claims, were allowed to assume the habiliments of maturity, while Utah, lusty, large, and strong, was kept in swaddling clothes. But the cries of the vigorous infant were at length heeded, and in answer to the seventh appeal of the kind, Utah's star was added to the nation's galaxy. But let us turn more particularly to the history of the church itself. When Brigham Young passed from earth, he was mourned of the people as deeply as was Moses of Israel, and had he not proved himself a Moses, I, and a Joshua, too? He had led the people into the land of holy promise, and had divided unto them their inheritances. He was a man with clear title as one of the small brotherhood we call great, as carpenter, farmer, pioneer, capitalist, financier, preacher, apostle, prophet, and everything he was a leader among men, even those who opposed him in politics and in religion, respected him for his talents, his magnanimity, his liberality, and his manliness, and years after his demise, men who had refused him honor while alive, brought their mites and their gold to erect a monument of stone and bronze to the memory of this man who needs it not. With his death closed another epoch in the history of his people, and a successor arose, one who is capable of leading and judging under the changed conditions. That plural marriage has been practiced by a limited proportion of the people under sanction of church ordinance has never since the introduction of the system been denied, but that plural marriage is a vital tenet of the church is not true. What the Latter - Day Saints call celestial marriage is characteristic of the church and is in very general practice, but of celestial marriage, plurality of wives was an incident, never an essential, yet the two have often been confused in the popular mind. \textcolor{green}{\textbf{We believe in a literal resurrection and an actual hereafter, in which future states shall be recognized every sanctified and authorized relationship existing here on earth, of parent and child, brother and sister, husband and wife. We believe further that contracts as of marriage, to be valid beyond the veil of mortality, must be sanctioned by a power greater than that of earth, with the seal of the holy priesthood upon their wedded state. These people believe implicitly in the perpetuity of that relationship on the far side of the grave. They marry not with the saddening limitation until death do you part, but for time and for all eternity. To them marriage is not, can never be, a civil compact alone. Its significance reaches beyond the grave. Its obligations are eternal, and the Latter - Day Saints are notable for the sanctity with which they invest the marital state. It has been my privilege to tread the soil of many lands, to observe the customs and study the habits of more nations than one, and I have yet to find the place and meet the people where and with whom the purity of man and woman is held more precious than among the maligned Mormons in the mountain valleys of the West.}}
+\end{minipage} & 
+\textcolor{green}{\textbf{1.09}} \\
+\hline
+\end{tabularx}
+\end{table}
+
+\vspace{0.5cm}
+
+\begin{table}[h]
+\centering
+\caption{Key Observations}
+\label{tab:observations}
+\begin{tabularx}{\textwidth}{|X|}
+\hline
+\rowcolor{lightgray}
+\textbf{Analysis} \\
+\hline
+\begin{itemize}
+    \item \textbf{SnapKV} suffers from severe repetition failure: After the phrase ``We believe in a literal resurrection, and in an actual hereafter, in which future states shall recognize'', the model enters an infinite loop, repeating ``every future state shall recognize'' hundreds of times, resulting in a WER of 93.62\%.
+    \item \textbf{SparseKV-FFT} successfully completes the transcription with high accuracy (WER: 1.09\%), correctly transcribing the entire passage including the complex sentence about resurrection and marriage beliefs.
+    \item The repetition issue in SnapKV demonstrates the importance of maintaining long-range context in KV-cache compression methods for long-form audio transcription tasks.
+    \item SparseKV-FFT's FFT-based compression strategy better preserves the contextual information necessary for coherent long-form generation.
+\end{itemize}
+\hline
+\end{tabularx}
+\end{table}
+
+\end{document}
+
