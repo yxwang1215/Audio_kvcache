@@ -514,101 +514,88 @@ class GlobalTimingStats:
         return output_file
 
 def load_speech_chatbot_alpaca_eval_dataset(split="test", twinkstart_path=None):
-    """Load speech-chatbot-alpaca-eval dataset from local path with metadata from HuggingFace
+    """Load speech-chatbot-alpaca-eval dataset from local audio + HuggingFace metadata
     
     Args:
         split: Dataset split to load (default: "test")
-        twinkstart_path: Path to TwinkStart root directory (default: /mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart)
+        twinkstart_path: Optional TwinkStart root directory (contains speech-chatbot-alpaca-eval/{split}/*.wav)
     """
     print(f"Loading speech-chatbot-alpaca-eval dataset (split={split})...")
-    
-    # Default TwinkStart path
-    default_twinkstart_path = "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart"
-    if twinkstart_path is None:
-        twinkstart_path = default_twinkstart_path
-    
-    # UltraEval-Audio root directory (for registry access)
-    ultraeval_root = "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio"
-    
-    # Try to find UltraEval-Audio root
-    possible_paths = [
-        ultraeval_root,
-        os.environ.get("ULTRAEVAL_ROOT", ""),
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../UltraEval-Audio"),
-        "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio"
-    ]
-    
-    ultraeval_root = None
-    for path in possible_paths:
-        if path and os.path.exists(path) and os.path.exists(os.path.join(path, "audio_evals")):
-            ultraeval_root = path
-            break
-    
-    if not ultraeval_root:
-        print("Error: UltraEval-Audio root directory not found.")
-        return []
-    
-    # Check if local audio files exist (use twinkstart_path if provided)
-    local_audio_dir = os.path.join(twinkstart_path, "speech-chatbot-alpaca-eval", split)
+
+    # Local TwinkStart paths (priority order)
+    twinkstart_candidates = []
+    if twinkstart_path:
+        twinkstart_candidates.append(twinkstart_path)
+    env_twinkstart = os.environ.get("TWINKSTART_PATH", "")
+    if env_twinkstart:
+        twinkstart_candidates.append(env_twinkstart)
+    twinkstart_candidates.extend([
+        "/mnt/users/wangyuxuan-20250915/Audio/Datasets/TwinkStart",
+        "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart",
+    ])
+
+    local_audio_dir = None
     local_audio_files = []
-    if os.path.exists(local_audio_dir):
+    for candidate_root in twinkstart_candidates:
+        candidate_dir = os.path.join(candidate_root, "speech-chatbot-alpaca-eval", split)
+        if os.path.exists(candidate_dir):
+            local_audio_dir = candidate_dir
+            break
+
+    if local_audio_dir and os.path.exists(local_audio_dir):
         local_audio_files = sorted(glob.glob(os.path.join(local_audio_dir, "*.wav")), 
                                   key=lambda x: int(os.path.splitext(os.path.basename(x))[0]) if os.path.splitext(os.path.basename(x))[0].isdigit() else float('inf'))
         print(f"Found {len(local_audio_files)} local audio files in {local_audio_dir}")
     else:
-        print(f"Warning: Local audio directory not found: {local_audio_dir}")
-    
-    # Add UltraEval-Audio to Python path
-    if ultraeval_root not in sys.path:
-        sys.path.insert(0, ultraeval_root)
-    
-    dataset_data = None
-    
-    # Try to load from HuggingFace cache first (without downloading)
-    try:
-        from datasets import load_dataset
-        print(f"Attempting to load speech-chatbot-alpaca-eval from HuggingFace cache (no download)...")
-        hf_dataset = load_dataset("TwinkStart/speech-chatbot-alpaca-eval", split=split, download_mode="reuse_cache_if_exists")
-        print(f"Successfully loaded {len(hf_dataset)} samples from HuggingFace cache")
-        
-        # Convert to list format
-        dataset_data = []
-        for idx, item in enumerate(hf_dataset):
-            # Extract question text - prioritize instruction (chatbot format), then input, then QuestionText
+        attempted_dir = os.path.join(
+            twinkstart_candidates[0] if twinkstart_candidates else "(none)",
+            "speech-chatbot-alpaca-eval",
+            split,
+        )
+        print(f"Warning: Local audio directory not found: {attempted_dir}")
+
+    # Find UltraEval-Audio root (optional fallback only)
+    ultraeval_root = None
+    possible_ultraeval_paths = [
+        os.environ.get("ULTRAEVAL_ROOT", ""),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../UltraEval-Audio"),
+        "/mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio",
+    ]
+    for path in possible_ultraeval_paths:
+        if path and os.path.exists(path) and os.path.exists(os.path.join(path, "audio_evals")):
+            ultraeval_root = path
+            break
+
+    def _build_dataset_data(raw_dataset):
+        converted = []
+        for idx, item in enumerate(raw_dataset):
             question_text = item.get("instruction", "")
             if not question_text:
                 question_text = item.get("input", "")
             if not question_text:
                 question_text = item.get("QuestionText", "")
             if not question_text:
-                # Last resort: try other common field names
                 question_text = item.get("question", item.get("prompt", ""))
-            
-            # Extract answer - according to registry, ref_col is "output"
+
             answer = item.get("output", "")
             if not answer:
-                # Fallback to "answer" if "output" is not available
                 answer = item.get("answer", "")
-            
-            # Use local audio file if available, otherwise use audio from HuggingFace dataset
+
             audio_path = None
             audio_array = None
             sampling_rate = 16000
-            
+
             if local_audio_files and idx < len(local_audio_files):
                 audio_path = local_audio_files[idx]
-                # Load audio from local file
                 try:
-                    # Try librosa first, then soundfile
                     try:
-                        audio_array, sr = librosa.load(audio_path, sr=16000, mono=True)
+                        audio_array, _ = librosa.load(audio_path, sr=16000, mono=True)
                         sampling_rate = 16000
                     except Exception:
                         audio, sample_rate = sf.read(audio_path)
                         if len(audio.shape) > 1 and audio.shape[1] > 1:
                             audio = np.mean(audio, axis=1)
                         if sample_rate != 16000:
-                            from scipy import signal
                             audio = signal.resample(audio, int(len(audio) * 16000 / sample_rate))
                         audio_array = audio.astype(np.float32)
                         sampling_rate = 16000
@@ -619,16 +606,15 @@ def load_speech_chatbot_alpaca_eval_dataset(split="test", twinkstart_path=None):
                 audio_path = item['audio'].get('path')
                 audio_array = item['audio'].get('array')
                 sampling_rate = item['audio'].get('sampling_rate', 16000)
-            
-            # Calculate duration if audio array is available
+
             duration = 0.0
             if audio_array is not None:
                 try:
                     duration = len(audio_array) / sampling_rate
-                except:
+                except Exception:
                     duration = 0.0
-            
-            dataset_data.append({
+
+            converted.append({
                 "id": item.get("id", f"sample_{idx}"),
                 "QuestionText": question_text,
                 "answer": answer,
@@ -639,128 +625,78 @@ def load_speech_chatbot_alpaca_eval_dataset(split="test", twinkstart_path=None):
                     "path": audio_path
                 }
             })
-            
+        return converted
+    
+    dataset_data = None
+    
+    # Try HuggingFace cache first (no download), then direct download as fallback
+    try:
+        print(f"Attempting to load speech-chatbot-alpaca-eval from HuggingFace cache (no download)...")
+        hf_dataset = load_dataset("TwinkStart/speech-chatbot-alpaca-eval", split=split, download_mode="reuse_cache_if_exists")
+        print(f"Successfully loaded {len(hf_dataset)} samples from HuggingFace cache")
+        dataset_data = _build_dataset_data(hf_dataset)
     except Exception as e:
         print(f"Could not load from HuggingFace cache: {e}")
-        print(f"Attempting to load from UltraEval-Audio registry...")
-        
-        # Fallback to registry
         try:
+            dataset_download_dir = os.environ.get("DATASET_DOWNLOAD_DIR", "")
+            if dataset_download_dir and not os.environ.get("HF_DATASETS_CACHE"):
+                safe_makedirs(dataset_download_dir, exist_ok=True)
+                os.environ["HF_DATASETS_CACHE"] = dataset_download_dir
+                print(f"Using DATASET_DOWNLOAD_DIR as HF cache: {dataset_download_dir}")
+
+            print("Attempting direct HuggingFace download: TwinkStart/speech-chatbot-alpaca-eval")
+            hf_dataset = load_dataset("TwinkStart/speech-chatbot-alpaca-eval", split=split, trust_remote_code=True)
+            print(f"Successfully loaded {len(hf_dataset)} samples from HuggingFace")
+            dataset_data = _build_dataset_data(hf_dataset)
+        except Exception as hf_e:
+            print(f"Could not load from HuggingFace directly: {hf_e}")
+
+    # Optional fallback to UltraEval-Audio registry (no longer required)
+    if (dataset_data is None or len(dataset_data) == 0) and ultraeval_root:
+        try:
+            if ultraeval_root not in sys.path:
+                sys.path.insert(0, ultraeval_root)
             from audio_evals.registry import registry
-            
+
+            print("Attempting to load from UltraEval-Audio registry (optional fallback)...")
             dataset_obj = registry.get_dataset("speech-chatbot-alpaca-eval")
-            if dataset_obj is None:
-                print(f"Error: Dataset 'speech-chatbot-alpaca-eval' not found in registry")
-                # Fall back to local files only
-                if not local_audio_files:
-                    return []
-                dataset_data = []
-                for idx, audio_file in enumerate(local_audio_files):
-                    try:
-                        # Try librosa first, then soundfile
-                        try:
-                            audio_array, sr = librosa.load(audio_file, sr=16000, mono=True)
-                        except Exception:
-                            audio, sample_rate = sf.read(audio_file)
-                            if len(audio.shape) > 1 and audio.shape[1] > 1:
-                                audio = np.mean(audio, axis=1)
-                            if sample_rate != 16000:
-                                from scipy import signal
-                                audio = signal.resample(audio, int(len(audio) * 16000 / sample_rate))
-                            audio_array = audio.astype(np.float32)
-                        duration = len(audio_array) / 16000.0
-                    except:
-                        audio_array = None
-                        duration = 0.0
-                    dataset_data.append({
-                        'id': f"sample_{idx}",
-                        'QuestionText': '',  # No question available from local files only
-                        'answer': '',  # No answer available from local files only
-                        'duration': duration,
-                        'audio': {
-                            'array': audio_array,
-                            'sampling_rate': 16000,
-                            'path': audio_file
-                        }
-                    })
-            else:
-                # Load dataset data from registry
+            if dataset_obj is not None:
                 registry_data = dataset_obj.load(limit=0)
                 print(f"Loaded {len(registry_data)} samples from registry")
-                
-                # Convert to list format and map to local audio files
-                dataset_data = []
-                for idx, item in enumerate(registry_data):
-                    # Extract question text
-                    question_text = item.get("instruction", "")
-                    if not question_text:
-                        question_text = item.get("input", "")
-                    if not question_text:
-                        question_text = item.get("QuestionText", "")
-                    if not question_text:
-                        question_text = item.get("question", item.get("prompt", ""))
-                    
-                    # Extract answer
-                    answer = item.get("output", "")
-                    if not answer:
-                        answer = item.get("answer", "")
-                    
-                    # Use local audio file if available
-                    audio_path = None
-                    audio_array = None
-                    sampling_rate = 16000
-                    
-                    if local_audio_files and idx < len(local_audio_files):
-                        audio_path = local_audio_files[idx]
-                        try:
-                            # Try librosa first, then soundfile
-                            try:
-                                audio_array, sr = librosa.load(audio_path, sr=16000, mono=True)
-                                sampling_rate = 16000
-                            except Exception:
-                                audio, sample_rate = sf.read(audio_path)
-                                if len(audio.shape) > 1 and audio.shape[1] > 1:
-                                    audio = np.mean(audio, axis=1)
-                                if sample_rate != 16000:
-                                    from scipy import signal
-                                    audio = signal.resample(audio, int(len(audio) * 16000 / sample_rate))
-                                audio_array = audio.astype(np.float32)
-                                sampling_rate = 16000
-                        except Exception as e:
-                            print(f"Warning: Failed to load audio from {audio_path}: {e}")
-                            audio_array = None
-                    else:
-                        # Use audio from registry data
-                        audio_data = item.get("audio", {})
-                        if isinstance(audio_data, dict):
-                            audio_array = audio_data.get("array", None)
-                            sampling_rate = audio_data.get("sampling_rate", 16000)
-                            audio_path = audio_data.get("path", None)
-                    
-                    # Calculate duration
-                    duration = 0.0
-                    if audio_array is not None:
-                        try:
-                            duration = len(audio_array) / sampling_rate
-                        except:
-                            duration = 0.0
-                    
-                    dataset_data.append({
-                        "id": item.get("id", f"sample_{idx}"),
-                        "QuestionText": question_text,
-                        "answer": answer,
-                        "duration": duration,
-                        "audio": {
-                            "array": audio_array,
-                            "sampling_rate": sampling_rate,
-                            "path": audio_path
-                        }
-                    })
-                    
+                dataset_data = _build_dataset_data(registry_data)
         except Exception as registry_e:
-            print(f"Error loading from registry: {registry_e}")
-            traceback.print_exc()
-            return []
+            print(f"Warning: Failed to load from UltraEval-Audio registry: {registry_e}")
+
+    # Last fallback: local audio only
+    if (dataset_data is None or len(dataset_data) == 0) and local_audio_files:
+        print("Warning: Falling back to local-audio-only mode (no question/answer metadata)")
+        dataset_data = []
+        for idx, audio_file in enumerate(local_audio_files):
+            try:
+                try:
+                    audio_array, _ = librosa.load(audio_file, sr=16000, mono=True)
+                except Exception:
+                    audio, sample_rate = sf.read(audio_file)
+                    if len(audio.shape) > 1 and audio.shape[1] > 1:
+                        audio = np.mean(audio, axis=1)
+                    if sample_rate != 16000:
+                        audio = signal.resample(audio, int(len(audio) * 16000 / sample_rate))
+                    audio_array = audio.astype(np.float32)
+                duration = len(audio_array) / 16000.0
+            except Exception:
+                audio_array = None
+                duration = 0.0
+            dataset_data.append({
+                'id': f"sample_{idx}",
+                'QuestionText': '',
+                'answer': '',
+                'duration': duration,
+                'audio': {
+                    'array': audio_array,
+                    'sampling_rate': 16000,
+                    'path': audio_file
+                }
+            })
     
     if dataset_data is None or len(dataset_data) == 0:
         print("Error: Failed to load any dataset data")
@@ -2024,7 +1960,7 @@ def main():
     parser.add_argument('--model-path', '-m', type=str, default=None,
                         help='Path to the model directory (default: from MODEL_PATH env or hardcoded path)')
     parser.add_argument('--twinkstart-path', type=str, default=None,
-                        help='Path to TwinkStart root directory (default: /mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart)')
+                        help='Path to TwinkStart root directory (optional, e.g. /mnt/users/wangyuxuan-20250915/Audio/Datasets/TwinkStart)')
     # Judge mode arguments
     parser.add_argument('--judge-model-path', type=str, default=None,
                         help='Judge model path (for local model, used in judge mode)')
@@ -2546,7 +2482,7 @@ def main():
                     **inputs,
                     use_audio_in_video=True,
                     return_audio=False,
-                    thinker_max_new_tokens=1100,  
+                    thinker_max_new_tokens=128,  
                     thinker_do_sample=False,
                     pad_token_id=processor.tokenizer.eos_token_id,
                     past_key_values=past_key_values

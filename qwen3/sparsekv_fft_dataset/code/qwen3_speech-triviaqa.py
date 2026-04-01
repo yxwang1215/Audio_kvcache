@@ -286,15 +286,18 @@ def update_sparsemm_budget(model, prefill_token_count):
         budget_ratio = ENV_BUDGET
         actual_budget = int(prefill_token_count * budget_ratio)
     
-    # Ensure budget is at least window_size to avoid errors
-    # Note: Only SparseKV/SparseMM needs this minimum budget constraint
-    # Other methods (SnapKV, AdaKV, PyramidKV, MixKV) don't need this constraint
-    if KV_METHOD in ("sparsekv", "sparsemm"):
+    # Ensure budget is always larger than window_size for clusters that
+    # require `max_capacity_prompt - window_size > 0`.
+    # This applies to SparseMM as well as SnapKV/PyramidKV/MixKV style clusters.
+    if KV_METHOD in ("sparsekv", "sparsemm", "snapkv", "pyramidkv", "mixkv"):
         min_budget = ENV_WINDOW_SIZE + 1
         if actual_budget < min_budget:
             actual_budget = min_budget
-            if ENV_BUDGET_IS_RATIO:
-                print(f"[SparseMM] Warning: Calculated budget {int(prefill_token_count * ENV_BUDGET)} is too small, using minimum {min_budget}")
+            print(
+                f"[SparseMM] Warning: Calculated budget {int(prefill_token_count * ENV_BUDGET) if ENV_BUDGET_IS_RATIO else int(ENV_BUDGET)} "
+                f"is too small for window_size={ENV_WINDOW_SIZE}, using minimum {min_budget}",
+                flush=True,
+            )
     
     # Update budget in all layers
     base_model = model.thinker.model
@@ -1660,6 +1663,8 @@ def main():
                         help='Path to the model directory (default: from MODEL_PATH env or hardcoded path)')
     parser.add_argument('--twinkstart-path', type=str, default=None,
                         help='Path to TwinkStart root directory (default: /mnt/users/wangyuxuan-20250915/Audio/UltraEval-Audio/raw/TwinkStart)')
+    parser.add_argument('--thinker-max-new-tokens', type=int, default=None,
+                        help='Maximum number of new tokens for thinker generation (default: THINKER_MAX_NEW_TOKENS env or 128)')
     # Judge mode arguments
     parser.add_argument('--judge-model-path', type=str, default=None,
                         help='Judge model path (for local model, used in judge mode)')
@@ -1723,6 +1728,11 @@ def main():
     sample_limit = int(os.environ.get("SAMPLE_LIMIT", 0))
     if sample_limit > 0:
         print(f"Sample limit set to: {sample_limit}")
+
+    thinker_max_new_tokens = args.thinker_max_new_tokens
+    if thinker_max_new_tokens is None:
+        thinker_max_new_tokens = int(os.environ.get("THINKER_MAX_NEW_TOKENS", 128))
+    print(f"Thinker max new tokens: {thinker_max_new_tokens}")
 
     
     # Determine output file paths
@@ -2179,7 +2189,7 @@ def main():
                     **inputs,
                     use_audio_in_video=True,
                     return_audio=False,
-                    thinker_max_new_tokens=1100,  
+                    thinker_max_new_tokens=thinker_max_new_tokens,
                     thinker_do_sample=False,
                     pad_token_id=processor.tokenizer.eos_token_id,
                     past_key_values=past_key_values

@@ -1,0 +1,24 @@
+\begin{algorithm}[tb]
+   \caption{Spectral Attention Smoothing (SAS)}
+   \label{alg:sas}
+\begin{algorithmic}[1]
+   \STATE {\bfseries Input:} Attention scores $A \in \mathbb{R}^{H \times L}$, cutoff ratio $\gamma$, mixing ratio $\alpha$.
+   \STATE {\bfseries Output:} Smoothed scores $\tilde{A}$.
+   
+   \FOR{each head $h = 1$ {\bfseries to} $H$}
+      \STATE $x \gets A[h,:]$, $X \gets \text{RFFT}(x) \in \mathbb{C}^{L'}$, where $L' = \lfloor L/2 \rfloor + 1$
+      
+      \STATE \COMMENT{Adaptive energy-based cutoff determination}
+      \STATE $e \gets |X|^2$, $c \gets \text{cumsum}(e)$
+      \STATE Find smallest $k$ such that $c[k] \ge c[L'-1] \cdot \gamma$
+      
+      \STATE \COMMENT{Frequency-domain filtering}
+      \STATE $M \gets \mathbf{1}_{0:k} \cup \mathbf{0}_{k:L'}$ \COMMENT{Keep low frequencies}
+      \STATE $\hat{x} \gets \text{IRFFT}(X \odot M, n=L)$
+      
+      \STATE \COMMENT{Residual mixing}
+      \STATE $\tilde{A}[h,:] \gets (1 - \alpha) \cdot x + \alpha \cdot \hat{x}$
+   \ENDFOR
+   \STATE \textbf{return} $\tilde{A}$
+\end{algorithmic}
+\end{algorithm}

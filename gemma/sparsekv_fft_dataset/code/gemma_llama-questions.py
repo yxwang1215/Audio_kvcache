@@ -419,7 +419,8 @@ class GlobalTimingStats:
                 "avg_total_gpu_time": 0.0,
                 "avg_decode_time": 0.0,
                 "total_decode_tokens": 0,
-                "avg_tps": 0.0
+                "avg_tps": 0.0,
+                "overall_tps": 0.0
             }
         
         total_wall = sum(r["wall_time"] for r in self.timing_records)
@@ -1858,7 +1859,7 @@ def main():
             
             # Load head score file
             # Priority 1: uniform or utils unavailable -> no file load
-            if ENV_HEAD_SCORE_FILE == "uniform" or not AUDIO_HEAD_UTILS_AVAILABLE:
+            if ENV_HEAD_SCORE_FILE == "uniform":
                 print(f"[SparseMM] Using uniform head score distribution")
                 head_score_data = {
                     'scores': [1.0 / (num_hidden_layers * num_attention_heads)] * (num_hidden_layers * num_attention_heads),
@@ -2020,7 +2021,8 @@ def main():
             full_user_prompt = prompt_text
 
             
-            # NOTE: Only audio is provided to the model - question text is removed to force model to extract question from audio
+            # Build messages with audio and prompt text
+            # The prompt text instructs the model to answer the question from the audio
             messages = [
                 {
                     "role": "system",
@@ -2031,7 +2033,8 @@ def main():
                 {
                     "role": "user",
                     "content": [
-                        {"type": "audio", "audio": audio_np}
+                        {"type": "audio", "audio": audio_np},
+                        {"type": "text", "text": prompt_text}
                     ]
                 }
             ]
@@ -2130,14 +2133,15 @@ def main():
             # Initialize cache for SparseMM if enabled
             # NOTE: Create fresh cache for each sample to avoid state leakage
             # - SnapKV: uses standard DynamicCache (uniform compression, all heads same length)
-            # - AdaKV/SparseMM/PyramidKV/MixKV: uses DynamicCacheSplitHeadFlatten (variable-length per head)
+            # - AdaKV/SparseMM/MixKV: uses DynamicCacheSplitHeadFlatten (variable-length per head)
+            # - PyramidKV: uses DynamicCache (based on SnapKVCluster, uniform compression)
             past_key_values = None
             if USE_SPARSEKV and sparsemm_enabled:
-                if KV_METHOD in ("snapkv", "tova"):
-                    # SnapKV and TOVA use standard DynamicCache because all heads have the same compressed length
+                if KV_METHOD in ("snapkv", "tova", "pyramidkv"):
+                    # SnapKV, TOVA, and PyramidKV use standard DynamicCache because all heads have the same compressed length
                     past_key_values = DynamicCache()
                 else:
-                    # AdaKV, SparseMM, PyramidKV, MixKV use DynamicCacheSplitHeadFlatten
+                    # AdaKV, SparseMM, MixKV use DynamicCacheSplitHeadFlatten
                     past_key_values = DynamicCacheSplitHeadFlatten()
             
             # Measure prefill time: generate only 1 token to measure prefill phase
@@ -2161,8 +2165,8 @@ def main():
             if USE_SPARSEKV and sparsemm_enabled:
                 reset_sparsemm_state(model)
                 clear_model_cache(model)  # Clear model cache to prevent state leakage
-                if KV_METHOD in ("snapkv", "tova"):
-                    # SnapKV and TOVA use standard DynamicCache
+                if KV_METHOD in ("snapkv", "tova", "pyramidkv"):
+                    # SnapKV, TOVA, and PyramidKV use standard DynamicCache
                     past_key_values = DynamicCache()  # Create fresh cache
                 else:
                     past_key_values = DynamicCacheSplitHeadFlatten()  # Create fresh cache

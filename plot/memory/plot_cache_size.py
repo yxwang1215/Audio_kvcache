@@ -32,17 +32,33 @@ cache_sizes = {
 # Full KV Cache - 在所有 budget 下都是同一个值
 fullkv_cache_size = 0.202972412109375
 
-# 更美观的配色方案 - 使用学术论文常用的专业配色
+# 更浅的配色方案 + 斜线阴影（hatch）
 colors = {
-    'fullkv': '#4C72B0',      # 深蓝色 (seaborn blue)
-    'snapkv': '#C44E52',      # 砖红色 (seaborn red)
-    'adakv': '#55A868',       # 森林绿色 (seaborn green)
-    'audiokv': '#DD8452',     # 珊瑚橙色 (seaborn orange)
+    'fullkv': '#AFC4E6',
+    'snapkv': '#E8B4B8',
+    'adakv': '#BFE3C6',
+    'audiokv': '#F1CFAF',
+}
+
+edge_colors = {
+    'fullkv': '#3B5A88',
+    'snapkv': '#9E4D52',
+    'adakv': '#3E7D50',
+    'audiokv': '#A76637',
+}
+
+hatches = {
+    'fullkv': '/',
+    'snapkv': '/',
+    'adakv': '/',
+    'audiokv': '/',
 }
 
 # 准备绘图数据
 x = np.arange(len(budgets))
-width = 0.18  # 柱子宽度
+width = 0.155
+inner_gap = 0.02
+step = width + inner_gap
 
 # 提取各方法的数据 (顺序: Full KV, SnapKV, AdaKV, AudioKV)
 fullkv_sizes = [fullkv_cache_size] * len(budgets)  # Full KV 在所有 budget 下相同
@@ -54,15 +70,18 @@ audiokv_sizes = [cache_sizes[b]['audiokv'] for b in budgets]
 fig, ax = plt.subplots(figsize=(10, 6))
 
 # 绘制柱状图 - 4个方法 (顺序: Full KV, SnapKV, AdaKV, AudioKV)
-offset = width * 1.5
-bars_fullkv = ax.bar(x - offset, fullkv_sizes, width, label='Full KV', 
-                     color=colors['fullkv'], edgecolor='none')
-bars_snapkv = ax.bar(x - width/2, snapkv_sizes, width, label='SnapKV', 
-                     color=colors['snapkv'], edgecolor='none')
-bars_adakv = ax.bar(x + width/2, adakv_sizes, width, label='AdaKV', 
-                    color=colors['adakv'], edgecolor='none')
-bars_audiokv = ax.bar(x + offset, audiokv_sizes, width, label='AudioKV', 
-                      color=colors['audiokv'], edgecolor='none')
+bars_fullkv = ax.bar(x - 1.5 * step, fullkv_sizes, width, label='Full KV', 
+                     color=colors['fullkv'], hatch=hatches['fullkv'],
+                     edgecolor=edge_colors['fullkv'], linewidth=1.2)
+bars_snapkv = ax.bar(x - 0.5 * step, snapkv_sizes, width, label='SnapKV', 
+                     color=colors['snapkv'], hatch=hatches['snapkv'],
+                     edgecolor=edge_colors['snapkv'], linewidth=1.2)
+bars_adakv = ax.bar(x + 0.5 * step, adakv_sizes, width, label='AdaKV', 
+                    color=colors['adakv'], hatch=hatches['adakv'],
+                    edgecolor=edge_colors['adakv'], linewidth=1.2)
+bars_audiokv = ax.bar(x + 1.5 * step, audiokv_sizes, width, label='AudioKV', 
+                      color=colors['audiokv'], hatch=hatches['audiokv'],
+                      edgecolor=edge_colors['audiokv'], linewidth=1.2)
 
 # 设置坐标轴
 ax.set_ylabel('memory', fontsize=21, fontweight='bold')

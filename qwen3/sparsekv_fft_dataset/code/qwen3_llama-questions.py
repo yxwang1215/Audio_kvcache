@@ -2228,7 +2228,7 @@ def main():
                     **inputs,
                     use_audio_in_video=True,
                     return_audio=False,
-                    thinker_max_new_tokens=1100,  
+                    thinker_max_new_tokens=128,  
                     thinker_do_sample=False,
                     pad_token_id=processor.tokenizer.eos_token_id,
                     past_key_values=past_key_values

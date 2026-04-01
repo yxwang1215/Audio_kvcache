@@ -18,6 +18,10 @@ plt.rcParams['axes.unicode_minus'] = False
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
 plt.rcParams['savefig.bbox'] = 'tight'
+plt.rcParams['pdf.fonttype'] = 42  # force Type 1/42 fonts in outputs
+plt.rcParams['ps.fonttype'] = 42
+plt.rcParams['pdf.use14corefonts'] = True
+plt.rcParams['ps.useafm'] = True
 
 # 数据矩阵
 data = np.array([

@@ -1768,8 +1768,8 @@ def asr_transcribe(processor, model, audio_np: np.ndarray, sr: int, max_new_toke
     # - Otherwise, let model use default cache (fastest)
     if sparsem_enabled:
         # Determine which cache type to use based on KV_METHOD
-        if KV_METHOD in ("snapkv", "tova", "knorm", "headkv"):
-            # SnapKV, TOVA and KNorm use standard DynamicCache because all heads have the same compressed length
+        if KV_METHOD in ("snapkv", "tova", "pyramidkv", "knorm", "headkv"):
+            # SnapKV, TOVA, PyramidKV and KNorm use standard DynamicCache because all heads have the same compressed length
             generate_kwargs["past_key_values"] = DynamicCache()
         else:
             # AdaKV, SparseMM, PyramidKV, MixKV use DynamicCacheSplitHeadFlatten

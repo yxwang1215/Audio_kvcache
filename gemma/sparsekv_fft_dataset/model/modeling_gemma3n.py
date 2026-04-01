@@ -2121,9 +2121,10 @@ class Gemma3nTextAttentionAdaKV(Gemma3nTextAttention):
                         key_states = key_states.to(query_states.device)
                         value_states = value_states.to(query_states.device)
                 
-                # Repeat KV for GQA and set key_states_attn/value_states_attn for attention computation
-                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
-                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                # IMPORTANT: Do NOT call repeat_kv here.
+                # eager_attention_forward will handle GQA expansion once.
+                key_states_attn = key_states
+                value_states_attn = value_states
                 # Skip AdaKV processing - use standard attention below
             elif is_prefill:
                 # PREFILL PHASE for non-shared layers
@@ -2278,19 +2279,10 @@ class Gemma3nTextAttentionAdaKV(Gemma3nTextAttention):
             # Update cache with current KV states
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-            # Some custom cache implementations (e.g. AdaKV / SplitHeadFlatten variants)
-            # may still return flattened 2D tensors here. In that case, repeat_kv (which
-            # expects [batch, num_kv_heads, seqlen, head_dim]) will crash with a shape
-            # unpack error. To be robust, only apply repeat_kv when we indeed receive 4D
-            # tensors, otherwise fall back to using the cache output directly.
-            if key_states.dim() == 4 and value_states.dim() == 4:
-                # Repeat KV for GQA
-                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
-                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
-            else:
-                # Already flattened / incompatible with repeat_kv; use as-is
-                key_states_attn = key_states
-                value_states_attn = value_states
+            # IMPORTANT: Do NOT call repeat_kv here.
+            # eager_attention_forward will handle GQA expansion once.
+            key_states_attn = key_states
+            value_states_attn = value_states
         else:
             # No cache or DynamicCacheSplitHeadFlatten that wasn't handled above - use original KV
             key_states_attn = key_states
@@ -2409,9 +2401,10 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
                         key_states = key_states.to(query_states.device)
                         value_states = value_states.to(query_states.device)
                 
-                # Repeat KV for GQA and set key_states_attn/value_states_attn for attention computation
-                key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
-                value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+                # IMPORTANT: Do NOT call repeat_kv here.
+                # eager_attention_forward will handle GQA expansion once.
+                key_states_attn = key_states
+                value_states_attn = value_states
                 # Skip PyramidKV processing - use standard attention below
             elif is_prefill:
                 # PREFILL PHASE for non-shared layers
@@ -2495,8 +2488,10 @@ class Gemma3nTextAttentionPyramidKV(Gemma3nTextAttention):
             # NOTE: This branch is ONLY for standard DynamicCache, NOT for DynamicCacheSplitHeadFlatten
             # DynamicCacheSplitHeadFlatten returns 2D tensors which are incompatible with repeat_kv
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            key_states_attn = repeat_kv(key_states, self.num_key_value_groups)
-            value_states_attn = repeat_kv(value_states, self.num_key_value_groups)
+            # IMPORTANT: Do NOT call repeat_kv here.
+            # eager_attention_forward will handle GQA expansion once.
+            key_states_attn = key_states
+            value_states_attn = value_states
         else:
             # No cache or DynamicCacheSplitHeadFlatten that wasn't handled above - use original KV
             key_states_attn = key_states

@@ -2,23 +2,21 @@
 # speech-triviaqa Judge 打分脚本
 
 set -e
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-3}"  
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-1}"  
 export JUDGE_API_MODEL="${JUDGE_API_MODEL:-gemini-2.5-flash}"  
-export JUDGE_API_KEY="${JUDGE_API_KEY:-sk-nSeZoIkSf8DGjeO5IvHnZpEc9O0QqeJrUyiJ5Oij55LW4QjF}"  # API Key
-export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-http://123.129.219.111:3000/v1}"
-export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_triviaqa_Results/SparseKV/budget0.2_topk16_alpha1_beta1_gamma1_1216}" 
+export JUDGE_API_KEY="${JUDGE_API_KEY:-${OPENAI_API_KEY:-sk-BQv7PBMJZ9Iaff5EpguCrUNHTuP6QobfUma3cKguHeUH1GLc}}"  # 建议通过环境变量注入
+export OPENAI_API_KEY="${OPENAI_API_KEY:-${JUDGE_API_KEY}}"
+export JUDGE_API_BASE_URL="${JUDGE_API_BASE_URL:-https://yunwu.ai/v1}"
+export OUTPUT_ROOT="${OUTPUT_ROOT:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_triviaqa_Results}"
+export BUDGET="${BUDGET:-0.4}"
+export SPARSEKV_HEAD_SCORE_PATH="${SPARSEKV_HEAD_SCORE_PATH:-/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen3_omni/head_score/audio_head_scores_topk16_alpha1_beta1_gamma1.json}"
 
-if [ -n "${INFERENCE_OUTPUT_FILE}" ]; then
-    # 如果 INFERENCE_OUTPUT_FILE 被显式指定，从它推导 OUTPUT_DIR
-    export OUTPUT_DIR="$(dirname "${INFERENCE_OUTPUT_FILE}")"
-else
-    # 否则使用默认 OUTPUT_DIR，然后构建 INFERENCE_OUTPUT_FILE
-    export OUTPUT_DIR="${OUTPUT_DIR:-/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen3-Omni-30B-A3B-Instruct/datasets/speech_triviaqa_Results/SparseKV/budget0.8}"
-    export INFERENCE_OUTPUT_FILE="${OUTPUT_DIR}/speech_triviaqa_results_qwen3.json"
-fi
+# KV Cache compression method: sparsekv, snapkv, adakv, pyramidkv
+METHOD_MODE="${1:-${METHOD_MODE:-remaining}}"
+METHOD_MODE="$(printf '%s' "${METHOD_MODE}" | tr '[:upper:]' '[:lower:]')"
 
-export JUDGE_OUTPUT_FILE="${JUDGE_OUTPUT_FILE:-${OUTPUT_DIR}/speech_triviaqa_results_qwen3_judge.json}"
-export FORCE_REJUDGE="${FORCE_REJUDGE:-true}"
+export JUDGE_OUTPUT_FILE="${JUDGE_OUTPUT_FILE:-}"
+export FORCE_REJUDGE="${FORCE_REJUDGE:-false}"
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -28,21 +26,30 @@ NC='\033[0m'
 echo -e "${GREEN}=== 启动 speech-triviaqa Judge 打分 ===${NC}"
 echo "Config: CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}"
 
-# 检查输入文件是否存在
-if [ ! -f "${INFERENCE_OUTPUT_FILE}" ]; then
-    echo -e "${RED}Error: 推理结果文件不存在: ${INFERENCE_OUTPUT_FILE}${NC}"
-    echo -e "${RED}请先运行推理脚本: bash run_speech-triviaqa_inference.sh${NC}"
-    exit 1
-fi
-
-echo "Input file: ${INFERENCE_OUTPUT_FILE}"
-echo "Output file: ${JUDGE_OUTPUT_FILE}"
-
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CODE_DIR="$(dirname "$SCRIPT_DIR")/code"
 
 source /mnt/users/wangyuxuan-20250915/miniconda/etc/profile.d/conda.sh
+
+is_completed_json_file() {
+    local json_file="$1"
+    [ -f "${json_file}" ] || return 1
+    python - "${json_file}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if isinstance(data, dict) and data.get("status") == "completed":
+        sys.exit(0)
+except Exception:
+    pass
+sys.exit(1)
+PY
+}
 
 # 判断使用哪种 judge 模型
 JUDGE_ARGS=""
@@ -52,6 +59,7 @@ if [ -n "${JUDGE_MODEL_PATH}" ]; then
 elif [ -n "${JUDGE_API_MODEL}" ]; then
     JUDGE_ARGS="--judge-api-model ${JUDGE_API_MODEL}"
     echo -e "${BLUE}Using API judge model: ${JUDGE_API_MODEL}${NC}"
+    echo -e "${BLUE}API Provider: yunwu.ai (OpenAI-compatible)${NC}"
     
     # 添加 API Key 和 Base URL 参数
     if [ -n "${JUDGE_API_KEY}" ]; then
@@ -61,6 +69,10 @@ elif [ -n "${JUDGE_API_MODEL}" ]; then
     if [ -n "${JUDGE_API_BASE_URL}" ]; then
         JUDGE_ARGS="${JUDGE_ARGS} --judge-api-base-url \"${JUDGE_API_BASE_URL}\""
         echo -e "${BLUE}API Base URL: ${JUDGE_API_BASE_URL}${NC}"
+    fi
+    if [ -z "${JUDGE_API_KEY}" ] && [ -z "${OPENAI_API_KEY}" ]; then
+        echo -e "${RED}Error: 未检测到 API Key。请先设置 JUDGE_API_KEY 或 OPENAI_API_KEY${NC}"
+        exit 1
     fi
 else
     echo -e "${RED}Error: 必须指定 JUDGE_MODEL_PATH 或 JUDGE_API_MODEL${NC}"
@@ -74,16 +86,123 @@ if [ "${FORCE_REJUDGE}" = "true" ]; then
     echo -e "${BLUE}Force rejudge enabled: will re-process all samples${NC}"
 fi
 
-# 打分（使用 LLM as Judge）
-echo -e "${GREEN}>>> 裁判打分...${NC}"
-conda activate Qwen3_2 && \
-cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
-eval python code/qwen3_speech-triviaqa.py \
-    --mode judge \
-    --input-file "${INFERENCE_OUTPUT_FILE}" \
-    --output-file "${JUDGE_OUTPUT_FILE}" \
-    ${JUDGE_ARGS}
+run_one_method() {
+    local method_name="$1"
+    local method_display="$2"
+    local fft_state="${3:-true}"
+    local sparsekv_head_score_mode="${4:-none}"
+    local fft_tag
+    local output_label
+    local output_dir
+    local inference_output_file
+    local judge_output_file
+    local score_tag
 
-echo -e "${GREEN}=== Judge 打分完成 ===${NC}"
-echo -e "${BLUE}打分结果保存在: ${JUDGE_OUTPUT_FILE}${NC}"
+    fft_state="$(printf '%s' "${fft_state}" | tr '[:upper:]' '[:lower:]')"
+    if [ "${fft_state}" = "true" ]; then
+        fft_tag="FFTOn"
+    else
+        fft_tag="FFTOff"
+    fi
+
+    if [ "${method_name}" = "sparsekv" ]; then
+        case "${sparsekv_head_score_mode}" in
+            uniform)
+                output_label="${method_display}_Uniform_${fft_tag}"
+                score_tag="uniform"
+                ;;
+            head_path)
+                output_label="${method_display}_HeadPath_${fft_tag}"
+                score_tag="head_path"
+                ;;
+            *)
+                output_label="${method_display}_${fft_tag}"
+                score_tag="default"
+                ;;
+        esac
+    else
+        output_label="${method_display}"
+        score_tag="default"
+    fi
+
+    output_dir="${OUTPUT_ROOT}/${output_label}/budget${BUDGET}"
+    inference_output_file="${output_dir}/speech_triviaqa_results_qwen3.json"
+    judge_output_file="${JUDGE_OUTPUT_FILE:-${output_dir}/speech_triviaqa_results_qwen3_judge.json}"
+
+    if [ ! -f "${inference_output_file}" ]; then
+        echo -e "${RED}Error: 推理结果文件不存在: ${inference_output_file}${NC}"
+        echo -e "${RED}请先运行第一阶段推理脚本，或检查 OUTPUT_ROOT/BUDGET/METHOD_MODE 是否一致${NC}"
+        exit 1
+    fi
+
+    if [ "${FORCE_REJUDGE}" != "true" ] && is_completed_json_file "${judge_output_file}"; then
+        echo -e "${BLUE}Skip completed judge output: ${judge_output_file}${NC}"
+        return 0
+    fi
+
+    echo "Input file: ${inference_output_file}"
+    echo "Output file: ${judge_output_file}"
+    echo "Case: ${output_label} (${method_name}, ${score_tag}, FFT=${fft_state})"
+
+    echo -e "${GREEN}>>> 裁判打分...${NC}"
+    conda activate Qwen3_2 && \
+    cd /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/qwen3/sparsekv_fft_dataset && \
+    eval python code/qwen3_speech-triviaqa.py \
+        --mode judge \
+        --input-file "${inference_output_file}" \
+        --output-file "${judge_output_file}" \
+        ${JUDGE_ARGS}
+
+    echo -e "${GREEN}=== Judge 打分完成 ===${NC}"
+    echo -e "${BLUE}打分结果保存在: ${judge_output_file}${NC}"
+}
+
+case "${METHOD_MODE}" in
+    all)
+        run_one_method "sparsekv" "SparseKV" "false" "head_path"
+        echo
+        run_one_method "sparsekv" "SparseKV" "true" "head_path"
+        echo
+        run_one_method "sparsekv" "SparseKV" "true" "uniform"
+        echo
+        run_one_method "snapkv" "SnapKV"
+        echo
+        run_one_method "adakv" "AdaKV"
+        echo
+        run_one_method "pyramidkv" "PyramidKV"
+        ;;
+    remaining)
+        run_one_method "sparsekv" "SparseKV" "false" "head_path"
+        echo
+        run_one_method "sparsekv" "SparseKV" "true" "head_path"
+        echo
+        run_one_method "sparsekv" "SparseKV" "true" "uniform"
+        echo
+        run_one_method "snapkv" "SnapKV"
+        echo
+        run_one_method "adakv" "AdaKV"
+        echo
+        run_one_method "pyramidkv" "PyramidKV"
+        ;;
+    sparsekv)
+        run_one_method "sparsekv" "SparseKV" "false" "head_path"
+        echo
+        run_one_method "sparsekv" "SparseKV" "true" "head_path"
+        echo
+        run_one_method "sparsekv" "SparseKV" "true" "uniform"
+        ;;
+    snapkv)
+        run_one_method "snapkv" "SnapKV"
+        ;;
+    adakv)
+        run_one_method "adakv" "AdaKV"
+        ;;
+    pyramidkv)
+        run_one_method "pyramidkv" "PyramidKV"
+        ;;
+    *)
+        echo -e "${RED}Usage: bash $0 [remaining|all|sparsekv|snapkv|adakv|pyramidkv]${NC}"
+        exit 1
+        ;;
+esac
 
