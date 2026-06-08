@@ -1,0 +1,54 @@
+% Rebuttal response to Reviewer jV7P-Q1
+% Topic: Specification of the offline head profiling dataset
+
+\paragraph{Response to Reviewer jV7P-Q1.}
+We thank the reviewer for highlighting this reproducibility gap.
+We agree that Figure~1, the head-importance scores, and the resulting budget-allocation policy all depend on the offline calibration corpus, and we will add an explicit specification in the revision.
+Below we summarize the calibration set used in all reported experiments; the same corpus is used across model families, while the resulting head scores are \emph{model-specific}.
+
+\paragraph{Calibration corpus.}
+\begin{itemize}
+    \item \textbf{Dataset:} LibriSpeech (\texttt{test-other} split), packaged in the AudioMarathon benchmark release.
+    \item \textbf{Language coverage:} English read speech only (LibriSpeech is monolingual).
+    \item \textbf{Pool size:} 2{,}864 utterances with paired audio and precomputed WhisperX word-level alignments (33 speakers; utterances sorted by file name).
+    \item \textbf{Utterances used for head scoring:} 2{,}605 utterances successfully profiled and aggregated (259 utterances skipped due to missing/low-confidence alignments or failed runs).
+    \item \textbf{Disjoint from main LibriSpeech evaluation:} Table~1 LibriSpeech results use \texttt{test-clean} from LibriSpeech-Long; calibration uses \texttt{test-other}, so the profiling corpus does not overlap the reported LibriSpeech test split.
+\end{itemize}
+
+\paragraph{Profiling protocol (reproducible pipeline).}
+Head importance is estimated offline in three stages:
+\begin{enumerate}
+    \item \textbf{WhisperX alignment (precomputed once):} word-level timestamps and confidence scores stored as \texttt{\{utt\_id\}\_whisperx.json}; words with WhisperX score $\ge 0.95$ are retained.
+    \item \textbf{Attention-grounded forward pass (per target model):} for each utterance, run greedy ASR generation with prompt \texttt{``Please transcribe the audio.''}, hook decoder self-attention, and map each generated token to its WhisperX word span.
+    \item \textbf{Head-score aggregation:} for each layer--head, compute
+    $S_{\text{hit}}$, $S_{\text{attn}}$, $S_{\text{cov}}$ over aligned tokens and form
+    $S = \alpha S_{\text{hit}} + \beta S_{\text{attn}} + \gamma S_{\text{cov}}$
+    with $\alpha=\beta=\gamma=1.0$; check whether top-$K$ attention mass ($K{=}24$ for Qwen2.5-Omni-3B main runs) falls on the word-aligned audio-token span.
+\end{enumerate}
+The released JSON files (\texttt{audio\_head\_scores\_topk24\_alpha1\_beta1\_gamma1.json} for Qwen2.5-Omni-3B, analogous files for 7B/Gemma/Qwen3) are consumed at inference via \texttt{HEAD\_SCORE\_PATH}; no WhisperX or profiling pass is needed during evaluation.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{\textbf{Offline head-profiling calibration set (used for Figure~1 and all main-table \textsc{AudioKV} runs).}}
+\label{tab:rebuttal-head-profiling-corpus}
+\begin{tabular}{ll}
+\toprule
+\textbf{Field} & \textbf{Specification} \\
+\midrule
+Corpus & LibriSpeech \texttt{test-other} (AudioMarathon) \\
+Language & English \\
+Utterances (pool / used) & 2{,}864 / 2{,}605 \\
+Speakers & 33 \\
+Alignment tool & WhisperX (word score $\ge 0.95$) \\
+Profiling task & ASR: \texttt{``Please transcribe the audio.''} \\
+Top-$K$ for hit metric & 24 (3B), 16--64 ablated for other models \\
+Score weights $(\alpha,\beta,\gamma)$ & $(1.0, 1.0, 1.0)$ \\
+Overlap with LibriSpeech test in Table~1 & None (\texttt{test-other} vs.\ \texttt{test-clean}) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Revision plan.}
+We will (i) add Table~\ref{tab:rebuttal-head-profiling-corpus} and the protocol above to the main paper (Sec.~3 / implementation details), (ii) release the calibration manifest and model-specific head-score JSON files, and (iii) point to the public scripts \texttt{audio\_head/*/word\_attention\_analysis.py} and \texttt{batch\_generate\_head\_scores.py} so readers can reproduce Figure~1 and the allocation policy from the same 2{,}605-utterance LibriSpeech calibration set.

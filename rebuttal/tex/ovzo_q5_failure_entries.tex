@@ -1,0 +1,49 @@
+\begin{answer}
+    % Rebuttal response to ovZo-Q5
+    % Topic: Clarifying 0.0 entries and failure/metric handling in Table 1
+
+    \paragraph{Response to ovZo-Q5.}
+    We thank the reviewer for pointing out that the 0.0 entries in Table~1 need more explicit metric documentation.
+    We agree that the current text is too brief: a zero score should not be read as a missing result or an uncomputed metric.
+    In the revision, we will clarify that Table~1 reports bounded task accuracy, and that for error-rate metrics we convert raw WER/CER to accuracy by clipping at the lower bound:
+    \[
+        \mathrm{Acc}_{\mathrm{WER}}=\max(0, 100-\mathrm{WER}), \qquad
+        \mathrm{Acc}_{\mathrm{CER}}=\max(0, 100-\mathrm{CER}).
+    \]
+    Therefore, a displayed 0.0 means that the raw error rate reached or exceeded 100\%, or that an answer was judged incorrect for QA-style tasks; it does \emph{not} mean that the sample was dropped, that the metric failed to run, or that an empty placeholder was inserted.
+
+    \paragraph{Historical failure log audit.}
+    We audited historical outputs under \texttt{/Results} and found representative failures consistent with the reviewer's concern.
+    For a QA-style Table~1 setting, the historical log
+    \texttt{Gemma\_3n\_E4B\_it/.../speech\_web\_questions\_Results/PyramidKV/budget0.4/speech\_web\_questions\_results\_gemma\_judge.json}
+    has judge accuracy 0.0 on the processed sample.
+    The output is \emph{not empty}; instead, the model produces a fluent but degenerate response: for the question ``what does jamaican people speak?'' with references ``Jamaican Creole English Language'' / ``Jamaican English'', the hypothesis begins ``I understand you've sent a series of the word `Q' repeatedly...''.
+    Thus, this 0.0 is a semantic failure caused by corrupted audio/question grounding under compression, not an uncomputable score or metric clipping artifact.
+
+    For ASR-style metrics, we additionally inspected a poor historical French ASR case from
+    \texttt{Qwen2\_5\_Omni\_3B/ablation\_vy3d\_q3/multilingual-french/InverseAudioAware\_SSS/budget0.8/multilingual\_librispeech\_results\_qwen25.json}.
+    The worst utterance (\texttt{10179\_11051\_000117}, 14.26s) has reference ``oreille quand noe eut rassemble les animaux devant l'arche il se dit'', while the hypothesis prepends a long chapter/title phrase before the correct content.
+    Its raw word-level breakdown is:
+    \[
+        N=12,\quad S=3,\quad D=0,\quad I=16,\quad \mathrm{WER}=158.33\%.
+    \]
+    At the character level, the same case has:
+    \[
+        N=68,\quad S=2,\quad D=1,\quad I=85,\quad \mathrm{CER}=129.41\%.
+    \]
+    This example would be displayed as 0.0 under the bounded accuracy convention because the raw error rate exceeds 100\%.
+    Importantly, the failure is insertion-dominated rather than empty-output dominated.
+
+    \paragraph{Failure modes and rates.}
+    In the audited French ASR log above, all 486 samples produced non-empty outputs.
+    Only 3/486 samples had raw WER $\geq$100\%, and a simple repetition heuristic flagged 1/486 outputs as repetitive.
+    The dominant catastrophic cases were insertion-heavy prefix hallucinations, such as chapter or audiobook metadata being generated before the true transcript, rather than blank hypotheses or metric exceptions.
+    This distinction will be made explicit in the revised paper so readers can interpret zeros as bounded metric outcomes rather than missing data.
+
+    \paragraph{Planned revision.}
+    We will revise Table~1 and its caption/appendix in three ways.
+    First, we will state the exact bounded-accuracy conversion for WER/CER and the judge-accuracy protocol for QA-style tasks.
+    Second, we will add raw WER/CER diagnostics, including insertion/deletion/substitution counts for representative 0.0 cases.
+    Third, we will report failure categories (empty output, repetition collapse, insertion-heavy hallucination, and judge-incorrect semantic failure) so that the source of each catastrophic score is transparent.
+    This should make clear that the 0.0 entries correspond to real generated outputs that fail under the task metric, not to missing runs or uncomputable scores.
+\end{answer}

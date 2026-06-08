@@ -1,0 +1,67 @@
+% Rebuttal response to Reviewer hrcD, Comment 5
+% Topic: Cross-task discrepancies (ASR/translation vs. QA) under text-oriented KV eviction
+
+\begin{answer}
+\paragraph{Response to Reviewer hrcD, Comment 5 (cross-task baseline gap).}
+We thank the reviewer for raising this important point.
+The gap between ASR/translation and QA is not an evaluation artifact: it follows directly from \emph{what each metric penalizes} and from the \emph{dominant failure mode} of text-oriented KV eviction on long audio-conditioned generation.
+
+\paragraph{WER definition and why repetition can exceed 100\%.}
+Following the paper, for an utterance with reference transcript of length $N_{\mathrm{ref}}$ (in words) and hypothesis $\hat{\mathbf{y}}$, we compute word error rate via the minimum edit distance:
+\begin{equation}
+\mathrm{WER}
+=
+\frac{S + D + I}{N_{\mathrm{ref}}}
+\times 100\%,
+\label{eq:wer-rebuttal}
+\end{equation}
+where $S$, $D$, and $I$ are the numbers of substitutions, deletions, and insertions in the optimal alignment, respectively.
+The denominator is fixed by the reference length only; the numerator grows with hypothesis length when the model \emph{over-generates}.
+Therefore $\mathrm{WER}$ is \textbf{not} bounded above by 100\%: whenever insertions dominate, $S+D+I$ can exceed $N_{\mathrm{ref}}$.
+
+\paragraph{Worked example (repetition collapse $\Rightarrow$ WER $> 100\%$).}
+Consider a short clip whose reference is
+\[
+\mathbf{y}=\text{``please turn on the light''},\qquad N_{\mathrm{ref}}=5.
+\]
+Under aggressive uniform eviction, a typical degenerate hypothesis is a high-confidence phrase loop:
+\[
+\hat{\mathbf{y}}=\text{``please please please please please please turn on the light light light light light''}.
+\]
+One valid alignment is: match the first \texttt{please} and the trailing \texttt{turn on the light} (low $S$), but pay one insertion for every extra repeated word.
+With 5 extra \texttt{please} and 4 extra \texttt{light}, we have $I=9$ while $S{=}0$ and $D{=}0$, hence
+\[
+\mathrm{WER}=\frac{9}{5}\times 100\%=180\%.
+\]
+Equivalently, our reported \textbf{word accuracy} is $\max(0,\,100-\mathrm{WER})$; here it is clipped to \textbf{0.0\%}, which is why Table~1 shows near-zero ASR scores for collapsed baselines rather than a missing entry.
+On long-form audio ($N_{\mathrm{ref}}$ in the hundreds), the same failure mode---evicting time-aligned audio KV and entering an autoregressive repetition loop---can produce thousands of spurious words before the decode cap, driving $\mathrm{WER}$ far above 100\% (e.g., $I \gg N_{\mathrm{ref}}$ even if a short prefix accidentally matches the reference).
+
+\paragraph{Why ASR and translation are disproportionately hurt.}
+\begin{enumerate}
+    \item \textbf{Dense, order-sensitive targets.}
+    ASR and speech translation require a near one-to-one word alignment over the \emph{entire} output.
+    A single eviction mistake that removes a critical audio span does not merely lower local accuracy; it breaks global time alignment and often triggers repetition or hallucinated function-word loops during autoregressive decoding.
+    Every spurious repeated word is counted as an insertion in Eq.~\eqref{eq:wer-rebuttal}, so errors \emph{accumulate} along the decode horizon.
+
+    \item \textbf{Long effective context and heterogeneous heads.}
+    Audio prefill is orders of magnitude longer than text QA prompts.
+    Text-calibrated eviction (SnapKV/H2O/PyramidKV) assumes that locally high-attention tokens are sufficient; in audio, only a subset of heads maintain time-aligned attention to acoustic tokens.
+    Uniform eviction therefore removes globally necessary audio KV, which is catastrophic for sequential transcription but less so for short answers.
+
+    \item \textbf{Translation compounds the same mechanism.}
+    ST metrics (e.g., BLEU/CER) likewise penalize length mismatch and repeated $n$-grams; a repetition collapse yields many insertions and near-zero $n$-gram precision, analogous to the WER case above.
+\end{enumerate}
+
+\paragraph{Why QA baselines can still look relatively good.}
+Audio QA in our benchmark is evaluated with \textbf{accuracy} on a short discrete answer (often a single label or a brief span), not with Eq.~\eqref{eq:wer-rebuttal} over a long transcript.
+This changes sensitivity in three ways:
+\begin{itemize}
+    \item \textbf{Sparse supervision:} only the final answer token(s) determine the score; the model may err on verbose reasoning yet still select the correct option.
+    \item \textbf{Shorter generation horizon:} fewer decode steps mean fewer opportunities for repetition collapse to explode $I$ in the metric.
+    \item \textbf{Partial evidence sufficiency:} many questions are answerable from a local acoustic cue (e.g., instrument type, yes/no); retaining a small fraction of salient audio tokens can suffice, whereas ASR requires preserving \emph{distributed} evidence for every word in order.
+\end{itemize}
+Thus, the cross-task gap reflects a \textbf{task--metric interaction}: text-oriented KV eviction tends to fail on globally aligned, dense sequence generation (ASR/ST), while short-answer QA can mask partial cache loss.
+
+\paragraph{Planned revision.}
+We will add a short discussion subsection (with Eq.~\eqref{eq:wer-rebuttal} and the repetition example above) explaining why near-zero ASR accuracy corresponds to $\mathrm{WER}\gtrsim 100\%$ and why QA should not be used alone to judge audio KV-compression quality.
+\end{answer}

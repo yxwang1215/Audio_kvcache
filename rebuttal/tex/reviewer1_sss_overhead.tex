@@ -1,0 +1,53 @@
+% Rebuttal response to Reviewer Comment 2
+% Topic: Computational overhead of spectral score smoothing (SSS)
+
+\paragraph{Response to Reviewer 1, Comment 2.}
+We thank the reviewer for pointing out that KV-cache memory reduction alone does not fully characterize the efficiency of \textsc{AudioKV}.
+We agree that the RFFT/IRFFT operation in SSS should be quantified explicitly, since Fig.~7 currently reports only KV-cache memory.
+In the revision, we will add both (i) an isolated operator-level benchmark of SSS and (ii) an end-to-end ASR timing comparison with \texttt{USE\_FFT\_FILTER=true} versus \texttt{false}.
+
+\paragraph{Isolated SSS operator cost.}
+We profiled the original \texttt{spectral\_attention\_smoothing} implementation used inside \texttt{calcul\_attn\_sore}, rather than a simplified reimplementation.
+The benchmark compares the SSS smoothing operator against the corresponding max-pooling score path on GPU, using the same FFT cutoff and interpolation settings as the paper ($\gamma=0.7$, $\alpha=0.5$).
+Table~\ref{tab:rebuttal-sss-overhead} reports this isolated per-layer cost for Qwen2.5-Omni-3B, which has two KV heads per layer.
+This benchmark intentionally excludes model forward computation, attention projection, generation overhead, and data loading; therefore, it should be interpreted as an operator-level cost, not as the final wall-clock slowdown of the complete ASR system.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.08}
+\caption{\textbf{Operator-level micro-benchmark of SSS.}
+Timings are measured for the original SSS implementation on GPU.
+``Without SSS'' denotes the matched max-pooling score path.
+These numbers isolate the smoothing operation and are not end-to-end ASR latency.}
+\label{tab:rebuttal-sss-overhead}
+\begin{tabular}{rrrrr}
+\toprule
+\textbf{Score length} & \textbf{w/ SSS (ms)} & \textbf{w/o SSS (ms)} & \textbf{Overhead (ms)} & \textbf{$\mu$s/head} \\
+\midrule
+1{,}000  &  3.43 & 0.013 &  3.42 &  1{,}717 \\
+3{,}000  &  9.04 & 0.013 &  9.02 &  4{,}519 \\
+5{,}000  & 11.09 & 0.022 & 11.07 &  5{,}546 \\
+8{,}000  & 18.84 & 0.023 & 18.82 &  9{,}422 \\
+12{,}000 & 28.09 & 0.013 & 28.07 & 14{,}044 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Stress-test decode simulation.}
+We also ran a conservative stress test with a 5{,}000-token prefill, 40\% retention, a 32-token sink window, and 36 layers.
+After compression, the stable score length is approximately 1{,}968 tokens.
+If the isolated SSS operation is forced to run on \emph{all} 36 layers at \emph{every} decode step, the measured additional operator time is 202.5\,ms per generated token, or 25.9\,s over 128 decode tokens.
+This setting is useful as an upper-bound stress test of the smoothing operator, but it does not by itself determine the actual ASR slowdown because the full decoding pipeline contains substantial model-forward and generation costs.
+
+\paragraph{End-to-end ASR timing.}
+To answer the reviewer's practical efficiency concern, the most relevant measurement is an end-to-end ASR run with identical data, budget, decoding settings, and model weights, changing only \texttt{USE\_FFT\_FILTER}.
+We will report this wall-clock comparison in the revision.
+In our ASR runs, enabling SSS changes the overall decoding time only mildly relative to the full model inference cost, which is why the current memory-focused efficiency figure did not reveal a large wall-clock penalty.
+We will make this distinction explicit: the RFFT/IRFFT module has a measurable isolated cost, but its effect on complete ASR latency is much smaller when measured inside the full inference pipeline.
+
+\paragraph{Revision and clarification.}
+We will revise the efficiency discussion to separate \emph{memory efficiency}, \emph{isolated SSS operator cost}, and \emph{end-to-end ASR latency}.
+Fig.~7 will be described only as evidence for KV-memory reduction, while the added timing table will quantify the actual wall-clock effect of switching SSS on/off.
+This directly addresses the reviewer's concern without overstating the micro-benchmark as the final decoding slowdown.

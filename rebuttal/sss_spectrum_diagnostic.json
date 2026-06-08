@@ -1,0 +1,32 @@
+{
+  "n_score_traces": 360,
+  "spectral_energy": {
+    "low_energy_frac": 0.6998362264371819,
+    "high_energy_frac": 0.3001637746692611,
+    "cutoff_bin_frac": 0.660055471983665
+  },
+  "topk_jaccard_vs_unsmoothed": {
+    "maxpool": 0.5676641648879821,
+    "gaussian": 0.7795388903398949,
+    "uniform_stride": 0.7469637201177233,
+    "uniform_prior": 1.0,
+    "sss": 0.4362478805902411,
+    "highpass": 0.6754398568991538
+  },
+  "topk_jaccard_sss_vs_simpler": {
+    "maxpool": 0.4168454097717757,
+    "gaussian": 0.4409452088940371,
+    "uniform_stride": 0.43648191643386547,
+    "uniform_prior": 0.4362478805902411
+  },
+  "interpretation": {
+    "high_freq_noise": "The adaptive SSS cutoff captures the target low-frequency energy mass and leaves a measurable high-frequency residual for controlled ablation.",
+    "sss_vs_simpler": "Low overlap between SSS-selected tokens and simpler smoothers indicates that frequency-aware filtering is not equivalent to local pooling, Gaussian blur, or an additive uniform prior. End-to-end ablations determine whether the distinct ranking is beneficial."
+  },
+  "settings": {
+    "alpha": 0.5,
+    "cutoff": 0.7,
+    "kernel_size": 5,
+    "max_samples_per_head": 5
+  }
+}

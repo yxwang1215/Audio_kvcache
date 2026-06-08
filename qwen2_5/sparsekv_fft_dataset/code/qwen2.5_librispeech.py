@@ -995,11 +995,19 @@ def main():
 
     
     sample_limit = int(os.environ.get("SAMPLE_LIMIT", 0))
+    sample_fraction = float(os.environ.get("SAMPLE_FRACTION", 0))
+    thinker_max_new_tokens = int(os.environ.get("THINKER_MAX_NEW_TOKENS", 100))
     if sample_limit > 0:
         print(f"Sample limit set to: {sample_limit}")
+    elif sample_fraction > 0:
+        print(f"Sample fraction set to: {sample_fraction:.2%}")
+    print(f"Thinker max new tokens: {thinker_max_new_tokens}")
 
     
-    librispeech_path = '/mnt/users/wangyuxuan-20250915/Datasets/AudioMarathon/librispeech-long'
+    librispeech_path = os.environ.get(
+        "LIBRISPEECH_LONG_DIR",
+        "/mnt/users/wangyuxuan-20250915/Datasets/AudioMarathon/librispeech-long",
+    )
     
     # Determine output file paths
     # Priority: --output-file > --output-dir > RESULTS_DIR env > default
@@ -1249,6 +1257,10 @@ def main():
     if sample_limit > 0 and len(dataset) > sample_limit:
         dataset = dataset[:sample_limit]
         print(f"Applying sample limit, processing {len(dataset)} samples")
+    elif 0 < sample_fraction < 1:
+        sample_count = max(1, int(len(dataset) * sample_fraction))
+        dataset = dataset[:sample_count]
+        print(f"Applying sample fraction {sample_fraction:.2%}, processing {len(dataset)} samples")
 
     
     speaker_stats = defaultdict(int)
@@ -1463,7 +1475,7 @@ def main():
                     **inputs,
                     use_audio_in_video=True,
                     return_audio=False,
-                    thinker_max_new_tokens=100,  
+                    thinker_max_new_tokens=thinker_max_new_tokens,
                     thinker_do_sample=False,
                     pad_token_id=processor.tokenizer.eos_token_id,
                     past_key_values=past_key_values,

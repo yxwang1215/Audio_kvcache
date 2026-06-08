@@ -1,0 +1,27 @@
+\vspace{-4mm}
+\question{revjV7P}{jV7P-Q2: Comparison to Simpler Smoothers.}{There is no comparison to simpler smoothers that would isolate whether frequency-domain filtering specifically is doing the work.}
+\begin{answer}
+We added a controlled smoother ablation on Qwen2.5-Omni-3B with budget $\rho=0.4$, keeping SparseKV and head scores fixed while changing only the score smoother.
+We report completed 20\% MLS ASR subsets for Spanish (477), French (486), and German (679 utterances).
+
+\vspace{-3mm}
+\begin{table}[h]
+\centering
+\vspace{-3mm}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Task (WER $\downarrow$)} & \textbf{None} & \textbf{MaxPool} & \textbf{Gaussian} & \textbf{Uni-stride} & \textbf{Uni-prior} & \textbf{SSS} \\
+\midrule
+MLS Spanish (477) & 890.61 & 890.61 & 890.61 & 890.61 & 890.61 & \textbf{31.52} \\
+MLS French (486) & 747.97 & 747.97 & 747.97 & 747.97 & 747.97 & \textbf{24.90} \\
+MLS German (679) & 1417.18 & 1417.18 & 1417.18 & 1417.18 & 1417.18 & \textbf{60.28} \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\vspace{-3mm}
+Across all three MLS languages, non-spectral smoothers trigger repetitive decoding collapse (Spanish: 890.61 WER, 163/477 with $\ge 1000$ decode tokens; French: 747.97 WER, 153/486; German: 1417.18 WER, 292/679), whereas SSS restores stable generation (31.52/5, 24.90/2, and 60.28/10 WER/long-decode counts, respectively).
+Thus, the benefit is not explained by smoothing in general; frequency-domain filtering is specifically vital for stable cache selection under the same low budget.
+\end{answer}

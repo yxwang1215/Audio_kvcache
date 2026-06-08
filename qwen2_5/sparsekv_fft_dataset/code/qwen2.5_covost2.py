@@ -884,8 +884,11 @@ def main():
         method_is = prune_method
 
     sample_limit = int(os.environ.get("SAMPLE_LIMIT", 0))
+    sample_fraction = float(os.environ.get("SAMPLE_FRACTION", 0.0))
     if sample_limit > 0:
         print(f"Sample limit set to: {sample_limit}")
+    elif 0 < sample_fraction < 1:
+        print(f"Sample fraction set to: {sample_fraction:.2%}")
 
     # Determine output file paths
     if args.output_file:
@@ -1109,6 +1112,10 @@ def main():
         else:
             print(f"First sample content (first 100 chars): {str(dataset[0])[:100]}")
     
+    if sample_limit <= 0 and 0 < sample_fraction < 1:
+        sample_limit = max(1, int(len(dataset) * sample_fraction + 0.999999))
+        print(f"Applying sample fraction {sample_fraction:.2%}: {sample_limit}/{len(dataset)} samples")
+
     if sample_limit > 0 and len(dataset) > sample_limit:
         # Use select() for HuggingFace datasets instead of slicing
         if hasattr(dataset, 'select'):

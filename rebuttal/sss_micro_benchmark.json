@@ -1,0 +1,107 @@
+{
+  "device": "cuda",
+  "config": {
+    "mode": "all",
+    "device": "cuda",
+    "seq_lens": [
+      1000,
+      3000,
+      5000,
+      8000,
+      12000
+    ],
+    "num_layers": 36,
+    "num_kv_heads": 2,
+    "prefill_len": 5000,
+    "retention": 0.4,
+    "window": 32,
+    "decode_tokens": 128,
+    "warmup": 5,
+    "iters": 30,
+    "cutoff": 0.7,
+    "alpha": 0.5,
+    "kernel_size": 5,
+    "output_json": "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/sss_micro_benchmark.json",
+    "sample_limit": 5,
+    "e2e_output_dir": null,
+    "model_path": "/mnt/public/models/Qwen2.5-Omni-3B",
+    "gpu": "0",
+    "budget": 0.4,
+    "conda_env": null
+  },
+  "micro": [
+    {
+      "seq_len": 1000,
+      "num_layers": 1,
+      "num_kv_heads": 2,
+      "with_sss_ms": 127.294873046875,
+      "without_sss_ms": 0.0039594667653242745,
+      "overhead_ms": 127.29091358010967,
+      "overhead_pct": 3214849.9059237526,
+      "per_layer_sss_us": 127294.873046875,
+      "per_head_sss_us": 63647.4365234375
+    },
+    {
+      "seq_len": 3000,
+      "num_layers": 1,
+      "num_kv_heads": 2,
+      "with_sss_ms": 339.41637369791664,
+      "without_sss_ms": 0.003925333420435588,
+      "overhead_ms": 339.4124483644962,
+      "overhead_pct": 8646716.393504024,
+      "per_layer_sss_us": 339416.3736979166,
+      "per_head_sss_us": 169708.1868489583
+    },
+    {
+      "seq_len": 5000,
+      "num_layers": 1,
+      "num_kv_heads": 2,
+      "with_sss_ms": 655.47421875,
+      "without_sss_ms": 0.003925333420435588,
+      "overhead_ms": 655.4702934165796,
+      "overhead_pct": 16698461.588107413,
+      "per_layer_sss_us": 655474.21875,
+      "per_head_sss_us": 327737.109375
+    },
+    {
+      "seq_len": 8000,
+      "num_layers": 1,
+      "num_kv_heads": 2,
+      "with_sss_ms": 929.2451822916667,
+      "without_sss_ms": 0.0038912000755469004,
+      "overhead_ms": 929.241291091591,
+      "overhead_pct": 23880583.702984948,
+      "per_layer_sss_us": 929245.1822916666,
+      "per_head_sss_us": 464622.5911458333
+    },
+    {
+      "seq_len": 12000,
+      "num_layers": 1,
+      "num_kv_heads": 2,
+      "with_sss_ms": 1468.1337239583333,
+      "without_sss_ms": 0.0040277334551016486,
+      "overhead_ms": 1468.1296962248782,
+      "overhead_pct": 36450517.70656027,
+      "per_layer_sss_us": 1468133.7239583333,
+      "per_head_sss_us": 734066.8619791666
+    }
+  ],
+  "decode_sim": {
+    "prefill_len": 5000,
+    "retention": 0.4,
+    "window": 32,
+    "decode_tokens": 128,
+    "num_layers": 36,
+    "num_kv_heads": 2,
+    "compressed_score_len": 1968,
+    "per_decode_step_with_sss_ms": 4518.894791666667,
+    "per_decode_step_without_sss_ms": 0.7457792282104492,
+    "per_decode_step_overhead_ms": 4518.149012438456,
+    "per_decode_step_overhead_pct": 605829.2912340935,
+    "total_decode_sss_overhead_ms": 578323.0735921224,
+    "prefill_all_layers_with_sss_ms": 23495.685416666667,
+    "prefill_all_layers_without_sss_ms": 0.46551040013631184,
+    "sss_only_per_layer_per_step_us": 125524.85532407409,
+    "sss_only_per_head_per_step_us": 62762.427662037044
+  }
+}

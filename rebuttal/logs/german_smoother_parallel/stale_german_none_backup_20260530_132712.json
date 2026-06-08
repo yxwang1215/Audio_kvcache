@@ -1,0 +1,171 @@
+{
+  "model_name": "Qwen2.5-Omni-3B",
+  "dataset": "Multilingual LibriSpeech",
+  "status": "in_progress",
+  "progress": {
+    "processed": 7,
+    "total": 679,
+    "percentage": 1.0309278350515463
+  },
+  "current_statistics": {
+    "wer_mean": 1122.8950503943554,
+    "word_accuracy": -1022.8950503943554,
+    "wer_std": 1839.3720461564058,
+    "wer_min": 18.91891891891892,
+    "wer_max": 5090.909090909091,
+    "perfect_predictions": 0,
+    "valid_samples": 7,
+    "current_avg_wer": 1122.8950503943554,
+    "current_avg_accuracy": -1022.8950503943554
+  },
+  "speaker_count": 9,
+  "speaker_wer": {
+    "4705": 1122.8950503943554
+  },
+  "language_count": 1,
+  "language_wer": {
+    "german": 1122.8950503943554
+  },
+  "timing_stats": {
+    "count": 6,
+    "avg_wall_time": 20.930586936950686,
+    "avg_prefill_time": 0.16511331431070964,
+    "avg_total_gpu_time": 20.930586936950686,
+    "avg_decode_time": 20.765473622639973,
+    "total_decode_tokens": 3140,
+    "avg_tps": 23.650587661758717,
+    "overall_tps": 25.202089913458977
+  },
+  "config": {
+    "device": "cuda:7",
+    "timestamp": "20260529_134625",
+    "gpu_id": "7",
+    "pruning_config": {
+      "prune_ratio": 0.0,
+      "prune_method": "base"
+    },
+    "sample_limit": 679,
+    "data_path": "/mnt/users/wangyuxuan-20250915/Audio/Datasets/multilingual_librispeech"
+  },
+  "detailed_results": [
+    {
+      "idx": 0,
+      "id": "4705_13109_000000",
+      "language": "german",
+      "speaker_id": "4705",
+      "chapter_id": "13109",
+      "duration": 17.97,
+      "reference": "denken sie soeben weilten meine gedanken bei ihnen in adelaide und ich wünschte mir sie herzaubern zu können nun der zauber ist gelungen lachte münchhausen da bin ich und was mich herführt",
+      "hypothesis": "danken sie soeben meine gedanken bei ihnen in adelaide und ich lachte münchhausen da bin ich und was mich herführt",
+      "wer": 40.625,
+      "response_text": "danken sie soeben meine gedanken bei ihnen in adelaide und ich lachte münchhausen da bin ich und was mich herführt",
+      "decode_token_count": 31,
+      "prefill_time": 0.6506033935546875,
+      "decode_time": 1.4173341064453124,
+      "total_time": 2.0679375,
+      "tps": 21.87204827642813
+    },
+    {
+      "idx": 1,
+      "id": "4705_13109_000001",
+      "language": "german",
+      "speaker_id": "4705",
+      "chapter_id": "13109",
+      "duration": 14.349999999999966,
+      "reference": "also bei ihren technischen kenntnissen und ihrer erfindungsgabe auf diesem gebiet glaubt der lord keinen besseren ingenieur und kapitän für sein weltschiff finden zu können als sie",
+      "hypothesis": "also bei ihren technischen fähigkeiten und ihrem charakter glaubt der lord keinen besseren ingenieur und kapitän für seine welt zu finden als sie",
+      "wer": 37.03703703703704,
+      "response_text": "also bei ihren technischen fähigkeiten und ihrem charakter glaubt der lord keinen besseren ingenieur und kapitän für seine welt zu finden als sie",
+      "decode_token_count": 36,
+      "prefill_time": 0.16269334411621095,
+      "decode_time": 1.5634749755859374,
+      "total_time": 1.7261683197021482,
+      "tps": 23.025632365179636
+    },
+    {
+      "idx": 2,
+      "id": "4705_13109_000002",
+      "language": "german",
+      "speaker_id": "4705",
+      "chapter_id": "13109",
+      "duration": 16.45999999999998,
+      "reference": "das stimmt aber hören sie er schreibt seine entdeckung hebe die trennenden räume des weltalls auf und gestatte der reisen nach dem mond nach den planeten vielleicht gar in die fixsternwelt",
+      "hypothesis": "das stimmt aber hören sie er sagt die tiefen des universums auf und gestattet reisen nach dem mond nach den planeten vielleicht gar in die fiktionswelt",
+      "wer": 32.25806451612903,
+      "response_text": "das stimmt aber hören sie er sagt die tiefen des universums auf und gestattet reisen nach dem mond nach den planeten vielleicht gar in die fiktionswelt",
+      "decode_token_count": 40,
+      "prefill_time": 0.16446646118164063,
+      "decode_time": 1.712904296875,
+      "total_time": 1.8773707580566406,
+      "tps": 23.352151123081118
+    },
+    {
+      "idx": 3,
+      "id": "4705_13109_000003",
+      "language": "german",
+      "speaker_id": "4705",
+      "chapter_id": "13109",
+      "duration": 10.649999999999975,
+      "reference": "freut mich freut mich eine edle treue seele und ein gelungener mensch er befindet sich also immer noch in des lords diensten",
+      "hypothesis": "freut mich freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine fre",
+      "wer": 5090.909090909091,
+      "response_text": "freut mich freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine freut mich eine fre",
+      "decode_token_count": 1500,
+      "prefill_time": 0.1668402862548828,
+      "decode_time": 59.35578515625,
+      "total_time": 59.52262544250488,
+      "tps": 25.271336164644335
+    },
+    {
+      "idx": 4,
+      "id": "4705_13109_000004",
+      "language": "german",
+      "speaker_id": "4705",
+      "chapter_id": "13109",
+      "duration": 18.620000000000005,
+      "reference": "was treibt denn unser heinz seither und wo weilt er er hat sich auf die sprachwissenschaften geworfen und lebt hier in berlin als privatdozent er beginnt sich einen namen zu machen und hat wie er mir anvertraute",
+      "hypothesis": "was treibt er und wo wohnt er er hat sich auf die sprachenwissenschaften geworfen und lebt hier in berlin als privatdozent er beginnt sich einen namen zu machen und hat wie er mir erzählt",
+      "wer": 18.91891891891892,
+      "response_text": "was treibt er und wo wohnt er er hat sich auf die sprachenwissenschaften geworfen und lebt hier in berlin als privatdozent er beginnt sich einen namen zu machen und hat wie er mir erzählt",
+      "decode_token_count": 51,
+      "prefill_time": 0.17403176879882812,
+      "decode_time": 2.12795947265625,
+      "total_time": 2.301991241455078,
+      "tps": 23.96662185315901
+    },
+    {
+      "idx": 5,
+      "id": "4705_13109_000005",
+      "language": "german",
+      "speaker_id": "4705",
+      "chapter_id": "13109",
+      "duration": 10.620000000000005,
+      "reference": "ha das gibt eine reise das ist noch nie dagewesen außer in der phantasie kühner schriftsteller da muss ich mit",
+      "hypothesis": "das ist noch eine reise das ist noch eine reise",
+      "wer": 75.0,
+      "response_text": "das ist noch eine reise das ist noch eine reise",
+      "decode_token_count": 13,
+      "prefill_time": 0.15392060852050782,
+      "decode_time": 0.6203701782226563,
+      "total_time": 0.7742907867431641,
+      "tps": 20.955230371074006
+    },
+    {
+      "idx": 6,
+      "id": "4705_13109_000006",
+      "language": "german",
+      "speaker_id": "4705",
+      "chapter_id": "13109",
+      "duration": 18.0,
+      "reference": "mahnte er der kapitän ist feinschmecker oho lachte dieser habe ich mir nicht termiten raupen und rohrratten schmecken lassen wenn es darauf ankam ich nehme alles wie es kommt",
+      "hypothesis": "mancher er der kapitän ist furchtbar oho lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtb",
+      "wer": 2565.5172413793102,
+      "response_text": "mancher er der kapitän ist furchtbar oho lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtbaren kapitän furchtbar lacht er der ich nicht den furchtb",
+      "decode_token_count": 1500,
+      "prefill_time": 0.1687274169921875,
+      "decode_time": 59.21234765625,
+      "total_time": 59.381075073242194,
+      "tps": 25.33255409341419
+    }
+  ]
+}

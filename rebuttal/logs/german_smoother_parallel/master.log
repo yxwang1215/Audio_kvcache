@@ -1,0 +1,22 @@
+Backed up stale German none JSON -> /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/logs/german_smoother_parallel/stale_german_none_backup_20260530_132941.json
+=== Parallel German smoother ablation ===
+OUTPUT_ROOT=/mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/ablation_jv7p_q2_smoothers_german_parallel
+Methods: none sss maxpool gaussian uniform_stride uniform_prior
+GPUs:    0 1 6 (3 per wave)
+Logs:    /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/logs/german_smoother_parallel/
+
+--- Wave 1: none sss maxpool ---
+Launch method=none on GPU 0 -> /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/logs/german_smoother_parallel/german_none_gpu0.log
+Launch method=sss on GPU 1 -> /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/logs/german_smoother_parallel/german_sss_gpu1.log
+Launch method=maxpool on GPU 6 -> /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/logs/german_smoother_parallel/german_maxpool_gpu6.log
+Waiting for wave (1) — 3 jobs...
+
+--- Wave 2: gaussian uniform_stride uniform_prior ---
+Launch method=gaussian on GPU 0 -> /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/logs/german_smoother_parallel/german_gaussian_gpu0.log
+Launch method=uniform_stride on GPU 1 -> /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/logs/german_smoother_parallel/german_uniform_stride_gpu1.log
+Launch method=uniform_prior on GPU 6 -> /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/logs/german_smoother_parallel/german_uniform_prior_gpu6.log
+Waiting for wave (2) — 3 jobs...
+
+All German parallel jobs finished.
+Aggregate:
+  python3 /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/aggregate_smoother_ablation.py --root /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/ablation_jv7p_q2_smoothers_german_parallel --task multilingual-german

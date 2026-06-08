@@ -1,0 +1,111 @@
+{
+  "device": "cuda",
+  "config": {
+    "mode": "compare",
+    "device": "cuda",
+    "seq_lens": [
+      4768
+    ],
+    "num_layers": 36,
+    "num_kv_heads": 2,
+    "prefill_len": 6000,
+    "retention": 0.8,
+    "window": 32,
+    "decode_tokens": 100,
+    "warmup": 3,
+    "iters": 5,
+    "cutoff": 0.7,
+    "alpha": 0.5,
+    "kernel_size": 5,
+    "output_json": "Audio_kvcache/rebuttal/sss_timing_e2e_budget08/sss_compare_with_operator_overhead_budget08_cuda_fast.json",
+    "sample_limit": 10,
+    "e2e_output_dir": null,
+    "model_path": "/mnt/public/models/Qwen2.5-Omni-3B",
+    "gpu": "0",
+    "budget": 0.4,
+    "conda_env": null,
+    "e2e_backend": "kespeech",
+    "skip_e2e": true,
+    "ref_timing_without": "Audio_kvcache/rebuttal/sss_timing_e2e_budget08/timing_without_sss.json",
+    "ref_timing_with": "Audio_kvcache/rebuttal/sss_timing_e2e_budget08/timing_with_sss.json"
+  },
+  "micro": [
+    {
+      "seq_len": 4768,
+      "num_layers": 1,
+      "num_kv_heads": 2,
+      "with_sss_ms": 174.628662109375,
+      "without_sss_ms": 0.004710400104522705,
+      "overhead_ms": 174.62395170927047,
+      "overhead_pct": 3707199.979500781,
+      "per_layer_sss_us": 174628.662109375,
+      "per_head_sss_us": 87314.3310546875
+    }
+  ],
+  "decode_sim": {
+    "prefill_len": 6000,
+    "retention": 0.8,
+    "window": 32,
+    "decode_tokens": 100,
+    "num_layers": 36,
+    "num_kv_heads": 2,
+    "compressed_score_len": 4768,
+    "per_decode_step_with_sss_ms": 6313.262109375,
+    "per_decode_step_without_sss_ms": 0.5146624088287354,
+    "per_decode_step_overhead_ms": 6312.747446966172,
+    "per_decode_step_overhead_pct": 1226580.2472989378,
+    "total_decode_sss_overhead_ms": 631274.7446966171,
+    "prefill_all_layers_with_sss_ms": 8076.23828125,
+    "prefill_all_layers_without_sss_ms": 0.5236735820770264,
+    "sss_only_per_layer_per_step_us": 175368.39192708334,
+    "sss_only_per_head_per_step_us": 87684.19596354167
+  },
+  "e2e": {
+    "e2e_backend": "ref_timing_json",
+    "ref_without": "Audio_kvcache/rebuttal/sss_timing_e2e_budget08/timing_without_sss.json",
+    "ref_with": "Audio_kvcache/rebuttal/sss_timing_e2e_budget08/timing_with_sss.json",
+    "without_sss": {
+      "count": 9,
+      "avg_wall_time": 4.130064181857639,
+      "avg_prefill_time": 4.061730769668047,
+      "avg_total_gpu_time": 4.130064181857639,
+      "avg_decode_time": 0.06833341218959278,
+      "total_decode_tokens": 900,
+      "avg_tps": 1465.2487818621994,
+      "overall_tps": 1463.4129453765233
+    },
+    "with_sss": {
+      "count": 9,
+      "avg_wall_time": 4.085292778862847,
+      "avg_prefill_time": 4.017708341651002,
+      "avg_total_gpu_time": 4.085292778862847,
+      "avg_decode_time": 0.06758443721184487,
+      "total_decode_tokens": 900,
+      "avg_tps": 1481.182770246991,
+      "overall_tps": 1479.6305795452267
+    },
+    "avg_decode_time_without_sss_s": 0.06833341218959278,
+    "avg_decode_time_with_sss_s": 0.06758443721184487,
+    "decode_slowdown_pct": -1.0960596781993848,
+    "overall_tps_without_sss": 1463.4129453765233,
+    "overall_tps_with_sss": 1479.6305795452267,
+    "tps_drop_pct": -1.1082062803900332,
+    "per_token_decode_ms_without_sss": 0.6833341218959278,
+    "per_token_decode_ms_with_sss": 0.6758443721184486,
+    "per_token_decode_extra_ms": -0.007489749777479182
+  },
+  "comparison": {
+    "real_decode_per_token_ms": 0.6833341218959278,
+    "real_decode_per_token_with_sss_ms": 0.6758443721184486,
+    "isolated_sss_all_layers_per_step_ms": 6313.262109375,
+    "isolated_maxpool_all_layers_per_step_ms": 0.5146624088287354,
+    "isolated_sss_overhead_per_step_ms": 6312.747446966172,
+    "isolated_overhead_fraction_of_real_decode": 9238.156334782894,
+    "isolated_overhead_pct_of_real_decode": 923815.6334782895,
+    "e2e_extra_decode_per_token_ms": -0.007489749777479182,
+    "e2e_extra_decode_pct_of_real_decode": -1.0960596781993972,
+    "e2e_decode_slowdown_pct": -1.0960596781993848,
+    "e2e_tps_drop_pct": -1.1082062803900332,
+    "interpretation": "isolated_* uses a stress test (SSS on all layers every decode step); e2e_* is the measured wall-clock decode delta with identical ASR settings."
+  }
+}

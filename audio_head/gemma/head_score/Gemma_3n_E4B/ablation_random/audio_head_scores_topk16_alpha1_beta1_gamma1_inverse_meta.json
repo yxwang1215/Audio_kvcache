@@ -1,0 +1,11 @@
+{
+    "reference": "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/head_score/Gemma_3n_E4B/audio_head_scores_topk16_alpha1_beta1_gamma1.json",
+    "mode": "inverse",
+    "seed": null,
+    "inverse_aggregation": "first",
+    "num_layers": 20,
+    "num_heads": 8,
+    "samples_per_head": 4,
+    "per_sample_random": true,
+    "output": "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/gemma/head_score/Gemma_3n_E4B/ablation_random/audio_head_scores_topk16_alpha1_beta1_gamma1_inverse.json"
+}

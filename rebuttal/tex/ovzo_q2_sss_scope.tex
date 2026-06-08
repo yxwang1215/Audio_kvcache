@@ -1,0 +1,42 @@
+\begin{answer}
+    \paragraph{Response to Reviewer ovZo-Q2.}
+    We thank the reviewer for this important suggestion.
+    We agree that the temporal-continuity motivation of SSS is most directly justified for audio tokens, whereas applying the same smoothing to instruction/prompt tokens and generated text tokens is less well motivated.
+    To verify the effective scope of SSS, we conducted an \emph{audio-only SSS} ablation in which the RFFT-based smoothing is applied only to the detected audio-token span, while all non-audio tokens keep their original unsmoothed importance scores.
+    We compare this variant against the original \emph{full-history SSS}, with the model, head scores, SparseKV setting, budget, and decoding configuration fixed.
+
+    \paragraph{Controlled setup.}
+    Both variants use Qwen2.5-Omni-3B with retention budget $\rho=0.8$, the same audio-aware head scores, and the same SSS hyperparameters (low-pass cutoff ratio $0.7$ and interpolation weight $\alpha=0.5$).
+    The only changed factor is the token scope of the smoothing operator:
+    \begin{itemize}
+        \item \textbf{Full-history SSS}: smooth the entire historical importance sequence.
+        \item \textbf{Audio-only SSS}: smooth only the audio-token segment and leave textual-token scores unchanged.
+    \end{itemize}
+
+    \begin{table}[t]
+    \centering
+    \small
+    \setlength{\tabcolsep}{5pt}
+    \caption{\textbf{ovZo-Q2 ablation on the token scope of SSS.}
+    Lower WER is better. All settings are identical except whether SSS is applied to the full token history or only to the audio-token span.}
+    \label{tab:rebuttal-ovzo-q2-sss-scope}
+    \begin{tabular}{lccc}
+    \toprule
+    \textbf{Task} & \textbf{Metric} & \textbf{Full-history SSS} & \textbf{Audio-only SSS} \\
+    \midrule
+    MLS Spanish ASR (477) & WER $\downarrow$ & 6.06 & \textbf{5.98} \\
+    MLS French ASR (486) & WER $\downarrow$ & \textbf{8.45} & 8.48 \\
+    \bottomrule
+    \end{tabular}
+    \end{table}
+
+    \paragraph{Findings.}
+    The two variants are nearly identical in performance.
+    On MLS Spanish, audio-only SSS slightly improves WER from 6.06 to 5.98, and on MLS French it remains essentially tied with full-history SSS (8.48 vs. 8.45 WER).
+    This shows that restricting smoothing to audio tokens preserves almost all of the benefit of the original method.
+    Therefore, the gain is primarily attributable to modeling acoustic temporal continuity, rather than to smoothing textual tokens in the prompt or generated response.
+
+    \paragraph{Revision plan.}
+    In the revision, we will add Table~\ref{tab:rebuttal-ovzo-q2-sss-scope} and clarify that the main effect of SSS comes from the audio-token region.
+    We will correspondingly moderate the description of full-history smoothing, presenting it as an implementation choice whose benefit is comparable to the cleaner audio-only variant, rather than as evidence that textual tokens should also satisfy the same continuity assumption.
+\end{answer}

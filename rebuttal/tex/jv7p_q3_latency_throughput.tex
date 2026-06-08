@@ -1,0 +1,49 @@
+\begin{answer}
+    % Rebuttal response to Reviewer jV7P-Q3
+    % Topic: Real wall-clock latency and throughput with SSS enabled
+
+    \paragraph{Response to Reviewer jV7P-Q3.}
+    We thank the reviewer for pointing out that Fig.~7 alone only demonstrates KV-cache memory reduction at a fixed budget.
+    We agree that this is not sufficient to substantiate an efficiency claim, since the runtime cost of SSS must also be measured.
+    We therefore added an end-to-end wall-clock timing comparison with identical model weights, input samples, decoding configuration, and KV budget, changing only whether SSS is enabled.
+
+    \paragraph{End-to-end latency and throughput.}
+    Table~\ref{tab:rebuttal-jv7p-sss-e2e-latency} reports CUDA-event timing on Qwen2.5-Omni-3B with LibriSpeech-long at budget $=0.8$ on an A100-80GB GPU.
+    We use \texttt{SAMPLE\_LIMIT=10} and exclude the first sample as warm-up, leaving 9 measured samples and 5{,}263 generated tokens.
+    The evaluated clips are long-form audio, with an average duration of 190.80s after excluding the warm-up sample.
+    This timing includes the full \texttt{generate()} call, so the SSS computation is included in the reported wall-clock latency and throughput.
+    We report end-to-end speed using real-time factor (RTF) and generated tokens per total wall-clock second, rather than the script's rough prefill/decode split.
+
+    \begin{table}[t]
+    \centering
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \caption{\textbf{Real ASR wall-clock latency and throughput with SSS on/off.}
+    Timing is measured on LibriSpeech-long with Qwen2.5-Omni-3B at budget $=0.8$; only \texttt{USE\_FFT\_FILTER} is changed.}
+    \label{tab:rebuttal-jv7p-sss-e2e-latency}
+    \begin{tabular}{lccc}
+    \toprule
+    \textbf{Metric} & \textbf{SSS disabled} & \textbf{SSS enabled} & \textbf{Change} \\
+    \midrule
+    Samples measured & 9 & 9 & -- \\
+    Total audio duration & 1717.22s & 1717.22s & -- \\
+    Avg. audio duration / sample & 190.80s & 190.80s & -- \\
+    Avg. wall time / sample & 22.2139s & 22.3830s & +0.1691s (+0.76\%) \\
+    Real-time factor (RTF) & 0.11642 & 0.11731 & +0.76\% \\
+    Audio-second ratio & 8.59 & 8.52 & -0.97\% \\
+    End-to-end output throughput & 26.32 tok/s & 26.13 tok/s & -0.73\% \\
+    \bottomrule
+    \end{tabular}
+    \end{table}
+
+    \paragraph{Interpretation.}
+    These measurements separate memory efficiency from runtime efficiency.
+    Fig.~7 should be interpreted only as the KV-memory comparison, while Table~\ref{tab:rebuttal-jv7p-sss-e2e-latency} quantifies the actual latency/throughput effect of enabling SSS.
+    The small delta in Table~\ref{tab:rebuttal-jv7p-sss-e2e-latency} is within normal run-to-run timing variation, so we do not claim that SSS accelerates inference.
+    The appropriate conclusion is that, at budget $=0.8$ and \texttt{thinker\_max\_new\_tokens=1100}, SSS adds no material end-to-end latency penalty in this setting while preserving the intended KV-cache reduction.
+    The throughput number should be interpreted as end-to-end ASR generation throughput under the same decoding cap, not as a full-reference transcription speed.
+
+    \paragraph{Planned revision.}
+    We will revise the efficiency section to report both memory and runtime.
+    Specifically, Fig.~7 will be described as a memory-only result, and we will add the wall-clock table above together with the exact timing protocol and script path \texttt{rebuttal/run\_sss\_timing\_comparison.sh}.
+\end{answer}

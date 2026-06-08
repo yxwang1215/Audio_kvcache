@@ -1,0 +1,86 @@
+{
+  "global_summary": {
+    "count": 9,
+    "avg_wall_time": 4.95515869140625,
+    "avg_prefill_time": 4.85555401556845,
+    "avg_total_gpu_time": 4.95515869140625,
+    "avg_decode_time": 0.0996046758378005,
+    "total_decode_tokens": 900,
+    "avg_tps": 1005.1037449138125,
+    "overall_tps": 1003.9689317682561
+  },
+  "detailed_records": [
+    {
+      "wall_time": 5.006336425781251,
+      "total_gpu_time": 5.006336425781251,
+      "prefill_time": 4.905055090038155,
+      "decode_time": 0.1012813357430963,
+      "decode_token_count": 100,
+      "tps": 987.3487475881394
+    },
+    {
+      "wall_time": 4.9193798828125,
+      "total_gpu_time": 4.9193798828125,
+      "prefill_time": 4.815988124031237,
+      "decode_time": 0.10339175878126314,
+      "decode_token_count": 100,
+      "tps": 967.1950760752723
+    },
+    {
+      "wall_time": 4.9323564453125,
+      "total_gpu_time": 4.9323564453125,
+      "prefill_time": 4.8291906547809695,
+      "decode_time": 0.10316579053153108,
+      "decode_token_count": 100,
+      "tps": 969.3135630016474
+    },
+    {
+      "wall_time": 4.939060546875001,
+      "total_gpu_time": 4.939060546875001,
+      "prefill_time": 4.834508037415326,
+      "decode_time": 0.10455250945967401,
+      "decode_token_count": 100,
+      "tps": 956.4571956885462
+    },
+    {
+      "wall_time": 4.936665039062501,
+      "total_gpu_time": 4.936665039062501,
+      "prefill_time": 4.838947995533948,
+      "decode_time": 0.09771704352855305,
+      "decode_token_count": 100,
+      "tps": 1023.362930242357
+    },
+    {
+      "wall_time": 4.98490478515625,
+      "total_gpu_time": 4.98490478515625,
+      "prefill_time": 4.889700339297651,
+      "decode_time": 0.09520444585859911,
+      "decode_token_count": 100,
+      "tps": 1050.3711155309218
+    },
+    {
+      "wall_time": 4.96396630859375,
+      "total_gpu_time": 4.96396630859375,
+      "prefill_time": 4.867070616448644,
+      "decode_time": 0.09689569214510539,
+      "decode_token_count": 100,
+      "tps": 1032.037625060212
+    },
+    {
+      "wall_time": 4.93810107421875,
+      "total_gpu_time": 4.93810107421875,
+      "prefill_time": 4.839516504959042,
+      "decode_time": 0.09858456925970753,
+      "decode_token_count": 100,
+      "tps": 1014.3575282716275
+    },
+    {
+      "wall_time": 4.97565771484375,
+      "total_gpu_time": 4.97565771484375,
+      "prefill_time": 4.880008777611075,
+      "decode_time": 0.09564893723267494,
+      "decode_token_count": 100,
+      "tps": 1045.4899227655892
+    }
+  ]
+}

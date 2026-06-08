@@ -1,0 +1,35 @@
+Planned TASKS: multilingual-german
+
+=== jV7P-Q2 smoother ablation ===
+Task=multilingual-german  Budget=0.4  GPU=2
+Methods: none sss maxpool gaussian uniform_stride uniform_prior
+Head JSON: /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_3B/audio_head_scores_topk24_alpha1_beta1_gamma1.json
+
+>>> Smooth_none  SCORE_SMOOTH_METHOD=none  USE_FFT_FILTER=false
+    SAMPLE_FRACTION=0.2
+Qwen2_5OmniToken2WavModel must inference with fp32, but flash_attention_2 only supports fp16 and bf16, attention implementation of Qwen2_5OmniToken2WavModel will fallback to sdpa.
+[KV Cache] Using method: sparsekv, USE_SPARSEKV=True
+[DEBUG] BUDGET environment variable: '0.4' -> parsed as 0.4 (is_ratio=True)
+[modeling] Using standard SparseMM implementation
+Using sparsekv version of the model
+Using GPU ID: 2
+Sample fraction set to: 20.00%
+Using dataset path: /mnt/users/wangyuxuan-20250915/Audio/Datasets/multilingual_librispeech
+Results will be saved to: /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/ablation_jv7p_q2_smoothers_german_parallel/multilingual-german/Smooth_none/budget0.4/multilingual_librispeech_results_qwen25.json (updated in real-time)
+Timing statistics will be saved to: /mnt/users/wangyuxuan-20250915/Audio/Results/Qwen2_5_Omni_3B/ablation_jv7p_q2_smoothers_german_parallel/multilingual-german/Smooth_none/budget0.4/timing_stats_sparsekv_Smooth_none.json
+
+=== Multilingual LibriSpeech ASR Evaluation Configuration (Qwen2.5-Omni) ===
+GPU ID: 2
+Pruning ratio: 0.0
+Pruning method: base
+Data path: /mnt/users/wangyuxuan-20250915/Audio/Datasets/multilingual_librispeech
+Languages: german
+System prompt: DISABLED (following official README)
+Language-specific max_new_tokens: {'german': 1500, 'french': 1100, 'spanish': 1100, 'english': 1100}
+FFT-based spectral filtering: DISABLED (using Conv1d)
+Audio-aware TopK selection: DISABLED
+========================================
+Loading Qwen2.5-Omni model...
+Using model path: /mnt/public/models/Qwen2.5-Omni-3B
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards:  33%|███▎      | 1/3 [00:08<00:16,  8.08s/it]Loading checkpoint shards:  67%|██████▋   | 2/3 [00:15<00:07,  7.66s/it]Loading checkpoint shards: 100%|██████████| 3/3 [00:19<00:00,  6.17s/it]Loading checkpoint shards: 100%|██████████| 3/3 [00:19<00:00,  6.61s/it]
+/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/run_sss_smoother_ablation.sh: line 130: 86377 Killed                  python "${PY_SCRIPT}" "${EXTRA_PY_ARGS[@]}" --model-path "${MODEL_PATH}" --output-dir "${output_dir}" --timing-output-file "${timing_file}"

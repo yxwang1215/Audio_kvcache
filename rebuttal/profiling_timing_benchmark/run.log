@@ -1,0 +1,510 @@
+The image processor of type `Qwen2VLImageProcessor` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. Note that this behavior will be extended to all models in a future release.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Unrecognized keys in `rope_scaling` for 'rope_type'='default': {'mrope_section'}
+Total audio files available: 2864
+Files are sorted by filename
+[Count Mode] Selected first 8 samples
+Found 8 samples with matching audio and WhisperX JSON
+
+Loading model...
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards:  33%|███▎      | 1/3 [00:04<00:08,  4.06s/it]Loading checkpoint shards:  67%|██████▋   | 2/3 [00:08<00:04,  4.03s/it]Loading checkpoint shards: 100%|██████████| 3/3 [00:09<00:00,  2.98s/it]Loading checkpoint shards: 100%|██████████| 3/3 [00:09<00:00,  3.26s/it]
+Registered attention hooks for 36 self_attn modules
+
+Processing 8 samples...
+
+[1/8] Processing: 116-288045-0000 ... WARNING:root:System prompt modified, audio output may not work as expected. Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'
+
+================================================================================
+Analyzing sample: 116-288045-0000
+================================================================================
+JSON Statistics:
+  - Total words in JSON: 33
+  - High-quality words (score >= 0.95): 8
+  - Filter ratio: 24.2%
+
+High-quality words preview:
+  - I: 0.738s - 0.778s (score: 0.956)
+  - the: 1.260s - 1.340s (score: 0.995)
+  - I: 2.003s - 2.043s (score: 0.999)
+  - ringing.: 2.746s - 3.007s (score: 0.988)
+  - I: 4.453s - 4.473s (score: 1.000)
+  ... and 3 more
+Audio duration: 10.65s
+Audio : [array([ 0.        ,  0.        ,  0.        , ..., -0.00021362,
+       -0.00015259, -0.00018311], dtype=float32)] Type : <class 'list'>
+Vision : (None, None) Type : <class 'tuple'>
+Detected 266 audio tokens at positions 15-280
+Mapped words to audio tokens:
+  - I: tokens[33:35]
+  - the: tokens[46:49]
+  - I: tokens[65:67]
+  - ringing.: tokens[83:91]
+  - I: tokens[126:127]
+Generating transcription...
+  [Info] Detected 3B model, using max_new_tokens=128
+Generated text: The audio transcription is: 'as i approached the city i heard the bells ringing and a little later i found the streets astir with throngs of well-dressed people in family groups winding their way hither and thither.'
+Generated 47 tokens
+Captured 46 generation steps
+  - First step has 576 layer-head pairs
+  - Expected: 36 layers × 16 heads = 576 pairs
+
+============================================================
+Generation Quality Diagnosis:
+============================================================
+Generated text length: 216 chars
+Number of tokens: 47
+WhisperX words: 8
+Direct word matches: 8/8 (100.0%)
+============================================================
+
+  [Debug] Using max_skip_threshold=15 for 3B model
+  [Debug] Matched 8 words out of 8
+  [Debug] Total tokens: 47, Matched tokens: 8
+Analyzing attention for 47 tokens...
+Warning: No attention captured for step 46
+  Analyzed 8 tokens from high-quality words
+  Word coverage: 6/8 (75.0%)
+Done in 49.5s (avg: 49.5s, remaining: 5.8min, 12.5%)
+[2/8] Processing: 116-288045-0001 ... WARNING:root:System prompt modified, audio output may not work as expected. Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'
+
+================================================================================
+Analyzing sample: 116-288045-0001
+================================================================================
+JSON Statistics:
+  - Total words in JSON: 22
+  - High-quality words (score >= 0.95): 4
+  - Filter ratio: 18.2%
+
+High-quality words preview:
+  - I: 1.338s - 1.358s (score: 1.000)
+  - in: 2.665s - 2.705s (score: 0.979)
+  - and: 5.841s - 5.902s (score: 0.997)
+  - hand: 6.083s - 6.304s (score: 0.986)
+Audio duration: 8.63s
+Audio : [array([0., 0., 0., ..., 0., 0., 0.], dtype=float32)] Type : <class 'list'>
+Vision : (None, None) Type : <class 'tuple'>
+Detected 216 audio tokens at positions 15-230
+Mapped words to audio tokens:
+  - I: tokens[48:49]
+  - in: tokens[81:83]
+  - and: tokens[161:163]
+  - hand: tokens[167:173]
+Generating transcription...
+  [Info] Detected 3B model, using max_new_tokens=128
+Generated text: The audio says: 'Looking about me, I saw a gentleman in a neat black dress, smiling, and his hand extended to me with great cordiality.'
+Generated 34 tokens
+Captured 33 generation steps
+  - First step has 576 layer-head pairs
+  - Expected: 36 layers × 16 heads = 576 pairs
+
+============================================================
+Generation Quality Diagnosis:
+============================================================
+Generated text length: 136 chars
+Number of tokens: 34
+WhisperX words: 4
+Direct word matches: 4/4 (100.0%)
+============================================================
+
+  [Debug] Using max_skip_threshold=15 for 3B model
+  [Debug] Matched 4 words out of 4
+  [Debug] Total tokens: 34, Matched tokens: 4
+Analyzing attention for 34 tokens...
+Warning: No attention captured for step 33
+  Analyzed 4 tokens from high-quality words
+  Word coverage: 4/4 (100.0%)
+Done in 3.7s (avg: 26.6s, remaining: 2.7min, 25.0%)
+[3/8] Processing: 116-288045-0002 ... WARNING:root:System prompt modified, audio output may not work as expected. Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'
+
+================================================================================
+Analyzing sample: 116-288045-0002
+================================================================================
+JSON Statistics:
+  - Total words in JSON: 27
+  - High-quality words (score >= 0.95): 6
+  - Filter ratio: 22.2%
+
+High-quality words preview:
+  - was: 1.537s - 1.618s (score: 0.952)
+  - tender: 3.004s - 3.285s (score: 0.965)
+  - to: 4.148s - 4.249s (score: 0.989)
+  - me.: 4.309s - 4.429s (score: 0.983)
+  - gratefully.: 5.875s - 6.317s (score: 0.985)
+  ... and 1 more
+Audio duration: 9.62s
+Audio : [array([0., 0., 0., ..., 0., 0., 0.], dtype=float32)] Type : <class 'list'>
+Vision : (None, None) Type : <class 'tuple'>
+Detected 241 audio tokens at positions 15-255
+Mapped words to audio tokens:
+  - was: tokens[53:56]
+  - tender: tokens[90:98]
+  - to: tokens[118:122]
+  - me.: tokens[122:126]
+  - gratefully.: tokens[162:174]
+Generating transcription...
+  [Info] Detected 3B model, using max_new_tokens=128
+Generated text: The audio says: 'he must have realized i was a stranger and wished to tender his hospitality to me i accepted it gratefully i clasped his hand he pressed mine.'
+Generated 36 tokens
+Captured 35 generation steps
+  - First step has 576 layer-head pairs
+  - Expected: 36 layers × 16 heads = 576 pairs
+
+============================================================
+Generation Quality Diagnosis:
+============================================================
+Generated text length: 160 chars
+Number of tokens: 36
+WhisperX words: 6
+Direct word matches: 6/6 (100.0%)
+============================================================
+
+  [Debug] Using max_skip_threshold=15 for 3B model
+  [Debug] Matched 6 words out of 6
+  [Debug] Total tokens: 36, Matched tokens: 7
+Analyzing attention for 36 tokens...
+Warning: No attention captured for step 35
+  Analyzed 7 tokens from high-quality words
+  Word coverage: 6/6 (100.0%)
+Done in 5.7s (avg: 19.7s, remaining: 1.6min, 37.5%)
+[4/8] Processing: 116-288045-0003 ... WARNING:root:System prompt modified, audio output may not work as expected. Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'
+
+================================================================================
+Analyzing sample: 116-288045-0003
+================================================================================
+JSON Statistics:
+  - Total words in JSON: 10
+  - High-quality words (score >= 0.95): 3
+  - Filter ratio: 30.0%
+
+High-quality words preview:
+  - a: 1.281s - 1.301s (score: 0.988)
+  - moment: 1.362s - 1.626s (score: 0.985)
+  - into: 2.133s - 2.275s (score: 0.978)
+Audio duration: 3.66s
+Audio : [array([0., 0., 0., ..., 0., 0., 0.], dtype=float32)] Type : <class 'list'>
+Vision : (None, None) Type : <class 'tuple'>
+Detected 91 audio tokens at positions 15-105
+Mapped words to audio tokens:
+  - a: tokens[46:48]
+  - moment: tokens[48:56]
+  - into: tokens[68:72]
+Generating transcription...
+  [Info] Detected 3B model, using max_new_tokens=128
+Generated text: The original content of this audio is: 'we gazed for a moment slightly into each other's eyes.'
+Generated 23 tokens
+Captured 22 generation steps
+  - First step has 576 layer-head pairs
+  - Expected: 36 layers × 16 heads = 576 pairs
+
+============================================================
+Generation Quality Diagnosis:
+============================================================
+Generated text length: 95 chars
+Number of tokens: 23
+WhisperX words: 3
+Direct word matches: 3/3 (100.0%)
+============================================================
+
+  [Debug] Using max_skip_threshold=15 for 3B model
+  [Debug] Matched 3 words out of 3
+  [Debug] Total tokens: 23, Matched tokens: 3
+Analyzing attention for 23 tokens...
+Warning: No attention captured for step 22
+  Analyzed 3 tokens from high-quality words
+  Word coverage: 3/3 (100.0%)
+Done in 2.0s (avg: 15.2s, remaining: 1.0min, 50.0%)
+[5/8] Processing: 116-288045-0004 ... WARNING:root:System prompt modified, audio output may not work as expected. Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'
+
+================================================================================
+Analyzing sample: 116-288045-0004
+================================================================================
+JSON Statistics:
+  - Total words in JSON: 13
+  - High-quality words (score >= 0.95): 6
+  - Filter ratio: 46.2%
+
+High-quality words preview:
+  - Of: 0.031s - 0.516s (score: 0.976)
+  - are: 0.960s - 1.041s (score: 0.959)
+  - there,: 1.323s - 1.505s (score: 0.958)
+  - I: 2.232s - 2.272s (score: 0.979)
+  - to: 2.535s - 2.575s (score: 0.999)
+  ... and 1 more
+Audio duration: 3.72s
+Audio : [array([0.        , 0.        , 0.        , ..., 0.0005188 , 0.00021362,
+       0.00030518], dtype=float32)] Type : <class 'list'>
+Vision : (None, None) Type : <class 'tuple'>
+Detected 93 audio tokens at positions 15-107
+Mapped words to audio tokens:
+  - Of: tokens[15:28]
+  - are: tokens[39:42]
+  - there,: tokens[48:53]
+  - I: tokens[70:72]
+  - to: tokens[78:80]
+Generating transcription...
+  [Info] Detected 3B model, using max_new_tokens=128
+Generated text: The audio transcription is: 'Of course you are going there too, I said to my friendly guide.'
+Generated 22 tokens
+Captured 21 generation steps
+  - First step has 576 layer-head pairs
+  - Expected: 36 layers × 16 heads = 576 pairs
+
+============================================================
+Generation Quality Diagnosis:
+============================================================
+Generated text length: 93 chars
+Number of tokens: 22
+WhisperX words: 6
+Direct word matches: 6/6 (100.0%)
+============================================================
+
+  [Debug] Using max_skip_threshold=15 for 3B model
+  [Debug] Matched 6 words out of 6
+  [Debug] Total tokens: 22, Matched tokens: 6
+Analyzing attention for 22 tokens...
+Warning: No attention captured for step 21
+  Analyzed 6 tokens from high-quality words
+  Word coverage: 6/6 (100.0%)
+Done in 2.7s (avg: 12.7s, remaining: 0.6min, 62.5%)
+[6/8] Processing: 116-288045-0005 ... WARNING:root:System prompt modified, audio output may not work as expected. Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'
+
+================================================================================
+Analyzing sample: 116-288045-0005
+================================================================================
+JSON Statistics:
+  - Total words in JSON: 10
+  - High-quality words (score >= 0.95): 3
+  - Filter ratio: 30.0%
+
+High-quality words preview:
+  - I: 2.351s - 2.411s (score: 0.990)
+  - I: 3.744s - 3.784s (score: 0.998)
+  - am: 3.844s - 3.905s (score: 0.996)
+Audio duration: 5.00s
+Audio : [array([ 0.0005188 ,  0.00024414,  0.00036621, ...,  0.00100708,
+        0.00036621, -0.00018311], dtype=float32)] Type : <class 'list'>
+Vision : (None, None) Type : <class 'tuple'>
+Detected 125 audio tokens at positions 15-139
+Mapped words to audio tokens:
+  - I: tokens[73:76]
+  - I: tokens[108:110]
+  - am: tokens[111:113]
+Generating transcription...
+  [Info] Detected 3B model, using max_new_tokens=128
+Generated text: The audio says: 'yes he answered i conduct the worship i am a priest.'
+Generated 18 tokens
+Captured 17 generation steps
+  - First step has 576 layer-head pairs
+  - Expected: 36 layers × 16 heads = 576 pairs
+
+============================================================
+Generation Quality Diagnosis:
+============================================================
+Generated text length: 70 chars
+Number of tokens: 18
+WhisperX words: 3
+Direct word matches: 3/3 (100.0%)
+============================================================
+
+  [Debug] Using max_skip_threshold=15 for 3B model
+  [Debug] Matched 3 words out of 3
+  [Debug] Total tokens: 18, Matched tokens: 3
+Analyzing attention for 18 tokens...
+Warning: No attention captured for step 17
+  Analyzed 3 tokens from high-quality words
+  Word coverage: 2/3 (66.7%)
+Done in 2.0s (avg: 10.9s, remaining: 0.4min, 75.0%)
+[7/8] Processing: 116-288045-0006 ... WARNING:root:System prompt modified, audio output may not work as expected. Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'
+
+================================================================================
+Analyzing sample: 116-288045-0006
+================================================================================
+JSON Statistics:
+  - Total words in JSON: 8
+  - High-quality words (score >= 0.95): 2
+  - Filter ratio: 25.0%
+
+High-quality words preview:
+  - taken: 2.088s - 2.330s (score: 0.956)
+  - by: 2.350s - 2.471s (score: 1.000)
+Audio duration: 3.52s
+Audio : [array([0., 0., 0., ..., 0., 0., 0.], dtype=float32)] Type : <class 'list'>
+Vision : (None, None) Type : <class 'tuple'>
+Detected 88 audio tokens at positions 15-102
+Mapped words to audio tokens:
+  - taken: tokens[67:74]
+  - by: tokens[73:77]
+Generating transcription...
+  [Info] Detected 3B model, using max_new_tokens=128
+Generated text: An idol, I whispered, taken by surprise.
+Generated 11 tokens
+Captured 10 generation steps
+  - First step has 576 layer-head pairs
+  - Expected: 36 layers × 16 heads = 576 pairs
+
+============================================================
+Generation Quality Diagnosis:
+============================================================
+Generated text length: 40 chars
+Number of tokens: 11
+WhisperX words: 2
+Direct word matches: 2/2 (100.0%)
+============================================================
+
+  [Debug] Using max_skip_threshold=15 for 3B model
+  [Debug] Matched 2 words out of 2
+  [Debug] Total tokens: 11, Matched tokens: 2
+Analyzing attention for 11 tokens...
+Warning: No attention captured for step 10
+  Analyzed 2 tokens from high-quality words
+  Word coverage: 2/2 (100.0%)
+Done in 1.2s (avg: 9.5s, remaining: 0.2min, 87.5%)
+[8/8] Processing: 116-288045-0007 ... WARNING:root:System prompt modified, audio output may not work as expected. Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'
+
+================================================================================
+Analyzing sample: 116-288045-0007
+================================================================================
+JSON Statistics:
+  - Total words in JSON: 7
+  - High-quality words (score >= 0.95): 1
+  - Filter ratio: 14.3%
+
+High-quality words preview:
+  - God,: 0.906s - 1.151s (score: 0.950)
+Audio duration: 2.67s
+Audio : [array([ 0.0000000e+00,  0.0000000e+00,  0.0000000e+00, ...,
+       -3.0517578e-05,  0.0000000e+00, -9.1552734e-05], dtype=float32)] Type : <class 'list'>
+Vision : (None, None) Type : <class 'tuple'>
+Detected 67 audio tokens at positions 15-81
+Mapped words to audio tokens:
+  - God,: tokens[37:44]
+Generating transcription...
+  [Info] Detected 3B model, using max_new_tokens=128
+Generated text: The audio says: 'They worship gods that did not exist.'
+Generated 14 tokens
+Captured 13 generation steps
+  - First step has 576 layer-head pairs
+  - Expected: 36 layers × 16 heads = 576 pairs
+
+============================================================
+Generation Quality Diagnosis:
+============================================================
+Generated text length: 55 chars
+Number of tokens: 14
+WhisperX words: 1
+Direct word matches: 1/1 (100.0%)
+============================================================
+
+  [Debug] Using max_skip_threshold=15 for 3B model
+  [Debug] Matched 1 words out of 1
+  [Debug] Total tokens: 14, Matched tokens: 1
+Analyzing attention for 14 tokens...
+Warning: No attention captured for step 13
+  Analyzed 1 tokens from high-quality words
+  Word coverage: 1/1 (100.0%)
+Done in 1.0s (avg: 8.5s, remaining: 0.0min, 100.0%)
+Skipped saving detailed analysis file (word_attention_analysis_topk24.json)
+  Note: You can still process attention_score using layer_head_attention_stats_topk24.json
+Saved summary to: /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/profiling_timing_benchmark/topk24/word_attention_summary_topk24.json
+Saved layer/head statistics to: /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/profiling_timing_benchmark/topk24/layer_head_attention_stats_topk24.json
+Saved top heads (sorted by importance) to: /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/profiling_timing_benchmark/topk24/top_heads_by_importance_topk24.json
+
+================================================================================
+Summary Statistics (Top-k = 24):
+================================================================================
+Total samples: 8
+
+Word Statistics from JSON:
+  Total words in all JSONs: 130
+  High-quality words (after filtering): 33
+  High-quality ratio: 25.4%
+
+Word Coverage (How many WhisperX words were successfully analyzed):
+  Total WhisperX words (high-quality): 33
+  Words successfully analyzed: 30
+  Global coverage ratio: 90.9%
+  Samples with 100% coverage: 6
+  Samples with partial coverage: 2
+  Samples with 0% coverage: 0
+
+Token Analysis:
+  Total tokens analyzed: 34
+
+Top-k Attention Hits:
+  Avg hits on word audio tokens: 0.81 / 24
+  Avg hits on all audio tokens: 14.03 / 24
+  Avg hit ratio (word/topk): 0.0338 (3.38%)
+  Median hit ratio: 0.0259 (2.59%)
+
+Hit Ratio Distribution (对应单词的命中率):
+  P25: 0.0146 (1.46%)
+  P50: 0.0259 (2.59%)
+  P75: 0.0497 (4.97%)
+  P95: 0.0859 (8.59%)
+
+Word/Audio Ratio Distribution (对应单词占所有音频的比例):
+  Avg: 0.0570
+  Median: 0.0383
+  P75: 0.0749
+
+Word Audio Token Statistics (目标单词的音频 token 数量):
+  Avg num word audio tokens: 4.38
+  Median num word audio tokens: 3.00
+
+Word Audio Coverage Ratio (相对于目标单词的覆盖率 = hits / num_word_tokens):
+  Avg coverage ratio: 0.1807 (18.07%)
+  Median coverage ratio: 0.1866 (18.66%)
+  P25: 0.1318 (13.18%)
+  P50: 0.1866 (18.66%)
+  P75: 0.2265 (22.65%)
+  P95: 0.3158 (31.58%)
+
+Attention Weight Statistics:
+  Avg attention weight on word audio: 0.0162
+  Avg attention weight on all audio: 0.2646
+  Avg attention ratio (word/audio): 0.0615 (6.15%)
+  Median attention ratio: 0.0596 (5.96%)
+
+Attention Ratio Distribution:
+  P25: 0.0244
+  P50: 0.0596
+  P75: 0.0797
+  P95: 0.1588
+
+================================================================================
+Head Importance Scores (Weighted Combination):
+================================================================================
+Weights: α=1.0, β=1.0, γ=1.0
+Formula: S = α·S_hit + β·S_attn + γ·S_cov
+
+Top 20 Audio-Critical Heads (by Importance Score):
+Rank   Layer/Head      Importance   S_hit      S_attn     S_cov     
+--------------------------------------------------------------------------------
+1      L5_H13          1.246925     0.1115     0.5568     0.5786    
+2      L5_H14          1.193404     0.1017     0.5862     0.5055    
+3      L20_H1          1.168619     0.1336     0.2902     0.7449    
+4      L5_H9           1.141176     0.0993     0.5948     0.4472    
+5      L22_H14         1.140048     0.1250     0.3732     0.6418    
+6      L4_H5           1.132339     0.1066     0.5276     0.4981    
+7      L5_H15          1.122059     0.0993     0.5602     0.4626    
+8      L17_H10         1.119880     0.1115     0.5095     0.4988    
+9      L5_H11          1.107507     0.1005     0.5319     0.4751    
+10     L20_H7          1.081772     0.1299     0.2496     0.7022    
+11     L17_H14         1.062904     0.1127     0.4076     0.5425    
+12     L31_H10         0.961823     0.1029     0.3578     0.5010    
+13     L20_H4          0.951196     0.1262     0.1466     0.6783    
+14     L20_H3          0.926584     0.1152     0.1736     0.6378    
+15     L17_H11         0.913809     0.0980     0.3620     0.4537    
+16     L5_H12          0.901394     0.1115     0.1962     0.5937    
+17     L20_H5          0.891864     0.1103     0.1232     0.6583    
+18     L25_H5          0.891734     0.1238     0.1154     0.6526    
+19     L10_H5          0.876597     0.0944     0.3682     0.4141    
+20     L7_H3           0.874661     0.1078     0.1651     0.6018    
+... and 556 more heads
+
+================================================================================
+Analysis complete!
+Total time: 67.96s (1.13 minutes)
+Average time per sample: 8.50s
+Results saved to: /mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/rebuttal/profiling_timing_benchmark/topk24
+================================================================================

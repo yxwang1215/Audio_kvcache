@@ -236,6 +236,39 @@ def spectral_attention_smoothing(
     
     return result
 
+
+try:
+    from .score_smoothing import apply_kv_score_smoothing
+except ImportError:
+    try:
+        from score_smoothing import apply_kv_score_smoothing
+    except ImportError:
+        apply_kv_score_smoothing = None  # type: ignore[misc, assignment]
+
+
+def _apply_scoped_score_smoothing(attn_scores, config, smoothing_fn):
+    scope = os.environ.get("SSS_TOKEN_SCOPE", "full").strip().lower()
+    if scope in ("", "full", "all", "history", "full_history"):
+        return smoothing_fn(attn_scores)
+    if scope not in ("audio", "audio_only", "audio-only"):
+        raise ValueError("SSS_TOKEN_SCOPE must be full or audio_only")
+
+    audio_start = getattr(config, "audio_token_start", None) if config is not None else None
+    audio_num = getattr(config, "audio_token_num", None) if config is not None else None
+    if audio_start is None or audio_num is None:
+        return smoothing_fn(attn_scores)
+
+    seq_len = attn_scores.shape[-1]
+    start = max(0, int(audio_start))
+    end = min(seq_len, start + int(audio_num))
+    if end <= start:
+        return attn_scores
+
+    scoped_scores = attn_scores.clone()
+    scoped_scores[..., start:end] = smoothing_fn(attn_scores[..., start:end])
+    return scoped_scores
+
+
 def merge_kv(key_states, value_states, indices, window_size, merge):
     # merge methods in LOOK-M
 
@@ -1001,39 +1034,53 @@ class AdaKVCluster():
         else:
             raise ValueError('gqa_func not supported')
 
-        # Check if FFT-based spectral filtering is enabled
-        use_fft_filter = os.environ.get("USE_FFT_FILTER", "false").lower() == "true"
-        
-        if use_fft_filter:
-            # Use FFT-based spectral filtering instead of Conv1d
-            filter_type = os.environ.get("FFT_FILTER_TYPE", "lowpass")  # lowpass, highpass, saliency
-            cutoff_ratio = float(os.environ.get("FFT_CUTOFF_RATIO", "0.3"))
-            alpha = float(os.environ.get("FFT_ALPHA", "0.5"))  # Mixing ratio
-            use_saliency = os.environ.get("FFT_USE_SALIENCY", "false").lower() == "true"
-            adaptive_cutoff = os.environ.get("FFT_ADAPTIVE_CUTOFF", "true").lower() == "true"
-            
-            # Apply FFT spectral filtering
-            attn_weights_mean_pooling = spectral_attention_smoothing(
+        if apply_kv_score_smoothing is not None:
+            attn_weights_mean_pooling = _apply_scoped_score_smoothing(
                 attn_weights_mean,
-                filter_type=filter_type,
-                cutoff_ratio=cutoff_ratio,
-                alpha=alpha,
-                use_saliency=use_saliency,
-                adaptive_cutoff=adaptive_cutoff
+                getattr(self, "config", None),
+                lambda scores: apply_kv_score_smoothing(
+                    scores,
+                    kernel_size=self.kernel_size,
+                    pooling=self.pooling,
+                ),
             )
         else:
-            # Original Conv1d-based pooling (fallback)
-            if self.pooling == 'avgpool':
-                attn_weights_mean_pooling = F.avg_pool1d(attn_weights_mean, kernel_size=self.kernel_size,
-                                                         padding=self.kernel_size // 2,
-                                                         stride=1)
-            elif self.pooling == 'maxpool':
-                attn_weights_mean_pooling = F.max_pool1d(attn_weights_mean, kernel_size=self.kernel_size,
-                                                         padding=self.kernel_size // 2,
-                                                         stride=1)
+            use_fft_filter = os.environ.get("USE_FFT_FILTER", "false").lower() == "true"
+            if use_fft_filter:
+                filter_type = os.environ.get("FFT_FILTER_TYPE", "lowpass")
+                cutoff_ratio = float(os.environ.get("FFT_CUTOFF_RATIO", "0.3"))
+                alpha = float(os.environ.get("FFT_ALPHA", "0.5"))
+                use_saliency = os.environ.get("FFT_USE_SALIENCY", "false").lower() == "true"
+                adaptive_cutoff = os.environ.get("FFT_ADAPTIVE_CUTOFF", "true").lower() == "true"
+                attn_weights_mean_pooling = _apply_scoped_score_smoothing(
+                    attn_weights_mean,
+                    getattr(self, "config", None),
+                    lambda scores: spectral_attention_smoothing(
+                        scores,
+                        filter_type=filter_type,
+                        cutoff_ratio=cutoff_ratio,
+                        alpha=alpha,
+                        use_saliency=use_saliency,
+                        adaptive_cutoff=adaptive_cutoff,
+                    ),
+                )
+            elif self.pooling == "avgpool":
+                attn_weights_mean_pooling = F.avg_pool1d(
+                    attn_weights_mean,
+                    kernel_size=self.kernel_size,
+                    padding=self.kernel_size // 2,
+                    stride=1,
+                )
+            elif self.pooling == "maxpool":
+                attn_weights_mean_pooling = F.max_pool1d(
+                    attn_weights_mean,
+                    kernel_size=self.kernel_size,
+                    padding=self.kernel_size // 2,
+                    stride=1,
+                )
             else:
-                raise ValueError('Pooling method not supported')
-        
+                raise ValueError("Pooling method not supported")
+
         # ===== 新增：应用音频感知增强（基于 WHY_IMPROVEMENTS.md） =====
         # 改进点：边界增强、Layer自适应时序偏置、时序连续性平滑
         if hasattr(self, 'config') and self.config is not None:
@@ -1348,42 +1395,68 @@ class SparseMM():
         else:
             raise ValueError('gqa_func not supported')
         
-        # Check if FFT-based spectral filtering is enabled
-        use_fft_filter = os.environ.get("USE_FFT_FILTER", "false").lower() == "true"
-        
-        if use_fft_filter:
-            # Use FFT-based spectral filtering instead of Conv1d
-            filter_type = os.environ.get("FFT_FILTER_TYPE", "lowpass")  # lowpass, highpass, saliency
-            cutoff_ratio = float(os.environ.get("FFT_CUTOFF_RATIO", "0.3"))
-            alpha = float(os.environ.get("FFT_ALPHA", "0.5"))  # Mixing ratio
-            use_saliency = os.environ.get("FFT_USE_SALIENCY", "false").lower() == "true"
-            adaptive_cutoff = os.environ.get("FFT_ADAPTIVE_CUTOFF", "true").lower() == "true"
-            
-            # Debug: Print FFT filter usage (only once per layer)
-            if not hasattr(self, '_fft_debug_printed') or not self._fft_debug_printed:
-                if self.layer_idx == 0:
-                    print(f"[SparseMM FFT] Layer {self.layer_idx}: Using FFT spectral filtering with "
-                          f"filter_type={filter_type}, cutoff_ratio={cutoff_ratio}, alpha={alpha}")
-                self._fft_debug_printed = True
-            
-            # Apply FFT spectral filtering
-            attn_weights_mean_pooling = spectral_attention_smoothing(
+        if apply_kv_score_smoothing is not None:
+            smooth_method = os.environ.get("SCORE_SMOOTH_METHOD", "").strip().lower()
+            if not smooth_method and os.environ.get("USE_FFT_FILTER", "false").lower() == "true":
+                smooth_method = "sss"
+            if smooth_method in ("sss", "fft", "spectral", "") and os.environ.get(
+                "USE_FFT_FILTER", "false"
+            ).lower() == "true":
+                if not hasattr(self, "_fft_debug_printed") or not self._fft_debug_printed:
+                    if self.layer_idx == 0:
+                        print(
+                            f"[SparseMM FFT] Layer {self.layer_idx}: "
+                            f"SCORE_SMOOTH_METHOD={smooth_method or 'sss'}, "
+                            f"cutoff={os.environ.get('FFT_CUTOFF_RATIO', '0.3')}, "
+                            f"alpha={os.environ.get('FFT_ALPHA', '0.5')}"
+                        )
+                    self._fft_debug_printed = True
+            attn_weights_mean_pooling = _apply_scoped_score_smoothing(
                 attn_weights_mean,
-                filter_type=filter_type,
-                cutoff_ratio=cutoff_ratio,
-                alpha=alpha,
-                use_saliency=use_saliency,
-                adaptive_cutoff=adaptive_cutoff
+                getattr(self, "config", None),
+                lambda scores: apply_kv_score_smoothing(
+                    scores,
+                    kernel_size=self.kernel_size,
+                    pooling=self.pooling,
+                ),
             )
         else:
-            # Original Conv1d-based pooling (fallback)
-            if self.pooling == 'avgpool':
-                attn_weights_mean_pooling = F.avg_pool1d(attn_weights_mean, kernel_size=self.kernel_size,padding=self.kernel_size // 2,stride=1)
-            elif self.pooling == 'maxpool':
-                attn_weights_mean_pooling = F.max_pool1d(attn_weights_mean, kernel_size=self.kernel_size,padding=self.kernel_size // 2,stride=1)
+            use_fft_filter = os.environ.get("USE_FFT_FILTER", "false").lower() == "true"
+            if use_fft_filter:
+                filter_type = os.environ.get("FFT_FILTER_TYPE", "lowpass")
+                cutoff_ratio = float(os.environ.get("FFT_CUTOFF_RATIO", "0.3"))
+                alpha = float(os.environ.get("FFT_ALPHA", "0.5"))
+                use_saliency = os.environ.get("FFT_USE_SALIENCY", "false").lower() == "true"
+                adaptive_cutoff = os.environ.get("FFT_ADAPTIVE_CUTOFF", "true").lower() == "true"
+                attn_weights_mean_pooling = _apply_scoped_score_smoothing(
+                    attn_weights_mean,
+                    getattr(self, "config", None),
+                    lambda scores: spectral_attention_smoothing(
+                        scores,
+                        filter_type=filter_type,
+                        cutoff_ratio=cutoff_ratio,
+                        alpha=alpha,
+                        use_saliency=use_saliency,
+                        adaptive_cutoff=adaptive_cutoff,
+                    ),
+                )
+            elif self.pooling == "avgpool":
+                attn_weights_mean_pooling = F.avg_pool1d(
+                    attn_weights_mean,
+                    kernel_size=self.kernel_size,
+                    padding=self.kernel_size // 2,
+                    stride=1,
+                )
+            elif self.pooling == "maxpool":
+                attn_weights_mean_pooling = F.max_pool1d(
+                    attn_weights_mean,
+                    kernel_size=self.kernel_size,
+                    padding=self.kernel_size // 2,
+                    stride=1,
+                )
             else:
-                raise ValueError('Pooling method not supported')
-        
+                raise ValueError("Pooling method not supported")
+
         # ===== 新增：应用音频感知增强（基于 WHY_IMPROVEMENTS.md） =====
         # 改进点：边界增强、Layer自适应时序偏置、时序连续性平滑
         if hasattr(self, 'config') and self.config is not None:

@@ -34,11 +34,13 @@ fullkv_cache_size = 0.202972412109375
 
 # 更浅的配色方案 + 斜线阴影（hatch）
 colors = {
-    'fullkv': '#AFC4E6',
-    'snapkv': '#E8B4B8',
-    'adakv': '#BFE3C6',
-    'audiokv': '#F1CFAF',
+    'fullkv': '#C7D8F0',
+    'snapkv': '#F2CCD0',
+    'adakv': '#D3EED8',
+    'audiokv': '#F8DEC5',
 }
+
+bar_alpha = 0.70
 
 edge_colors = {
     'fullkv': '#3B5A88',
@@ -48,10 +50,10 @@ edge_colors = {
 }
 
 hatches = {
-    'fullkv': '/',
-    'snapkv': '/',
-    'adakv': '/',
-    'audiokv': '/',
+    'fullkv': '//',
+    'snapkv': '//',
+    'adakv': '//',
+    'audiokv': '//',
 }
 
 # 准备绘图数据
@@ -72,22 +74,22 @@ fig, ax = plt.subplots(figsize=(10, 6))
 # 绘制柱状图 - 4个方法 (顺序: Full KV, SnapKV, AdaKV, AudioKV)
 bars_fullkv = ax.bar(x - 1.5 * step, fullkv_sizes, width, label='Full KV', 
                      color=colors['fullkv'], hatch=hatches['fullkv'],
-                     edgecolor=edge_colors['fullkv'], linewidth=1.2)
+                     edgecolor=edge_colors['fullkv'], linewidth=1.2, alpha=bar_alpha)
 bars_snapkv = ax.bar(x - 0.5 * step, snapkv_sizes, width, label='SnapKV', 
                      color=colors['snapkv'], hatch=hatches['snapkv'],
-                     edgecolor=edge_colors['snapkv'], linewidth=1.2)
+                     edgecolor=edge_colors['snapkv'], linewidth=1.2, alpha=bar_alpha)
 bars_adakv = ax.bar(x + 0.5 * step, adakv_sizes, width, label='AdaKV', 
                     color=colors['adakv'], hatch=hatches['adakv'],
-                    edgecolor=edge_colors['adakv'], linewidth=1.2)
+                    edgecolor=edge_colors['adakv'], linewidth=1.2, alpha=bar_alpha)
 bars_audiokv = ax.bar(x + 1.5 * step, audiokv_sizes, width, label='AudioKV', 
                       color=colors['audiokv'], hatch=hatches['audiokv'],
-                      edgecolor=edge_colors['audiokv'], linewidth=1.2)
+                      edgecolor=edge_colors['audiokv'], linewidth=1.2, alpha=bar_alpha)
 
 # 设置坐标轴
-ax.set_ylabel('memory', fontsize=21, fontweight='bold')
+ax.set_ylabel('Memory (GB)', fontsize=21, fontweight='bold')
 # 不添加标题
 ax.set_xticks(x)
-ax.set_xticklabels([f'{b}' for b in budgets], fontsize=17, fontweight='bold')
+ax.set_xticklabels([f'{int(b * 100)}%' for b in budgets], fontsize=17, fontweight='bold')
 # 不从0开始，让差异更明显
 ax.set_ylim(0.06, fullkv_cache_size * 1.15)
 

@@ -1,0 +1,154 @@
+\begin{answer}
+    % Rebuttal response to Reviewer Comment 1
+    % Topic: Baseline performance and hyperparameter / budget allocation transparency
+    
+    \paragraph{Response to Reviewer 1, Comment 1.}
+    We thank the reviewer for this important observation.
+    We agree that the near-zero word accuracy of several baselines under strict budgets requires clearer explanation, and we will add a dedicated ``Experimental Setup'' subsection and a hyperparameter table in the revision.
+    Below we clarify (i) that all methods operate under \emph{identical} KV-cache budgets, (ii) the exact hyperparameters used for baselines and \textsc{AudioKV}, (iii) the per-subset decoding token limits used in Table~1, and (iv) why audio-centric evaluation differs fundamentally from prior text-only KV-compression studies.
+    
+    \paragraph{Fair and identical budget allocation.}
+    All methods in Table 1 share the \textbf{same} budget definition.
+    For each input, let $N_{\text{prefill}}$ denote the total number of prefill tokens (system prompt + audio tokens + task instruction).
+    Given a retention ratio $\rho \in \{0.4, 0.6, 0.8\}$, every method receives the same total KV budget:
+    \[
+    B = \lfloor \rho \cdot N_{\text{prefill}} \rfloor .
+    \]
+    From $B$, a fixed \emph{sink window} of $W=32$ recent tokens is always preserved (following standard SnapKV/H2O practice).
+    The remaining \emph{selectable} budget is $B - W$.
+    Budgets are computed \emph{dynamically per sample} based on the actual prefill length, ensuring that a 40\% budget truly means 40\% of \emph{that} sequence---not a fixed absolute token count.
+    No method receives additional memory or a larger effective budget than any other at the same $\rho$.
+    
+    \paragraph{How each method allocates the shared budget.}
+    The difference across methods lies in \emph{how} the shared budget $B$ is distributed, not in \emph{how much} memory they are allowed to use:
+    \begin{itemize}
+        \item \textbf{SnapKV / PyramidKV / H2O:} apply attention- or norm-based scoring with \textbf{uniform allocation across heads} (each head retains the same number of tokens, modulo PyramidKV's layer-wise pyramid schedule).
+        \item \textbf{AdaKV:} adaptively redistributes the \emph{same total budget} across heads according to per-head attention mass, but still without audio-specific head priors (i.e., all heads are treated equally \emph{a priori}).
+        \item \textbf{\textsc{AudioKV}:} allocates the \emph{same total budget} $B$ via audio-head importance scores (estimated offline from attention-to-audio alignment) and applies spectral score smoothing (SSS) before token selection.
+    \end{itemize}
+    Thus, the comparison isolates \emph{allocation strategy} under matched memory constraints.
+    
+    \paragraph{Hyperparameters (baselines vs.\ \textsc{AudioKV}).}
+    Table~\ref{tab:rebuttal-hparams} summarizes the configuration used for all main-table experiments.
+    Unless noted, values follow the original method papers; we additionally align $W$ and kernel/pooling settings across methods to avoid confounding budget fairness with tuning differences.
+    
+    \begin{table}[t]
+    \centering
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \caption{\textbf{Hyperparameters and budget allocation for all methods in the main table.}
+    All methods share the same retention ratio $\rho$ and dynamic budget $B=\lfloor \rho N_{\text{prefill}} \rfloor$.}
+    \label{tab:rebuttal-hparams}
+    
+    % ========= 核心修改：包裹 resizebox =========
+    \resizebox{\textwidth}{!}{% 
+    \begin{tabular}{lccccc}
+    \toprule
+    \textbf{Setting} & \textbf{SnapKV} & \textbf{AdaKV} & \textbf{PyramidKV} & \textbf{H2O} & \textbf{\textsc{AudioKV}} \\
+    \midrule
+    Retention ratios $\rho$ & \multicolumn{5}{c}{$\{0.4,\; 0.6,\; 0.8\}$ (identical for all methods)} \\
+    Budget formula & \multicolumn{5}{c}{$B = \lfloor \rho N_{\text{prefill}} \rfloor$, updated per sample} \\
+    Sink window $W$ & \multicolumn{5}{c}{32 tokens (always retained)} \\
+    Selectable budget & \multicolumn{5}{c}{$B - W$} \\
+    \midrule
+    Score pooling kernel & 5 & 5 & 5 & 5 & 5 \\
+    Pooling type & maxpool & maxpool & maxpool & avgpool & maxpool \\
+    Head allocation & uniform & adaptive (no audio prior) & uniform + pyramid & uniform & audio-head weighted \\
+    \midrule
+    AdaKV floor ratio & -- & 0.2 & -- & -- & -- \\
+    AdaKV normalize & -- & True & -- & -- & -- \\
+    Pyramid $\beta$ & -- & -- & 20 & -- & -- \\
+    H2O heavy/recent split & -- & -- & -- & 0.5 / 0.5 & -- \\
+    \midrule
+    Head importance & uniform & uniform & uniform & uniform & model-specific JSON \\
+    SSS (FFT smoothing) & No & No & No & No & Yes \\
+    FFT cutoff ratio & -- & -- & -- & -- & 0.7 \\
+    FFT blend $\alpha$ & -- & -- & -- & -- & 0.5 \\
+    Selective ratio (SparseMM) & -- & -- & -- & -- & 0.5 \\
+    \bottomrule
+    \end{tabular}% <--- 注意这里有个百分号
+    } % ==========================================
+    \end{table}
+    \noindent
+    \textit{Note:} For \textsc{AudioKV}, head-importance files are model-specific (e.g., \texttt{topk24\_$\alpha$1\_$\beta$1\_$\gamma$1} for Qwen2.5-Omni-3B).
+    All baselines disable SSS/FFT and use uniform head scores, as they do not model audio-head heterogeneity.
+    
+    \paragraph{Decoding token limits (per benchmark subset).}
+    The KV retention ratio $\rho$ controls \emph{prefill} cache size only; it does \textbf{not} change the decoding horizon.
+    For each model and benchmark column in Table~1, \textbf{all} compared methods (Full KV, SnapKV, AdaKV, PyramidKV, H2O, and \textsc{AudioKV}) use the \textbf{same} \texttt{thinker\_max\_new\_tokens} cap and greedy decoding (\texttt{thinker\_do\_sample=False}).
+    Table~\ref{tab:rebuttal-decode-limits} summarizes these caps; no baseline receives a larger decode budget than any other method on the same subset.
+    
+    \begin{table}[t]
+    \centering
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \caption{\textbf{Maximum decoding tokens (\texttt{thinker\_max\_new\_tokens}) for each Table~1 subset.}
+    Identical for all methods under the same model and subset. ``Dynamic'' entries are computed per utterance from audio duration $T$ (seconds).}
+    \label{tab:rebuttal-decode-limits}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{llcc}
+    \toprule
+    \textbf{Task} & \textbf{Subset (Table~1 column)} & \textbf{Qwen2.5 / Qwen3-Omni} & \textbf{Gemma-3n (E2B / E4B)} \\
+    \midrule
+    \multirow{5}{*}{ASR}
+    & ZH (KeSpeech) & 1100 & Dynamic, $C{=}512$, $F{=}16$, $\tau{=}8.75$ \\
+    & EN (LibriSpeech-long) & 1100 & Dynamic, $C{=}2048$, $F{=}64$, $\tau{=}6.25$ \\
+    & FR (Multilingual LibriSpeech) & 1100 & Dynamic, $C{=}3072$, $F{=}64$, $\tau{=}8.13$ \\
+    & DE (Multilingual LibriSpeech) & \textbf{1500} & Dynamic, $C{=}3072$, $F{=}64$, $\tau{=}8.13$ \\
+    & ES (Multilingual LibriSpeech) & 1100 & Dynamic, $C{=}3072$, $F{=}64$, $\tau{=}8.13$ \\
+    \midrule
+    \multirow{2}{*}{ST}
+    & E2C (CoVoST2 en$\rightarrow$zh) & 1100 & Dynamic, $C{=}2048$, $F{=}64$, $\tau{=}6.25$ \\
+    & C2E (CoVoST2 zh$\rightarrow$en) & 1100 & Dynamic, $C{=}2048$, $F{=}64$, $\tau{=}6.25$ \\
+    \bottomrule
+    \end{tabular}%
+    }
+    \end{table}
+    \noindent
+    For Qwen-family models, caps are fixed constants (German ASR uses 1500 because German word-piece sequences are longer under the same audio length).
+    For Gemma, the per-sample cap is
+    \[
+    N_{\text{decode}} = \min\!\Bigl\{C,\; \max\!\bigl(F,\; \lfloor \tau \cdot T + \beta \rfloor\bigr)\Bigr\},
+    \]
+    where $\beta{=}128$ (E2B) or $192$ (E4B) is a fixed buffer; $\tau$ incorporates language-specific scaling in the ASR scripts (e.g., $1.4{\times}$ for Chinese, $1.3{\times}$ for FR/DE/ES).
+    These limits are independent of $\rho$ and are held constant across all KV-compression methods, ensuring that baseline collapse reflects cache eviction rather than truncated decoding budgets.
+    
+    \paragraph{Why near-zero accuracy is expected in audio, not a tuning artifact.}
+    We emphasize that the low baseline numbers are \textbf{not} due to an unfair budget disadvantage, but rather reflect a \textbf{domain shift} from text KV compression to long-form audio understanding:
+    \begin{enumerate}
+        \item \textbf{Much longer prefill sequences.}
+        Audio inputs produce $N_{\text{prefill}}$ that is one to two orders of magnitude larger than typical text-only benchmarks (e.g., long-form ASR clips can span $>$200\,s and thousands of audio tokens).
+        At $\rho=0.4$, retaining only 40\% of a 5{,}000-token prefill leaves $\sim$2{,}000 tokens---yet uniform methods may discard large contiguous audio regions critical for word-level alignment.
+    
+        \item \textbf{Audio-head heterogeneity.}
+        Our analysis shows that only a subset of attention heads consistently attend to time-aligned audio regions during decoding.
+        Uniform or text-calibrated scoring (SnapKV/H2O) treats all heads equally and frequently evicts audio-salient tokens, causing \emph{decoding collapse} (repetition loops or empty output).
+        In a qualitative case study on a 232\,s LibriSpeech utterance, SnapKV at matched budget produces WER\,=\,93.6\% due to infinite phrase repetition, whereas \textsc{AudioKV} achieves WER\,=\,1.1\% on the same clip.
+    
+        \item \textbf{Metric interpretation.}
+        Table entries report \textbf{word accuracy} (\%).
+        A score of \textbf{0.0} indicates catastrophic failure (WER $\approx$ 100\%), typically from repetition collapse or degenerate generation---not from a missing evaluation entry.
+    
+        \item \textbf{Consistency with controlled ablations.}
+        Our ablation (Table 2) shows that applying SSS alone to SnapKV (without audio-head weighting) already raises Qwen2.5-Omni-3B average accuracy from 15.9\% to 50.2\%, confirming that text-oriented scoring is insufficient for audio even under identical budgets.
+        Full \textsc{AudioKV} further reaches 68.5\%, demonstrating the additional benefit of head-aware allocation.
+    \end{enumerate}
+    
+    \paragraph{Comparison to text KV-compression literature.}
+    Prior text-focused work typically evaluates on shorter contexts (e.g., 4K--32K tokens with proportionally smaller compression gaps) and tasks where local attention dominance is a reasonable assumption (summarization, single-turn QA).
+    In contrast, speech ASR requires maintaining \emph{global} audio-text alignment over autoregressive decoding horizons that extend well beyond the prefill phase.
+    Under the same proportional budget $\rho$, methods that perform well on text can therefore collapse on audio---which is precisely the motivation for \textsc{AudioKV}.
+    
+    \paragraph{Planned revision.}
+    We will incorporate the following into the camera-ready version:
+    \begin{itemize}
+        \item A hyperparameter table (Table~\ref{tab:rebuttal-hparams}) and a per-subset decoding-limit table (Table~\ref{tab:rebuttal-decode-limits}) in the main paper or appendix.
+        \item An explicit description of the dynamic budget formula, per-method allocation rules, and decoding token caps.
+        \item A brief discussion of why text KV-compression results do not directly transfer to audio, supported by the long-form failure case study (Appendix).
+        \item Clarification that 0.0 entries denote catastrophic decoding failure under matched budgets.
+    \end{itemize}
+    
+    We hope this addresses the reviewer's concern and clarifies that the baseline gap reflects a fundamental audio-specific challenge rather than an unfair experimental setup.
+    
+    \end{answer}
+    

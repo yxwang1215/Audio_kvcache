@@ -1,0 +1,50 @@
+\begin{answer}
+    % Rebuttal response to Reviewer jV7P-Q4
+    % Topic: Characterizing setup and runtime cost of offline head profiling
+
+    \paragraph{Response to Reviewer jV7P-Q4.}
+    We thank the reviewer for pointing out that the offline profiling cost should be characterized explicitly.
+    We agree, and will add both the corpus scale and the one-time runtime cost to the implementation details.
+    Importantly, this cost is \emph{not} paid during benchmark inference: evaluation only loads the final head-score JSON through \texttt{HEAD\_SCORE\_PATH}.
+
+    \paragraph{What is run offline.}
+    The profiling pipeline has two one-time stages.
+    First, WhisperX produces word-level timestamps for the calibration corpus and stores them as \texttt{\{utt\_id\}\_whisperx.json}.
+    Second, for each target model, we run greedy ASR on the calibrated utterances with decoder self-attention hooks enabled, map generated tokens to high-confidence WhisperX word spans, and aggregate layer--head scores.
+    The main Qwen2.5-Omni-3B head scores use the LibriSpeech \texttt{test-other} calibration pool described in jV7P-Q1: 2{,}864 utterances with available audio/alignment files, of which 2{,}605 utterances were successfully profiled and aggregated.
+
+    \paragraph{Measured profiling runtime.}
+    To characterize the runtime, we measured the Qwen2.5-Omni-3B profiling script on the first 8 LibriSpeech calibration utterances using \texttt{topK=24}, score threshold 0.95, and detailed per-token JSON saving disabled.
+    The script registered hooks for all 36 decoder self-attention modules and captured 36 layers $\times$ 16 heads per generation step.
+    The run processed 8 utterances, 33 high-confidence WhisperX words, and 34 analyzed generated tokens in 67.96s, i.e., 8.50s per utterance on average.
+    The first utterance took 49.5s because it includes the cold start/cache effects after model loading; the remaining seven utterances took 18.3s total, or 2.61s per utterance.
+    This gives an approximate full-corpus profiling time of 6.2 hours if using the conservative all-sample average, or 1.9 hours using the steady-state per-utterance rate, for the 2{,}605 successfully profiled utterances on a single A100-class GPU.
+
+    \begin{table}[t]
+    \centering
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \caption{\textbf{One-time offline head-profiling cost for Qwen2.5-Omni-3B.} Runtime is measured with \texttt{audio\_head/qwen2.5\_omni/word\_attention\_analysis.py}; inference-time experiments only load the resulting head-score JSON and do not repeat this pipeline.}
+    \label{tab:rebuttal-offline-profiling-cost}
+    \begin{tabular}{ll}
+    \toprule
+    \textbf{Field} & \textbf{Measured value / setting} \\
+    \midrule
+    Calibration pool & 2{,}864 LibriSpeech \texttt{test-other} utterances \\
+    Successfully profiled utterances & 2{,}605 \\
+    Alignment input & Precomputed WhisperX word timestamps, score $\geq 0.95$ \\
+    Target model for measurement & Qwen2.5-Omni-3B \\
+    Attention hooks & 36 decoder layers, 16 heads/layer \\
+    Timing subset & 8 utterances, 33 high-confidence words \\
+    Profiling pass time & 67.96s total, 8.50s/utterance average \\
+    Steady-state time & 18.3s for last 7 utterances, 2.61s/utterance \\
+    Extrapolated 2{,}605-utterance time & 6.2h conservative; 1.9h steady-state \\
+    Inference-time cost & None beyond loading the head-score JSON \\
+    \bottomrule
+    \end{tabular}
+    \end{table}
+
+    \paragraph{Planned revision.}
+    We will add Table~\ref{tab:rebuttal-offline-profiling-cost} and the accompanying protocol to the paper.
+    We will also release the calibration manifest, the profiling command, and the resulting model-specific head-score JSON files so that the one-time cost and the inference-time separation are reproducible.
+\end{answer}

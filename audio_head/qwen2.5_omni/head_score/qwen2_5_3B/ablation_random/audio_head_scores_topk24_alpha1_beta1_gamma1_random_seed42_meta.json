@@ -1,0 +1,11 @@
+{
+    "reference": "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_3B/audio_head_scores_topk24_alpha1_beta1_gamma1.json",
+    "mode": "random",
+    "seed": 42,
+    "inverse_aggregation": null,
+    "num_layers": 36,
+    "num_heads": 16,
+    "samples_per_head": 4,
+    "per_sample_random": true,
+    "output": "/mnt/users/wangyuxuan-20250915/Audio/Audio_kvcache/audio_head/qwen2.5_omni/head_score/qwen2_5_3B/ablation_random/audio_head_scores_topk24_alpha1_beta1_gamma1_random_seed42.json"
+}

@@ -1,0 +1,42 @@
+\begin{answer}
+    % Rebuttal response to Reviewer VY3D-Q2
+    % Topic: Computational overhead of SSS in long-audio decoding
+
+    \paragraph{Response to Reviewer VY3D-Q2.}
+    We thank the reviewer for raising this important point.
+    We agree that KV-memory savings alone are not sufficient to characterize the practicality of SSS, especially for long-audio ASR where the audio prefix is large.
+    We therefore measured the actual end-to-end decoding overhead of SSS inside the full Qwen2.5-Omni-3B ASR pipeline, rather than only reporting an isolated RFFT/IRFFT operator benchmark.
+
+    \paragraph{End-to-end timing in real ASR decoding.}
+    On LibriSpeech, we compare the same decoding setup with and without SSS enabled.
+    The average wall-clock time increases from 4.091s to 4.173s per sample, corresponding to only +0.081s absolute overhead or +1.99\% relative slowdown.
+    The average decode time changes from 0.0677s to 0.0691s, i.e., +2.02\%.
+    In per-token terms, decoding latency increases from 0.68ms/token to 0.69ms/token, an additional 0.014ms/token.
+    Overall throughput changes from 1477.47 to 1448.16 tokens/s, a 1.98\% drop.
+
+    \begin{table}[t]
+    \centering
+    \small
+    \setlength{\tabcolsep}{4pt}
+    \caption{\textbf{End-to-end overhead of SSS in real ASR decoding.} Timing is measured on LibriSpeech using Qwen2.5-Omni-3B with identical decoding settings, comparing SSS disabled vs. enabled.}
+    \label{tab:rebuttal-sss-e2e-overhead}
+    \begin{tabular}{lccc}
+    \toprule
+    \textbf{Metric} & \textbf{w/o SSS} & \textbf{w/ SSS} & \textbf{Change} \\
+    \midrule
+    Avg. wall time / sample & 4.091s & 4.173s & +1.99\% \\
+    Avg. decode time / sample & 0.0677s & 0.0691s & +2.02\% \\
+    Per-token decode latency & 0.68ms & 0.69ms & +0.014ms \\
+    Overall throughput & 1477.47 tok/s & 1448.16 tok/s & -1.98\% \\
+    \bottomrule
+    \end{tabular}
+    \end{table}
+
+    \paragraph{Why the practical overhead is small.}
+    Although the frequency-domain smoothing operation involves RFFT/IRFFT, it is applied only to the selected score/saliency computation path and is lightweight compared with the full multimodal forward pass and attention computation over long audio contexts.
+    In the full ASR pipeline, the dominant cost remains model prefill and decoding, so the additional SSS computation leads to a small end-to-end slowdown of about 2\%.
+
+    \paragraph{Planned revision.}
+    We will add Table~\ref{tab:rebuttal-sss-e2e-overhead} and the above timing analysis to the efficiency section.
+    We will also clarify that isolated RFFT/IRFFT timing should be interpreted as an operator stress test, while the primary practical metric is the end-to-end ASR decoding overhead with SSS enabled.
+\end{answer}

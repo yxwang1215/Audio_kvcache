@@ -1030,8 +1030,11 @@ def main():
 
     # Sample limit
     sample_limit = int(os.environ.get("SAMPLE_LIMIT", 0))
+    sample_fraction = float(os.environ.get("SAMPLE_FRACTION", 0.0))
     if sample_limit > 0:
         print(f"Sample limit set to: {sample_limit}")
+    elif 0 < sample_fraction < 1:
+        print(f"Sample fraction set to: {sample_fraction:.2%}")
 
     # Set default dataset path
     default_dataset_path = '/mnt/users/wangyuxuan-20250915/Audio/Datasets/multilingual_librispeech'
@@ -1266,6 +1269,10 @@ def main():
         return
     
     # Apply sample limit if specified
+    if sample_limit <= 0 and 0 < sample_fraction < 1:
+        sample_limit = max(1, int(len(dataset) * sample_fraction + 0.999999))
+        print(f"Applying sample fraction {sample_fraction:.2%}: {sample_limit}/{len(dataset)} samples")
+
     if sample_limit > 0 and len(dataset) > sample_limit:
         dataset = dataset[:sample_limit]
         print(f"Applying sample limit, processing {len(dataset)} samples")

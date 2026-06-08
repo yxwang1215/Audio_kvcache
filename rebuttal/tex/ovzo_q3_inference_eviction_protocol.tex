@@ -1,0 +1,87 @@
+\begin{answer}
+    % Rebuttal response to Reviewer ovZo-Q3
+    % Topic: Inference-time eviction protocol and audio-head cache retention
+
+    \paragraph{Response to Reviewer ovZo-Q3.}
+    We thank the reviewer for pointing out that the inference-time eviction protocol should be made more explicit.
+    We agree that the paper should spell out how the learned audio-head scores become concrete KV-cache retention decisions.
+    We will add the following procedure and notation to the method section.
+
+    \paragraph{From retention ratio to per-head cache capacity.}
+    For each input sample, let $N_{\mathrm{prefill}}$ be the prefill length and $\rho$ be the retention ratio.
+    We first compute the per-KV-head cache budget
+    \[
+        B = \lfloor \rho N_{\mathrm{prefill}} \rfloor .
+    \]
+    A fixed local window of $W=32$ most recent tokens is always retained in every KV head.
+    Therefore, only the historical prefix before this local window is compressed, with selectable capacity
+    \[
+        C = B - W .
+    \]
+    The window is not ranked by SSS and is never evicted.
+
+    \paragraph{Audio-aware head allocation.}
+    The offline audio-head scores are first normalized across all attention heads.
+    For grouped-query attention models, attention-head scores within the same KV group are summed to obtain a KV-head score $s_{\ell,h}$, and the resulting KV-head scores are re-normalized so that $\sum_{\ell,h} s_{\ell,h}=1$.
+    We then allocate a minimum historical capacity to every KV head:
+    \[
+        C_{\min}=\lfloor rC \rfloor ,
+    \]
+    where $r=0.5$ in our experiments.
+    The remaining capacity is distributed proportionally to the normalized audio-head scores:
+    \[
+        C^{(\ell,h)}
+        =
+        \mathrm{round}\left(
+        C_{\min}
+        +
+        s_{\ell,h}(C-C_{\min})LH_{\mathrm{kv}}
+        \right),
+    \]
+    where $L$ is the number of layers and $H_{\mathrm{kv}}$ is the number of KV heads per layer.
+    If $C^{(\ell,h)}$ exceeds the available historical length, it is capped by $N_{\mathrm{prefill}}-W$.
+    Thus, audio-critical heads receive larger historical cache capacities, while every head still keeps a nonzero baseline allocation.
+
+    \paragraph{Token eviction within each head.}
+    For each layer--KV-head pair $(\ell,h)$, we compute token-importance scores over the historical prefix from the attention of the recent window.
+    SSS is applied to these token scores before ranking.
+    The concrete retained cache for head $(\ell,h)$ is therefore
+    \[
+        \mathrm{Top}\text{-}C^{(\ell,h)}
+        \left(
+        \mathrm{SSS}(\mathbf{a}^{(\ell,h)}_{1:N_{\mathrm{prefill}}-W})
+        \right)
+        \quad \cup \quad
+        \{N_{\mathrm{prefill}}-W+1,\ldots,N_{\mathrm{prefill}}\}.
+    \]
+    In words, each head keeps its SSS-smoothed Top-$C^{(\ell,h)}$ historical tokens plus the shared local window of $W$ tokens.
+    This is the concrete inference-time eviction rule.
+
+    \paragraph{Do audio-critical heads retain more KV entries?}
+    Yes.
+    Under the Qwen2.5-Omni-3B setting used in the rebuttal runs ($L=36$, $H_{\mathrm{kv}}=2$, $W=32$, $r=0.5$), a representative 5k-token prefill with $\rho=0.8$ gives $B=4000$ and $C=3968$.
+    After applying the audio-aware head allocation, the top quartile of audio-critical KV heads receives 4{,}811 selectable historical slots on average after capping by the available history, while the bottom quartile receives 2{,}951 slots on average.
+    This is a 1.63$\times$ larger historical retention capacity for audio-critical KV heads before adding the common local window.
+
+    \begin{table}[t]
+    \centering
+    \small
+    \setlength{\tabcolsep}{5pt}
+    \caption{\textbf{Audio-aware cache-capacity allocation for Qwen2.5-Omni-3B.}
+    Example uses $N_{\mathrm{prefill}}=5000$, $\rho=0.8$, $W=32$, and $r=0.5$.
+    Values report selectable historical slots per KV head, excluding the shared local window.}
+    \label{tab:rebuttal-ovzo-q3-head-capacity}
+    \begin{tabular}{lccc}
+    \toprule
+    \textbf{KV-head group} & \textbf{Mean} & \textbf{Min} & \textbf{Max} \\
+    \midrule
+    Top quartile by audio-head score & 4{,}811 & 4{,}370 & 4{,}968 \\
+    Bottom quartile by audio-head score & 2{,}951 & 2{,}629 & 3{,}219 \\
+    \bottomrule
+    \end{tabular}
+    \end{table}
+
+    \paragraph{Planned revision.}
+    We will add the above eviction rule, the accompanying equations, and Table~\ref{tab:rebuttal-ovzo-q3-head-capacity} to clarify how the local window, baseline allocation, proportional head budget, and SSS-smoothed Top-$K$ selection are combined in practice.
+    We will also add a logging diagnostic that counts the intersection between retained token indices and the audio-token span, so the revision reports not only the allocated capacity but also the realized number of retained audio-token KV entries.
+\end{answer}

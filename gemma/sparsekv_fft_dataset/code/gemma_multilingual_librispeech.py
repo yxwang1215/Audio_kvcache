@@ -148,6 +148,7 @@ if device.type == "cuda":
 
 # 运行控制
 SAMPLE_LIMIT = int(os.environ.get("SAMPLE_LIMIT", 0))
+SAMPLE_FRACTION = float(os.environ.get("SAMPLE_FRACTION", 0.0))
 # 若 >0 则强制使用该值；=0 表示按时长动态估算（推荐）
 MAX_NEW_TOKENS_ENV = int(os.environ.get("MAX_NEW_TOKENS", 0))
 ENABLE_CHUNKING = os.environ.get("ENABLE_CHUNKING", "1") == "1"  # 默认开启
@@ -1951,8 +1952,13 @@ def main():
         print("没有找到有效的样本数据，退出……")
         return
 
-    if SAMPLE_LIMIT > 0 and len(samples) > SAMPLE_LIMIT:
-        samples = samples[:SAMPLE_LIMIT]
+    sample_limit = SAMPLE_LIMIT
+    if sample_limit <= 0 and 0 < SAMPLE_FRACTION < 1:
+        sample_limit = max(1, int(len(samples) * SAMPLE_FRACTION + 0.999999))
+        print(f"应用样本比例 {SAMPLE_FRACTION:.2%}: {sample_limit}/{len(samples)} 个样本")
+
+    if sample_limit > 0 and len(samples) > sample_limit:
+        samples = samples[:sample_limit]
         print(f"应用样本限制，将处理 {len(samples)} 个样本")
 
     from collections import defaultdict

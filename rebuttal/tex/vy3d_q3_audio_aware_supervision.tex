@@ -1,0 +1,49 @@
+% Rebuttal response to VY3D-Q3
+% Topic: Separating the contribution of audio-aware supervision
+
+\paragraph{Response to VY3D-Q3.}
+We thank the reviewer for this constructive suggestion.
+To isolate the contribution of \emph{audio-aware supervision} from the spectral score smoothing (SSS) module, we ran an additional controlled experiment where SSS, SparseKV, the retention budget, the model, and decoding settings are kept unchanged, while only the source of head importance is replaced.
+Specifically, we compare the original audio-aware head-importance scores against (i) an inverse audio-aware score file and (ii) a random-initialized score file with seed 42.
+
+\paragraph{Controlled setup.}
+All variants use budget $\rho=0.8$ and SSS enabled.
+The only changed factor is the supervision signal used to rank heads before SSS-based token selection.
+We focus on ASR results because they directly measure whether the audio-head prior helps preserve speech evidence.
+We report completed 20\% MLS ASR subsets on Qwen2.5-Omni-3B and Gemma-3n-E4B-it.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{VY3D-Q3 controlled ablation of audio-aware supervision.}
+SSS and all decoding settings are fixed; only the head-importance source is changed.
+Lower WER is better.
+All MLS results use the completed language-specific 20\% ASR subsets.}
+\label{tab:rebuttal-vy3d-q3-audio-supervision}
+\begin{tabular}{lllccc}
+\toprule
+\textbf{Model} & \textbf{Task} & \textbf{Metric} & \textbf{Audio-aware} & \textbf{Inverse} & \textbf{Random} \\
+\midrule
+Qwen2.5-Omni-3B & MLS Spanish ASR (477) & WER $\downarrow$ & \textbf{6.00} & 15.39 & 6.46 \\
+ & MLS French ASR (486) & WER $\downarrow$ & \textbf{8.45} & 9.63 & 8.85 \\
+ & MLS German ASR (679) & WER $\downarrow$ & \textbf{12.17} & 14.47 & 12.60 \\
+\midrule
+Gemma-3n-E4B-it & MLS Spanish ASR (477) & WER $\downarrow$ & \textbf{13.27} & 16.87 & 13.58 \\
+ & MLS French ASR (486) & WER $\downarrow$ & \textbf{39.55} & 44.91 & 40.50 \\
+ & MLS German ASR (679) & WER $\downarrow$ & \textbf{19.40} & 23.08 & 19.51 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Findings.}
+On all six MLS ASR settings, the audio-aware head prior is consistently best across Spanish, French, and German for both Qwen and Gemma.
+The effect is strongest on MLS Spanish, where replacing it with the inverse ranking increases WER from 6.00 to 15.39 on Qwen and from 13.27 to 16.87 on Gemma.
+The trend remains positive on MLS French (Qwen: 8.45 vs.\ 9.63 WER; Gemma: 39.55 vs.\ 44.91 WER) and MLS German (Qwen: 12.17 vs.\ 14.47 WER; Gemma: 19.40 vs.\ 23.08 WER).
+The random-head control is closer to the audio-aware prior than the inverse control, but is still worse on the MLS ASR settings.
+This supports the claim that audio-aware supervision helps when the downstream objective depends directly on preserving acoustic evidence.
+
+\paragraph{Revision plan.}
+In the revision, we will add Table~\ref{tab:rebuttal-vy3d-q3-audio-supervision} and clarify that \textsc{AudioKV}'s improvement comes from the combination of audio-aware head allocation and SSS.
+The new experiment separates the two factors: SSS remains fixed, while the head-importance source is changed.
+We will present audio-aware supervision as a validated contributor for ASR-style speech preservation, rather than attributing the entire method's gains to this component alone.
