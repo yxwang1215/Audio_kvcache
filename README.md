@@ -1,4 +1,6 @@
-# Audio KV Cache Compression Methods
+# [ACM MM 2026] Audio KV Cache Compression Methods
+
+![ACM Multimedia 2026](https://img.shields.io/badge/ACM%20Multimedia-2026-B31B1B?style=for-the-badge)
 
 This project implements multiple KV Cache compression methods for optimizing memory usage and computational efficiency in audio understanding tasks.
 
